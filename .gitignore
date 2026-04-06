@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Agent / CI / Tool configs
+.claude/
+.serena/
+.turbo/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.db-journal
+
+# Prisma
+packages/database/prisma/*.db
+
+# Docker volumes
+infra/docker/data/
+
+# Agent artifacts
+.agent/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/

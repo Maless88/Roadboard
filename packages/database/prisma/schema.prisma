@@ -1,0 +1,205 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users & Teams ────────────────────────────────────
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  displayName String   @map("display_name")
+  email       String   @unique
+  password    String
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  teamMemberships TeamMembership[]
+  projectGrants   ProjectGrant[]   @relation("GrantedByUser")
+  sessions        Session[]
+  mcpTokens       McpToken[]
+
+  @@map("users")
+}
+
+model Team {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  memberships   TeamMembership[]
+  projectGrants ProjectGrant[]   @relation("TeamGrants")
+  projects      Project[]
+
+  @@map("teams")
+}
+
+model TeamMembership {
+  id     String @id @default(cuid())
+  teamId String @map("team_id")
+  userId String @map("user_id")
+  role   String @default("member")
+  status String @default("active")
+
+  team Team @relation(fields: [teamId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([teamId, userId])
+  @@map("team_memberships")
+}
+
+// ── Auth & Sessions ──────────────────────────────────
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("sessions")
+}
+
+// ── Projects ─────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  status      String   @default("active")
+  ownerTeamId String   @map("owner_team_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  ownerTeam     Team           @relation(fields: [ownerTeamId], references: [id])
+  phases        Phase[]
+  milestones    Milestone[]
+  tasks         Task[]
+  memoryEntries MemoryEntry[]
+  projectGrants ProjectGrant[]
+
+  @@map("projects")
+}
+
+model Phase {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  title       String
+  description String?
+  orderIndex  Int       @default(0) @map("order_index")
+  status      String    @default("planned")
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  project    Project     @relation(fields: [projectId], references: [id])
+  milestones Milestone[]
+  tasks      Task[]
+
+  @@map("phases")
+}
+
+model Milestone {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  phaseId     String?   @map("phase_id")
+  title       String
+  description String?
+  dueDate     DateTime? @map("due_date")
+  status      String    @default("planned")
+  orderIndex  Int       @default(0) @map("order_index")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+  phase   Phase?  @relation(fields: [phaseId], references: [id])
+  tasks   Task[]
+
+  @@map("milestones")
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  projectId   String    @map("project_id")
+  phaseId     String?   @map("phase_id")
+  milestoneId String?   @map("milestone_id")
+  title       String
+  description String?
+  status      String    @default("todo")
+  priority    String    @default("medium")
+  assigneeId  String?   @map("assignee_id")
+  dueDate     DateTime? @map("due_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  phase     Phase?     @relation(fields: [phaseId], references: [id])
+  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+
+  @@map("tasks")
+}
+
+// ── Memory ───────────────────────────────────────────
+
+model MemoryEntry {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  type      String
+  title     String
+  body      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("memory_entries")
+}
+
+// ── Grants ───────────────────────────────────────────
+
+model ProjectGrant {
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  subjectType   String   @map("subject_type")
+  subjectId     String   @map("subject_id")
+  grantType     String   @map("grant_type")
+  grantedByUserId String? @map("granted_by_user_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  project   Project @relation(fields: [projectId], references: [id])
+  grantedBy User?   @relation("GrantedByUser", fields: [grantedByUserId], references: [id])
+  team      Team?   @relation("TeamGrants", fields: [subjectId], references: [id], map: "project_grants_team_fk")
+
+  @@map("project_grants")
+}
+
+// ── MCP Tokens ───────────────────────────────────────
+
+model McpToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  name      String
+  tokenHash String    @unique @map("token_hash")
+  scope     String
+  status    String    @default("active")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("mcp_tokens")
+}

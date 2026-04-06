@@ -1,0 +1,23 @@
+{
+  "name": "roadboard",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Roadboard 2.0 — Multi-project execution, memory, and collaboration platform",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "db:migrate": "pnpm --filter @roadboard/database db:migrate",
+    "db:generate": "pnpm --filter @roadboard/database db:generate",
+    "db:seed": "pnpm --filter @roadboard/database db:seed",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "bootstrap": "pnpm install && pnpm docker:up && pnpm db:migrate && pnpm db:generate && pnpm db:seed"
+  }
+}
