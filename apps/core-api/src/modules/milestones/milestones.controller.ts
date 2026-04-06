@@ -10,19 +10,23 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { RequireGrant } from '../../common/require-grant.decorator';
 import { MilestonesService } from './milestones.service';
 import { CreateMilestoneDto } from './create-milestone.dto';
 import { UpdateMilestoneDto } from './update-milestone.dto';
 
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GrantCheckGuard)
 @Controller('milestones')
 export class MilestonesController {
 
   constructor(@Inject(MilestonesService) private readonly milestonesService: MilestonesService) {}
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Post()
   create(@Body() dto: CreateMilestoneDto) {
 
@@ -30,6 +34,7 @@ export class MilestonesController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get()
   findAll(
     @Query('projectId') projectId: string,
@@ -40,6 +45,7 @@ export class MilestonesController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get(':id')
   findOne(@Param('id') id: string) {
 
@@ -47,6 +53,7 @@ export class MilestonesController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateMilestoneDto) {
 
@@ -54,6 +61,7 @@ export class MilestonesController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Delete(':id')
   delete(@Param('id') id: string) {
 

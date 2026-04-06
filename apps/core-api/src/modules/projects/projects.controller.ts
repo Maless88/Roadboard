@@ -10,20 +10,23 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ProjectStatus } from '@roadboard/domain';
+import { GrantType, ProjectStatus } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { RequireGrant } from '../../common/require-grant.decorator';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
 
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GrantCheckGuard)
 @Controller('projects')
 export class ProjectsController {
 
   constructor(@Inject(ProjectsService) private readonly projectsService: ProjectsService) {}
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Post()
   create(@Body() dto: CreateProjectDto) {
 
@@ -31,6 +34,7 @@ export class ProjectsController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get()
   findAll(@Query('status') status?: ProjectStatus) {
 
@@ -38,6 +42,7 @@ export class ProjectsController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get(':id')
   findOne(@Param('id') id: string) {
 
@@ -45,6 +50,7 @@ export class ProjectsController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
 
@@ -52,6 +58,7 @@ export class ProjectsController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_WRITE)
   @Delete(':id')
   delete(@Param('id') id: string) {
 

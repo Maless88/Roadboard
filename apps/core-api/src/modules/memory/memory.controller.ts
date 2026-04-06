@@ -10,20 +10,23 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { MemoryEntryType } from '@roadboard/domain';
+import { GrantType, MemoryEntryType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { RequireGrant } from '../../common/require-grant.decorator';
 import { MemoryService } from './memory.service';
 import { CreateMemoryEntryDto } from './create-memory-entry.dto';
 import { UpdateMemoryEntryDto } from './update-memory-entry.dto';
 
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GrantCheckGuard)
 @Controller('memory')
 export class MemoryController {
 
   constructor(@Inject(MemoryService) private readonly memoryService: MemoryService) {}
 
 
+  @RequireGrant(GrantType.MEMORY_WRITE)
   @Post()
   create(@Body() dto: CreateMemoryEntryDto) {
 
@@ -31,6 +34,7 @@ export class MemoryController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get()
   findAll(
     @Query('projectId') projectId: string,
@@ -41,6 +45,7 @@ export class MemoryController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get(':id')
   findOne(@Param('id') id: string) {
 
@@ -48,6 +53,7 @@ export class MemoryController {
   }
 
 
+  @RequireGrant(GrantType.MEMORY_WRITE)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateMemoryEntryDto) {
 
@@ -55,6 +61,7 @@ export class MemoryController {
   }
 
 
+  @RequireGrant(GrantType.MEMORY_WRITE)
   @Delete(':id')
   delete(@Param('id') id: string) {
 

@@ -10,20 +10,23 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { TaskStatus } from '@roadboard/domain';
+import { GrantType, TaskStatus } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { RequireGrant } from '../../common/require-grant.decorator';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './create-task.dto';
 import { UpdateTaskDto } from './update-task.dto';
 
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GrantCheckGuard)
 @Controller('tasks')
 export class TasksController {
 
   constructor(@Inject(TasksService) private readonly tasksService: TasksService) {}
 
 
+  @RequireGrant(GrantType.TASK_WRITE)
   @Post()
   create(@Body() dto: CreateTaskDto) {
 
@@ -31,6 +34,7 @@ export class TasksController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get()
   findAll(
     @Query('projectId') projectId: string,
@@ -43,6 +47,7 @@ export class TasksController {
   }
 
 
+  @RequireGrant(GrantType.PROJECT_READ)
   @Get(':id')
   findOne(@Param('id') id: string) {
 
@@ -50,6 +55,7 @@ export class TasksController {
   }
 
 
+  @RequireGrant(GrantType.TASK_WRITE)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
 
@@ -57,6 +63,7 @@ export class TasksController {
   }
 
 
+  @RequireGrant(GrantType.TASK_WRITE)
   @Delete(':id')
   delete(@Param('id') id: string) {
 
