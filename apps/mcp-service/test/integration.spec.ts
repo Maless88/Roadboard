@@ -121,7 +121,7 @@ describe('mcp-service Integration', () => {
 
     // Spawn mcp-service with valid token
     mcpProc = spawn('node', ['--import', 'tsx/esm', SVC_ENTRY], {
-      env: { ...process.env, MCP_TOKEN: mcpToken, CORE_API_PORT: '4001', AUTH_ACCESS_PORT: '4002' },
+      env: { ...process.env, MCP_TOKEN: mcpToken, CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002' },
       stdio: ['pipe', 'pipe', 'inherit'],
     });
 
@@ -159,6 +159,9 @@ describe('mcp-service Integration', () => {
     expect(names).toContain('create_task');
     expect(names).toContain('update_task_status');
     expect(names).toContain('create_memory_entry');
+    expect(names).toContain('prepare_task_context');
+    expect(names).toContain('prepare_project_summary');
+    expect(names).toContain('create_handoff');
   });
 
 
@@ -302,6 +305,90 @@ describe('mcp-service Integration', () => {
     expect(Array.isArray(entries)).toBe(true);
     expect(entries.length).toBeGreaterThan(0);
   });
+
+
+  it('should prepare task context via MCP', async () => {
+
+    const res = await sendRequest(mcpProc, {
+      jsonrpc: '2.0',
+      id: reqId++,
+      method: 'tools/call',
+      params: { name: 'prepare_task_context', arguments: { projectId, taskId } },
+    });
+
+    expect(res.error).toBeUndefined();
+
+    const result = res.result as { content: Array<{ text: string }> };
+    const ctx = JSON.parse(result.content[0].text) as {
+      project: { id: string };
+      task: { id: string };
+      related_tasks: unknown[];
+      recent_memory: unknown[];
+    };
+
+    expect(ctx.project).toBeDefined();
+    expect(ctx.task.id).toBe(taskId);
+    expect(Array.isArray(ctx.related_tasks)).toBe(true);
+    expect(Array.isArray(ctx.recent_memory)).toBe(true);
+  });
+
+
+  it('should prepare project summary via MCP', async () => {
+
+    const res = await sendRequest(mcpProc, {
+      jsonrpc: '2.0',
+      id: reqId++,
+      method: 'tools/call',
+      params: { name: 'prepare_project_summary', arguments: { projectId } },
+    });
+
+    expect(res.error).toBeUndefined();
+
+    const result = res.result as { content: Array<{ text: string }> };
+    const summary = JSON.parse(result.content[0].text) as {
+      project: { id: string };
+      task_summary: { total: number; by_status: Record<string, number> };
+      open_tasks: unknown[];
+      memory: unknown[];
+    };
+
+    expect(summary.project).toBeDefined();
+    expect(typeof summary.task_summary.total).toBe('number');
+    expect(Array.isArray(summary.open_tasks)).toBe(true);
+    expect(Array.isArray(summary.memory)).toBe(true);
+  });
+
+
+  it('should create a handoff via MCP', async () => {
+
+    const res = await sendRequest(mcpProc, {
+      jsonrpc: '2.0',
+      id: reqId++,
+      method: 'tools/call',
+      params: {
+        name: 'create_handoff',
+        arguments: {
+          projectId,
+          summary: 'Completed FASE 8 workflow tools implementation.',
+          next_steps: ['Write integration tests', 'Commit and push'],
+        },
+      },
+    });
+
+    expect(res.error).toBeUndefined();
+
+    const result = res.result as { content: Array<{ text: string }> };
+    const entry = JSON.parse(result.content[0].text) as {
+      id: string;
+      type: string;
+      body: string;
+    };
+
+    expect(entry.id).toBeDefined();
+    expect(entry.type).toBe('handoff');
+    expect(entry.body).toContain('## Summary');
+    expect(entry.body).toContain('## Next Steps');
+  });
 });
 
 
@@ -313,7 +400,7 @@ describe('mcp-service — invalid token', () => {
   beforeAll(async () => {
 
     invalidProc = spawn('node', ['--import', 'tsx/esm', SVC_ENTRY], {
-      env: { ...process.env, MCP_TOKEN: 'invalid-token-xyz', CORE_API_PORT: '4001', AUTH_ACCESS_PORT: '4002' },
+      env: { ...process.env, MCP_TOKEN: 'invalid-token-xyz', CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002' },
       stdio: ['pipe', 'pipe', 'inherit'],
     });
 

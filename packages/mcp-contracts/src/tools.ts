@@ -142,6 +142,64 @@ export const CREATE_MEMORY_ENTRY_TOOL: McpToolDefinition = {
   },
 };
 
+export const PREPARE_TASK_CONTEXT_TOOL: McpToolDefinition = {
+  name: 'prepare_task_context',
+  description: 'Assemble full context for a task: project info, the task itself, sibling tasks in the same phase, and recent memory entries. Use this before starting work on a task.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      taskId: {
+        type: 'string',
+        description: 'The task ID to build context for',
+      },
+    },
+    required: ['projectId', 'taskId'],
+  },
+};
+
+export const PREPARE_PROJECT_SUMMARY_TOOL: McpToolDefinition = {
+  name: 'prepare_project_summary',
+  description: 'Generate a structured project snapshot for agent onboarding: project details, task counts by status, open tasks, and memory entries.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+    },
+    required: ['projectId'],
+  },
+};
+
+export const CREATE_HANDOFF_TOOL: McpToolDefinition = {
+  name: 'create_handoff',
+  description: 'Create a structured handoff memory entry from current session activity. Use at end of session to preserve context for the next agent or session.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      summary: {
+        type: 'string',
+        description: 'What was accomplished in this session',
+      },
+      next_steps: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Ordered list of next actions for the following session',
+      },
+    },
+    required: ['projectId', 'summary'],
+  },
+};
+
 export const MCP_TOOLS = [
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
@@ -150,4 +208,7 @@ export const MCP_TOOLS = [
   CREATE_TASK_TOOL,
   UPDATE_TASK_STATUS_TOOL,
   CREATE_MEMORY_ENTRY_TOOL,
+  PREPARE_TASK_CONTEXT_TOOL,
+  PREPARE_PROJECT_SUMMARY_TOOL,
+  CREATE_HANDOFF_TOOL,
 ] as const;

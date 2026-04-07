@@ -143,6 +143,46 @@ const TOOLS = [
       required: ["projectId", "type", "title"],
     },
   },
+  {
+    name: "prepare_task_context",
+    description: "Assemble full context for a task: project info, the task itself, sibling tasks in the same phase, and recent memory entries.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        taskId: { type: "string", description: "The task ID to build context for" },
+      },
+      required: ["projectId", "taskId"],
+    },
+  },
+  {
+    name: "prepare_project_summary",
+    description: "Generate a structured project snapshot for agent onboarding: project details, task counts by status, open tasks, and memory entries.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "create_handoff",
+    description: "Create a structured handoff memory entry from current session activity. Use at end of session to preserve context for the next agent or session.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        summary: { type: "string", description: "What was accomplished in this session" },
+        next_steps: {
+          type: "array",
+          items: { type: "string" },
+          description: "Ordered list of next actions for the following session",
+        },
+      },
+      required: ["projectId", "summary"],
+    },
+  },
 ];
 
 
@@ -220,6 +260,81 @@ async function handleToolCall(
         title: args.title as string,
         body: args.body as string | undefined,
       });
+      return jsonResponse(result);
+    }
+
+    case "prepare_task_context": {
+      const projectId = args.projectId as string;
+      const taskId = args.taskId as string;
+
+      const [project, tasks, memory] = await Promise.all([
+        client.getProject(projectId),
+        client.listTasks(projectId),
+        client.listMemory(projectId),
+      ]);
+
+      const taskList = tasks as Array<Record<string, unknown>>;
+      const task = taskList.find((t) => t.id === taskId);
+
+      if (!task) {
+        return errorResponse(`Task ${taskId} not found in project ${projectId}`);
+      }
+
+      const relatedTasks = taskList.filter(
+        (t) => t.id !== taskId && t.phaseId === task.phaseId,
+      );
+
+      return jsonResponse({
+        project,
+        task,
+        related_tasks: relatedTasks,
+        recent_memory: (memory as unknown[]).slice(0, 5),
+      });
+    }
+
+    case "prepare_project_summary": {
+      const projectId = args.projectId as string;
+
+      const [project, tasks, memory] = await Promise.all([
+        client.getProject(projectId),
+        client.listTasks(projectId),
+        client.listMemory(projectId),
+      ]);
+
+      const taskList = tasks as Array<Record<string, unknown>>;
+
+      const byStatus = taskList.reduce<Record<string, number>>((acc, t) => {
+        const s = t.status as string;
+        acc[s] = (acc[s] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      return jsonResponse({
+        project,
+        task_summary: { total: taskList.length, by_status: byStatus },
+        open_tasks: taskList.filter((t) => t.status !== "done"),
+        memory,
+      });
+    }
+
+    case "create_handoff": {
+      const projectId = args.projectId as string;
+      const summary = args.summary as string;
+      const nextSteps = args.next_steps as string[] | undefined;
+
+      const parts: string[] = [`## Summary\n${summary}`];
+
+      if (nextSteps && nextSteps.length > 0) {
+        parts.push(`## Next Steps\n${nextSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+      }
+
+      const result = await client.createMemoryEntry({
+        projectId,
+        type: "handoff",
+        title: `Handoff — ${new Date().toISOString().slice(0, 10)}`,
+        body: parts.join("\n\n"),
+      });
+
       return jsonResponse(result);
     }
 
