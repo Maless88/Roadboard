@@ -52,15 +52,15 @@ export class CoreApiClient {
 
   async listTasks(projectId: string, status?: string): Promise<unknown[]> {
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ projectId });
 
     if (status) {
       params.set("status", status);
     }
 
-    const query = params.toString();
-    const url = `${BASE_URL}/projects/${projectId}/tasks${query ? `?${query}` : ""}`;
-    const res = await fetch(url, { headers: this.headers() });
+    const res = await fetch(`${BASE_URL}/tasks?${params.toString()}`, {
+      headers: this.headers(),
+    });
 
     if (!res.ok) {
       throw new Error(`core-api listTasks failed: ${res.status}`);
@@ -76,11 +76,10 @@ export class CoreApiClient {
     priority?: string;
   }): Promise<unknown> {
 
-    const { projectId, ...body } = data;
-    const res = await fetch(`${BASE_URL}/projects/${projectId}/tasks`, {
+    const res = await fetch(`${BASE_URL}/tasks`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(data),
     });
 
     if (!res.ok) {
@@ -93,7 +92,7 @@ export class CoreApiClient {
 
   async updateTaskStatus(taskId: string, status: string): Promise<unknown> {
 
-    const res = await fetch(`${BASE_URL}/tasks/${taskId}/status`, {
+    const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
       method: "PATCH",
       headers: this.headers(),
       body: JSON.stringify({ status }),
@@ -109,15 +108,15 @@ export class CoreApiClient {
 
   async listMemory(projectId: string, type?: string): Promise<unknown[]> {
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ projectId });
 
     if (type) {
       params.set("type", type);
     }
 
-    const query = params.toString();
-    const url = `${BASE_URL}/projects/${projectId}/memory${query ? `?${query}` : ""}`;
-    const res = await fetch(url, { headers: this.headers() });
+    const res = await fetch(`${BASE_URL}/memory?${params.toString()}`, {
+      headers: this.headers(),
+    });
 
     if (!res.ok) {
       throw new Error(`core-api listMemory failed: ${res.status}`);
@@ -134,11 +133,10 @@ export class CoreApiClient {
     body?: string;
   }): Promise<unknown> {
 
-    const { projectId, ...body } = data;
-    const res = await fetch(`${BASE_URL}/projects/${projectId}/memory`, {
+    const res = await fetch(`${BASE_URL}/memory`, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(data),
     });
 
     if (!res.ok) {
