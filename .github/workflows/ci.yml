@@ -7,8 +7,8 @@ on:
     branches: [main, master]
 
 jobs:
-  check:
-    name: Lint, Typecheck & Test
+  typecheck-and-test:
+    name: Typecheck & Unit/Integration Tests
     runs-on: ubuntu-latest
 
     services:
@@ -22,6 +22,16 @@ jobs:
           - 5433:5432
         options: >-
           --health-cmd "pg_isready -U roadboard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
@@ -50,8 +60,79 @@ jobs:
       - name: Run migrations
         run: pnpm db:migrate
 
-      - name: Typecheck
+      - name: Typecheck all packages
         run: pnpm -r typecheck
 
-      - name: Test
+      - name: Unit and integration tests
         run: pnpm -r test
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    needs: typecheck-and-test
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: roadboard
+          POSTGRES_PASSWORD: roadboard
+          POSTGRES_DB: roadboard
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U roadboard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://roadboard:roadboard@localhost:5433/roadboard
+      CORE_API_URL: http://localhost:3001
+      AUTH_URL: http://localhost:3002
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm db:generate
+
+      - name: Run migrations and seed
+        run: pnpm db:migrate && pnpm db:seed
+
+      - name: Build all apps
+        run: pnpm -r build
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web-app exec playwright install chromium --with-deps
+
+      - name: Start auth-access
+        run: >
+          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard
+          AUTH_ACCESS_PORT=3002
+          node apps/auth-access/dist/main.js &
+          sleep 3
+
+      - name: Start core-api
+        run: >
+          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard
+          CORE_API_PORT=3001 AUTH_ACCESS_PORT=3002
+          node apps/core-api/dist/main.js &
+          sleep 3
+
+      - name: Build web-app
+        run: pnpm --filter web-app build
+
+      - name: Run Playwright tests
+        run: pnpm --filter web-app test:e2e

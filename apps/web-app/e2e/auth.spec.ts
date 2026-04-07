@@ -1,0 +1,57 @@
+import { test, expect } from '@playwright/test';
+
+
+test.describe('Authentication', () => {
+
+  test('redirects unauthenticated user to login', async ({ page }) => {
+
+    await page.goto('/');
+    await expect(page).toHaveURL('/login');
+  });
+
+
+  test('login page renders correctly', async ({ page }) => {
+
+    await page.goto('/login');
+    await expect(page.getByRole('heading', { name: 'RoadBoard' })).toBeVisible();
+    await expect(page.getByLabel('Username')).toBeVisible();
+    await expect(page.getByLabel('Password')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+  });
+
+
+  test('login with valid credentials navigates to projects', async ({ page }) => {
+
+    await page.goto('/login');
+    await page.getByLabel('Username').fill('alessio');
+    await page.getByLabel('Password').fill('***REDACTED***');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect(page).toHaveURL('/projects');
+    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+  });
+
+
+  test('login with invalid credentials stays on login', async ({ page }) => {
+
+    await page.goto('/login');
+    await page.getByLabel('Username').fill('alessio');
+    await page.getByLabel('Password').fill('wrong-password');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+
+    await expect(page).toHaveURL('/login');
+  });
+
+
+  test('sign out navigates back to login', async ({ page }) => {
+
+    await page.goto('/login');
+    await page.getByLabel('Username').fill('alessio');
+    await page.getByLabel('Password').fill('***REDACTED***');
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await expect(page).toHaveURL('/projects');
+
+    await page.getByRole('button', { name: 'Sign out' }).click();
+    await expect(page).toHaveURL('/login');
+  });
+});
