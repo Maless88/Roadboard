@@ -19,5 +19,8 @@
     "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
     "bootstrap": "pnpm install && pnpm docker:up && pnpm db:migrate && pnpm db:generate && pnpm db:seed"
+  },
+  "devDependencies": {
+    "turbo": "^2.9.4"
   }
 }

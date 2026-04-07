@@ -2,8 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn, type ChildProcess } from 'child_process';
 import { resolve } from 'path';
 
-const AUTH_URL = 'http://localhost:4002';
-const CORE_URL = 'http://localhost:4001';
+const AUTH_URL = 'http://localhost:3002';
+const CORE_URL = 'http://localhost:3001';
 
 const SVC_ENTRY = resolve(__dirname, '../src/main.ts');
 

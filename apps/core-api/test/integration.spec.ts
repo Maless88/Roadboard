@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 
-const AUTH_URL = 'http://localhost:4002';
-const CORE_URL = 'http://localhost:4001';
+const AUTH_URL = 'http://localhost:3002';
+const CORE_URL = 'http://localhost:3001';
 
 
 interface LoginResponse {
