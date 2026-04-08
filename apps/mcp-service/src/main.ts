@@ -1,5 +1,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -8,6 +10,9 @@ import { optionalEnv } from "@roadboard/config";
 import { CoreApiClient } from "./clients/core-api.client.js";
 
 
+const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "3002");
+const MCP_TRANSPORT = optionalEnv("MCP_TRANSPORT", "stdio");
+const MCP_HTTP_PORT = Number(optionalEnv("MCP_HTTP_PORT", "3005"));
 const MCP_TOKEN = optionalEnv("MCP_TOKEN", "");
 
 
@@ -210,6 +215,7 @@ async function handleToolCall(
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
 
   switch (name) {
+
     case "list_projects": {
       const result = await client.listProjects(args.status as string | undefined);
       return jsonResponse(result);
@@ -344,14 +350,12 @@ async function handleToolCall(
 }
 
 
-async function main(): Promise<void> {
+function buildServer(client: CoreApiClient): Server {
 
   const server = new Server(
     { name: "roadboard-mcp", version: "0.0.1" },
     { capabilities: { tools: {} } },
   );
-
-  const client = new CoreApiClient(MCP_TOKEN);
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
 
@@ -370,9 +374,92 @@ async function main(): Promise<void> {
     }
   });
 
+  return server;
+}
+
+
+async function validateMcpToken(rawToken: string): Promise<boolean> {
+
+  const res = await fetch(`http://localhost:${AUTH_ACCESS_PORT}/tokens/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: rawToken }),
+  }).catch(() => null);
+
+  return res?.ok === true;
+}
+
+
+async function startHttp(): Promise<void> {
+
+  const app = createMcpExpressApp({ host: "0.0.0.0" });
+
+  app.use(async (req, res, next) => {
+
+    const auth = req.headers.authorization;
+
+    if (!auth?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Missing or invalid Authorization header" });
+      return;
+    }
+
+    const token = auth.slice(7);
+    const valid = await validateMcpToken(token);
+
+    if (!valid) {
+      res.status(401).json({ error: "Invalid or revoked MCP token" });
+      return;
+    }
+
+    (req as Record<string, unknown> & typeof req).mcpToken = token;
+    next();
+  });
+
+  app.all("/mcp", async (req, res) => {
+
+    const token = (req as Record<string, unknown> & typeof req).mcpToken as string;
+    const client = new CoreApiClient(token);
+    const server = buildServer(client);
+
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+    });
+
+    await server.connect(transport);
+
+    try {
+      await transport.handleRequest(req, res, req.body as unknown);
+    } finally {
+      await server.close();
+    }
+  });
+
+  app.listen(MCP_HTTP_PORT, "0.0.0.0", () => {
+    console.log(`mcp-service HTTP listening on port ${MCP_HTTP_PORT}`);
+    console.log(`MCP endpoint: http://0.0.0.0:${MCP_HTTP_PORT}/mcp`);
+  });
+}
+
+
+async function startStdio(): Promise<void> {
+
+  const client = new CoreApiClient(MCP_TOKEN);
+  const server = buildServer(client);
   const transport = new StdioServerTransport();
+
   await server.connect(transport);
 }
+
+
+async function main(): Promise<void> {
+
+  if (MCP_TRANSPORT === "http") {
+    await startHttp();
+  } else {
+    await startStdio();
+  }
+}
+
 
 main().catch((err) => {
   console.error("MCP service failed to start:", err);
