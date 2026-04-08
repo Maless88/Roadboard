@@ -28,7 +28,8 @@ export default async function SettingsPage() {
     })),
   );
 
-  const isAdmin = session.username === 'alessio';
+  const isAdmin = session.role === 'admin';
+  const isTeamLeader = session.role === 'team_leader';
 
   return (
     <>
@@ -47,6 +48,7 @@ export default async function SettingsPage() {
           projects={projects}
           grantsPerProject={grantsPerProject}
           isAdmin={isAdmin}
+          isTeamLeader={isTeamLeader}
         />
       </main>
     </>

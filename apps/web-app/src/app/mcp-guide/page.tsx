@@ -132,17 +132,25 @@ export default function McpGuidePage() {
   );
 
   const tools = [
-    { name: 'list_projects', desc: 'Elenca tutti i progetti accessibili al token' },
-    { name: 'get_project', desc: 'Dettaglio di un progetto specifico' },
-    { name: 'list_active_tasks', desc: 'Task di un progetto, filtrabile per status' },
-    { name: 'create_task', desc: 'Crea un nuovo task in un progetto' },
-    { name: 'update_task_status', desc: 'Aggiorna lo status di un task' },
-    { name: 'get_project_memory', desc: 'Legge le memory entry di un progetto' },
-    { name: 'create_memory_entry', desc: 'Scrive una memory entry nel progetto' },
-    { name: 'prepare_task_context', desc: 'Contesto completo per un task (progetto + task + sibling + memory)' },
-    { name: 'prepare_project_summary', desc: 'Snapshot narrativo del progetto per onboarding agente' },
-    { name: 'create_handoff', desc: 'Crea un handoff strutturato a fine sessione' },
+    { name: 'initial_instructions', desc: 'Protocollo operativo MCP: catalog dei tool, workflow raccomandato e regole. Chiamare una volta a inizio sessione.', category: 'onboarding' },
+    { name: 'list_projects', desc: 'Elenca tutti i progetti accessibili al token', category: 'read' },
+    { name: 'get_project', desc: 'Dettaglio di un progetto specifico', category: 'read' },
+    { name: 'list_active_tasks', desc: 'Task di un progetto, filtrabile per status', category: 'read' },
+    { name: 'get_project_memory', desc: 'Legge le memory entry di un progetto', category: 'read' },
+    { name: 'prepare_project_summary', desc: 'Snapshot narrativo del progetto per onboarding agente', category: 'context' },
+    { name: 'prepare_task_context', desc: 'Contesto completo per un task (progetto + task + sibling + memory)', category: 'context' },
+    { name: 'create_task', desc: 'Crea un nuovo task in un progetto', category: 'write' },
+    { name: 'update_task_status', desc: 'Aggiorna lo status di un task', category: 'write' },
+    { name: 'create_memory_entry', desc: 'Scrive una memory entry nel progetto', category: 'write' },
+    { name: 'create_handoff', desc: 'Crea un handoff strutturato a fine sessione', category: 'write' },
   ];
+
+  const categoryColors: Record<string, string> = {
+    onboarding: 'bg-indigo-900 text-indigo-300 border-indigo-700',
+    read: 'bg-blue-900 text-blue-300 border-blue-700',
+    context: 'bg-purple-900 text-purple-300 border-purple-700',
+    write: 'bg-green-900 text-green-300 border-green-700',
+  };
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
@@ -179,12 +187,13 @@ export default function McpGuidePage() {
         </div>
 
         {/* Nav rapida */}
-        <nav className="mb-12 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <nav className="mb-12 grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { href: '#prereqs', icon: '🔑', label: 'Prerequisiti' },
             { href: '#claude-code', icon: '⚡', label: 'Claude Code' },
             { href: '#zed', icon: '🔷', label: 'Zed' },
             { href: '#codex', icon: '🟣', label: 'VS Code / Codex' },
+            { href: '#protocol', icon: '🤖', label: 'Protocollo sessione' },
           ].map((item) => (
             <a
               key={item.href}
@@ -251,7 +260,7 @@ export default function McpGuidePage() {
             </p>
             <CodeBlock code="/mcp" lang="bash" />
             <p className="text-gray-400 text-sm mt-3">
-              Dovresti vedere <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">roadboard</code> nell&apos;elenco dei server connessi con 10 tool disponibili.
+              Dovresti vedere <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">roadboard</code> nell&apos;elenco dei server connessi con 11 tool disponibili.
             </p>
           </Step>
 
@@ -336,6 +345,13 @@ export default function McpGuidePage() {
 
         {/* Tool disponibili */}
         <Section id="tools" icon="🛠️" title="Tool disponibili">
+          <div className="flex flex-wrap gap-2 mb-4 text-xs">
+            {(['onboarding', 'read', 'context', 'write'] as const).map((cat) => (
+              <span key={cat} className={`inline-flex items-center px-2 py-0.5 rounded border font-medium ${categoryColors[cat]}`}>
+                {cat}
+              </span>
+            ))}
+          </div>
           <div className="grid gap-2">
             {tools.map((tool) => (
               <div
@@ -343,10 +359,70 @@ export default function McpGuidePage() {
                 className="flex items-start gap-4 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 hover:border-gray-600 transition-colors"
               >
                 <code className="text-green-400 font-mono text-sm flex-shrink-0 w-52">{tool.name}</code>
-                <span className="text-gray-400 text-sm">{tool.desc}</span>
+                <span className="text-gray-400 text-sm flex-1">{tool.desc}</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded border text-xs font-medium flex-shrink-0 ${categoryColors[tool.category]}`}>
+                  {tool.category}
+                </span>
               </div>
             ))}
           </div>
+        </Section>
+
+        {/* Protocollo di sessione */}
+        <Section id="protocol" icon="🤖" title="Protocollo di sessione per agenti">
+          <div className="bg-indigo-950/40 border border-indigo-800/50 rounded-lg p-5 mb-6">
+            <p className="text-indigo-200 text-sm leading-relaxed">
+              Il tool <code className="text-green-400 bg-gray-900/60 px-1.5 py-0.5 rounded">initial_instructions</code> definisce il protocollo operativo del server MCP.
+              Va chiamato <strong>una sola volta a inizio sessione</strong> per iniettare il catalog dei tool, il workflow raccomandato e le regole operative nell&apos;LLM.
+            </p>
+          </div>
+
+          <Step n={1} title="Aggiungi la regola al tuo CLAUDE.md (o equivalente)">
+            <p className="text-gray-400 text-sm mb-3">
+              Per rendere l&apos;onboarding automatico, aggiungi questa riga nelle istruzioni del tuo agente:
+            </p>
+            <CodeBlock
+              code={`## MCP Operational Protocols\n- **RoadBoard 2.0 MCP**: If tools are available, you MUST execute \`initial_instructions()\`\n  at the start of every session to load the operational protocol, tool catalog,\n  and workflow rules.`}
+              lang="markdown"
+            />
+          </Step>
+
+          <Step n={2} title="Workflow raccomandato (restituito da initial_instructions)">
+            <div className="space-y-2">
+              {[
+                { n: 1, action: 'Chiama prepare_project_summary(projectId) per caricare il contesto completo del progetto.' },
+                { n: 2, action: 'Se lavori su un task specifico, chiama prepare_task_context(projectId, taskId).' },
+                { n: 3, action: 'Prima di iniziare, verifica che esista un task. Usa create_task se necessario.' },
+                { n: 4, action: 'Aggiorna lo status del task con update_task_status man mano che avanzi.' },
+                { n: 5, action: 'Salva decisioni importanti con create_memory_entry.' },
+                { n: 6, action: 'A fine sessione chiama create_handoff per preservare il contesto.' },
+              ].map((item) => (
+                <div key={item.n} className="flex items-start gap-3 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">{item.n}</span>
+                  <span className="text-gray-400 text-sm">{item.action}</span>
+                </div>
+              ))}
+            </div>
+          </Step>
+
+          <Step n={3} title="Regole operative">
+            <div className="space-y-2">
+              {[
+                'Chiama initial_instructions una volta a inizio sessione.',
+                'Apri o identifica sempre un task prima di iniziare a lavorare.',
+                'Non dichiarare completion senza aggiornare lo status del task.',
+                'Usa create_memory_entry per persistere decisioni architetturali e scoperte rilevanti.',
+                'Chiama sempre create_handoff a fine sessione.',
+                'Preferisci prepare_project_summary a letture multiple per l\'onboarding.',
+                'Se il projectId è sconosciuto, chiama prima list_projects.',
+              ].map((rule) => (
+                <div key={rule} className="flex items-start gap-3 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
+                  <span className="text-green-400 flex-shrink-0">✓</span>
+                  <span className="text-gray-400 text-sm">{rule}</span>
+                </div>
+              ))}
+            </div>
+          </Step>
         </Section>
 
         {/* Troubleshooting */}

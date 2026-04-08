@@ -8,6 +8,8 @@ export interface User {
   displayName: string;
   email: string;
   status: string;
+  role: string;
+  managerId: string | null;
   createdAt: string;
 }
 
@@ -101,6 +103,8 @@ export interface SessionInfo {
   userId: string;
   username: string;
   displayName: string;
+  role: string;
+  managerId: string | null;
   expiresAt: string;
 }
 
@@ -240,9 +244,30 @@ export async function listUsers(token: string): Promise<User[]> {
 }
 
 
+export async function resetUserPassword(
+  token: string,
+  userId: string,
+  newPassword: string,
+): Promise<{ success: boolean }> {
+
+  const res = await fetch(`${AUTH_API}/users/${userId}/password/reset`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify({ newPassword }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to reset password');
+  }
+
+  return res.json() as Promise<{ success: boolean }>;
+}
+
+
 export async function createUser(
   token: string,
-  data: { username: string; displayName: string; email: string; password: string },
+  data: { username: string; displayName: string; email: string; password: string; role?: string; managerId?: string },
 ): Promise<User> {
 
   const res = await fetch(`${AUTH_API}/users`, {
