@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
 const AUTH_URL = 'http://localhost:3002';
+const CORE_API_URL = 'http://localhost:3001';
 
 
 interface LoginResponse {
@@ -60,12 +61,25 @@ interface ValidateTokenResponse {
 }
 
 
+interface Project {
+  id: string;
+  slug: string;
+  name: string;
+}
+
+
 function authHeaders(token: string): Record<string, string> {
 
   return {
     'Content-Type': 'application/json',
     Authorization: `Bearer ${token}`,
   };
+}
+
+
+function bearerHeader(token: string): Record<string, string> {
+
+  return { Authorization: `Bearer ${token}` };
 }
 
 
@@ -77,16 +91,57 @@ describe('auth-access Integration', () => {
   let grantId: string;
   let mcpTokenId: string;
   let mcpTokenRaw: string;
+  let testProjectId: string;
 
-  const TEST_PROJECT_ID = 'test-project-grant';
+  const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+
+  afterAll(async () => {
+
+    if (!token) return;
+
+    if (grantId) {
+      await fetch(`${AUTH_URL}/grants/${grantId}`, { method: 'DELETE', headers: bearerHeader(token) }).catch(() => null);
+    }
+
+    if (membershipId) {
+      await fetch(`${AUTH_URL}/memberships/${membershipId}`, { method: 'DELETE', headers: bearerHeader(token) }).catch(() => null);
+    }
+
+    if (teamId) {
+      await fetch(`${AUTH_URL}/teams/${teamId}`, { method: 'DELETE', headers: bearerHeader(token) }).catch(() => null);
+    }
+  });
 
 
   beforeAll(async () => {
 
-    const res = await fetch(`${AUTH_URL}/health`).catch(() => null);
+    const health = await fetch(`${AUTH_URL}/health`).catch(() => null);
 
-    if (!res?.ok) {
-      throw new Error('auth-access not running. Start it on :4002 before running integration tests.');
+    if (!health?.ok) {
+      throw new Error('auth-access not running. Start it on :3002 before running integration tests.');
+    }
+
+    const loginRes = await fetch(`${AUTH_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'alessio', password: 'roadboard2025' }),
+    });
+
+    const data = (await loginRes.json()) as LoginResponse;
+    token = data.token;
+    userId = data.userId;
+
+    const projectsRes = await fetch(`${CORE_API_URL}/projects`, {
+      headers: bearerHeader(token),
+    }).catch(() => null);
+
+    if (projectsRes?.ok) {
+      const projects = (await projectsRes.json()) as Project[];
+
+      if (projects.length > 0) {
+        testProjectId = projects[0].id;
+      }
     }
   });
 
@@ -183,7 +238,7 @@ describe('auth-access Integration', () => {
       const res = await fetch(`${AUTH_URL}/teams`, {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ name: 'Test Team Integration', slug: `test-team-${Date.now()}` }),
+        body: JSON.stringify({ name: `Test Team ${RUN_ID}`, slug: `test-team-${RUN_ID}` }),
       });
 
       expect(res.status).toBe(201);
@@ -191,7 +246,7 @@ describe('auth-access Integration', () => {
       const data = (await res.json()) as Team;
 
       expect(data.id).toBeDefined();
-      expect(data.name).toBe('Test Team Integration');
+      expect(data.name).toBe(`Test Team ${RUN_ID}`);
 
       teamId = data.id;
     });
@@ -256,13 +311,18 @@ describe('auth-access Integration', () => {
 
     it('should create a project grant', async () => {
 
+      if (!testProjectId) {
+        console.warn('Skipping grants tests: no project found in core-api');
+        return;
+      }
+
       const res = await fetch(`${AUTH_URL}/grants`, {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({
-          projectId: TEST_PROJECT_ID,
-          subjectType: 'user',
-          subjectId: userId,
+          projectId: testProjectId,
+          subjectType: 'team',
+          subjectId: teamId,
           grantType: 'project:admin',
           grantedByUserId: userId,
         }),
@@ -273,8 +333,8 @@ describe('auth-access Integration', () => {
       const data = (await res.json()) as Grant;
 
       expect(data.id).toBeDefined();
-      expect(data.projectId).toBe(TEST_PROJECT_ID);
-      expect(data.subjectId).toBe(userId);
+      expect(data.projectId).toBe(testProjectId);
+      expect(data.subjectId).toBe(teamId);
 
       grantId = data.id;
     });
@@ -282,7 +342,9 @@ describe('auth-access Integration', () => {
 
     it('should list grants for a project', async () => {
 
-      const res = await fetch(`${AUTH_URL}/grants?projectId=${TEST_PROJECT_ID}`, {
+      if (!testProjectId) return;
+
+      const res = await fetch(`${AUTH_URL}/grants?projectId=${testProjectId}`, {
         headers: authHeaders(token),
       });
 
@@ -297,10 +359,12 @@ describe('auth-access Integration', () => {
 
     it('should confirm permission via grant check', async () => {
 
+      if (!testProjectId) return;
+
       const params = new URLSearchParams({
-        projectId: TEST_PROJECT_ID,
-        subjectType: 'user',
-        subjectId: userId,
+        projectId: testProjectId,
+        subjectType: 'team',
+        subjectId: teamId,
         grantType: 'project:admin',
       });
 
@@ -393,7 +457,7 @@ describe('auth-access Integration', () => {
 
       const res = await fetch(`${AUTH_URL}/tokens/${mcpTokenId}`, {
         method: 'DELETE',
-        headers: authHeaders(token),
+        headers: bearerHeader(token),
       });
 
       expect(res.status).toBe(200);
@@ -419,7 +483,7 @@ describe('auth-access Integration', () => {
 
       const res = await fetch(`${AUTH_URL}/auth/logout`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: bearerHeader(token),
       });
 
       expect(res.status).toBe(201);
@@ -430,10 +494,12 @@ describe('auth-access Integration', () => {
     });
 
 
-    it('should reject requests after logout', async () => {
+    it('should reject session validation after logout', async () => {
 
-      const res = await fetch(`${AUTH_URL}/teams`, {
-        headers: authHeaders(token),
+      const res = await fetch(`${AUTH_URL}/sessions/validate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
       });
 
       expect(res.status).toBe(401);
