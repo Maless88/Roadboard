@@ -4,6 +4,7 @@ import { hashPassword, verifyPassword } from '@roadboard/auth';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
 import { ChangePasswordDto } from './change-password.dto';
+import { ResetPasswordDto } from './reset-password.dto';
 
 
 @Injectable()
@@ -30,6 +31,8 @@ export class UsersService {
         displayName: dto.displayName,
         email: dto.email,
         password: hashed,
+        ...(dto.role ? { role: dto.role } : {}),
+        ...(dto.managerId ? { managerId: dto.managerId } : {}),
       },
     });
 
@@ -102,6 +105,25 @@ export class UsersService {
 
     if (!valid) {
       throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const hashed = await hashPassword(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashed },
+    });
+
+    return { success: true };
+  }
+
+
+  async resetPassword(id: string, dto: ResetPasswordDto): Promise<{ success: boolean }> {
+
+    const user = await this.prisma.user.findUnique({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`);
     }
 
     const hashed = await hashPassword(dto.newPassword);
