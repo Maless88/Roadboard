@@ -3,4 +3,6 @@ export class UpdateUserDto {
   displayName?: string;
   email?: string;
   status?: string;
+  role?: string;
+  managerId?: string;
 }

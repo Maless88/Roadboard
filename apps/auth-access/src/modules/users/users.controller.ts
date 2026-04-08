@@ -12,6 +12,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
 import { ChangePasswordDto } from './change-password.dto';
+import { ResetPasswordDto } from './reset-password.dto';
 
 
 @Controller('users')
@@ -52,6 +53,13 @@ export class UsersController {
   changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
 
     return this.usersService.changePassword(id, dto);
+  }
+
+
+  @Patch(':id/password/reset')
+  resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
+
+    return this.usersService.resetPassword(id, dto);
   }
 
 

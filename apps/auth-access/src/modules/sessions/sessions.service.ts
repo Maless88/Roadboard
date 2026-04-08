@@ -40,6 +40,8 @@ export class SessionsService {
       userId: session.userId,
       username: session.user.username,
       displayName: session.user.displayName,
+      role: session.user.role,
+      managerId: session.user.managerId,
       expiresAt: session.expiresAt,
     };
   }
