@@ -206,34 +206,27 @@ export default function McpGuidePage() {
             </p>
           </div>
 
-          <Step n={1} title="Accedi alla dashboard RoadBoard">
-            <p className="text-gray-400 text-sm mb-3">
-              Vai su{' '}
-              <a href="/login" className="text-indigo-400 hover:text-indigo-300 underline">
-                http://10.0.254.5:3000
-              </a>{' '}
-              e accedi con le tue credenziali.
+          <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-4 mb-8">
+            <p className="text-yellow-200 text-sm font-medium mb-1">⚙️ La pagina Settings è in arrivo</p>
+            <p className="text-yellow-300/70 text-sm">
+              La UI per creare i token MCP è in sviluppo. Per ora i token vengono generati dall&apos;amministratore
+              e consegnati direttamente. Contatta <strong className="text-yellow-200">alessio</strong> per ricevere il tuo.
+            </p>
+          </div>
+
+          <Step n={1} title="Ricevi il tuo token dall'amministratore">
+            <p className="text-gray-400 text-sm">
+              L&apos;amministratore crea il token associato al tuo account e te lo consegna.
+              Il token è una stringa esadecimale da 64 caratteri. Conservala in modo sicuro —
+              non può essere recuperata dopo la consegna.
             </p>
           </Step>
 
-          <Step n={2} title="Vai a Settings e crea un token MCP">
-            <p className="text-gray-400 text-sm mb-3">
-              Dal menu in alto vai su <strong className="text-white">Settings → Token MCP</strong> e clicca{' '}
-              <strong className="text-white">Crea nuovo token</strong>.
-            </p>
-            <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-4">
-              <p className="text-yellow-200 text-sm">
-                ⚠️ Il token raw viene mostrato <strong>una sola volta</strong> subito dopo la creazione.
-                Copialo immediatamente e conservalo in modo sicuro.
-              </p>
-            </div>
-          </Step>
-
-          <Step n={3} title="Sostituisci il placeholder nelle configurazioni">
+          <Step n={2} title="Sostituisci il placeholder nelle configurazioni">
             <p className="text-gray-400 text-sm">
               In tutti gli esempi qui sotto, sostituisci{' '}
               <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">&lt;YOUR_MCP_TOKEN&gt;</code>{' '}
-              con il token che hai appena copiato.
+              con il token che hai ricevuto.
             </p>
           </Step>
         </Section>
