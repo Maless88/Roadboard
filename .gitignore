@@ -21,6 +21,7 @@ dist/
 .claude/
 .serena/
 .turbo/
+.mcp.json
 
 # OS
 .DS_Store

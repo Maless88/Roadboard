@@ -22,6 +22,7 @@
 ## 3. MCP OPERATIONAL PROTOCOLS (AUTO-ONBOARDING)
 - **Serena Module**: If tools are available, you MUST execute `initial_instructions()` at the start of every session to inject the operational protocol.
 - **Memento Module**: If tools are available, you MUST execute `memento_onboarding()` at the start of every session to inject the memory management protocol.
+- **RoadBoard 2.0 MCP**: If tools are available, you MUST execute `initial_instructions()` at the start of every session to load the operational protocol, tool catalog, and workflow rules.
 - **Context7 Module**: You MUST use Context7 tools whenever the user asks a question about any programming language, framework, library, API, software tool, or technology stack.
 
 ## 4. EXECUTION GUIDELINES
