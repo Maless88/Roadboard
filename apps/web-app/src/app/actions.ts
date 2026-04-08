@@ -6,13 +6,21 @@ import { login, logout, updateTaskStatus } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
 
 
-export async function loginAction(formData: FormData): Promise<void> {
+export async function loginAction(
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
 
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
 
-  const { token } = await login(username, password);
-  await setToken(token);
+  try {
+    const { token } = await login(username, password);
+    await setToken(token);
+  } catch {
+    return { error: 'Username o password non corretti.' };
+  }
+
   redirect('/projects');
 }
 
