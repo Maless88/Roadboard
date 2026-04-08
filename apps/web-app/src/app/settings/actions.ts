@@ -8,6 +8,7 @@ import {
   revokeToken,
   createUser,
   deleteUser,
+  resetUserPassword,
   createGrant,
   deleteGrant,
   validateSession,
@@ -101,13 +102,15 @@ export async function createUserAction(
   const displayName = (formData.get('displayName') as string).trim();
   const email = (formData.get('email') as string).trim();
   const password = formData.get('password') as string;
+  const role = (formData.get('role') as string | null)?.trim() || undefined;
+  const managerId = (formData.get('managerId') as string | null)?.trim() || undefined;
 
   if (!username || !displayName || !email || !password) {
     return { error: 'Tutti i campi sono obbligatori' };
   }
 
   try {
-    await createUser(token, { username, displayName, email, password });
+    await createUser(token, { username, displayName, email, password, role, managerId });
     revalidatePath('/settings');
     return { success: true };
   } catch (err) {
@@ -174,4 +177,31 @@ export async function deleteGrantAction(grantId: string): Promise<void> {
 
   await deleteGrant(token, grantId);
   revalidatePath('/settings');
+}
+
+
+export async function resetUserPasswordAction(
+  _prev: { error?: string; success?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  const userId = formData.get('userId') as string;
+  const newPassword = formData.get('newPassword') as string;
+
+  if (!userId || !newPassword) return { error: 'Dati mancanti' };
+
+  if (newPassword.length < 8) {
+    return { error: 'La password deve essere almeno 8 caratteri' };
+  }
+
+  try {
+    await resetUserPassword(token, userId, newPassword);
+    return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Errore' };
+  }
 }
