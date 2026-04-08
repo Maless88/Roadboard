@@ -200,6 +200,57 @@ export const CREATE_HANDOFF_TOOL: McpToolDefinition = {
   },
 };
 
+export const LIST_RECENT_DECISIONS_TOOL: McpToolDefinition = {
+  name: 'list_recent_decisions',
+  description: 'List decisions for a project, optionally filtered by status',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      status: {
+        type: 'string',
+        description: 'Filter by decision status (open, accepted, rejected, superseded)',
+      },
+    },
+    required: ['projectId'],
+  },
+};
+
+export const CREATE_DECISION_TOOL: McpToolDefinition = {
+  name: 'create_decision',
+  description: 'Record an architectural or project decision',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      title: {
+        type: 'string',
+        description: 'Short title for the decision',
+      },
+      summary: {
+        type: 'string',
+        description: 'What was decided',
+      },
+      rationale: {
+        type: 'string',
+        description: 'Why this decision was made',
+      },
+      impactLevel: {
+        type: 'string',
+        description: 'Impact level: low, medium, high',
+        enum: ['low', 'medium', 'high'],
+      },
+    },
+    required: ['projectId', 'title', 'summary'],
+  },
+};
+
 export const MCP_TOOLS = [
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
@@ -211,4 +262,6 @@ export const MCP_TOOLS = [
   PREPARE_TASK_CONTEXT_TOOL,
   PREPARE_PROJECT_SUMMARY_TOOL,
   CREATE_HANDOFF_TOOL,
+  LIST_RECENT_DECISIONS_TOOL,
+  CREATE_DECISION_TOOL,
 ] as const;

@@ -18,6 +18,14 @@ const MCP_TOKEN = optionalEnv("MCP_TOKEN", "");
 
 const TOOLS = [
   {
+    name: "initial_instructions",
+    description: "Call this tool ONCE at the start of every session. Returns the RoadBoard 2.0 MCP operational protocol: available tools, when to use them, recommended workflow, and operating rules.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
     name: "list_projects",
     description: "List all projects the current token has access to",
     inputSchema: {
@@ -188,6 +196,40 @@ const TOOLS = [
       required: ["projectId", "summary"],
     },
   },
+  {
+    name: "list_recent_decisions",
+    description: "List decisions for a project, optionally filtered by status",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        status: {
+          type: "string",
+          description: "Filter by decision status (open, accepted, rejected, superseded)",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "create_decision",
+    description: "Record an architectural or project decision",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        title: { type: "string", description: "Short title for the decision" },
+        summary: { type: "string", description: "What was decided" },
+        rationale: { type: "string", description: "Why this decision was made" },
+        impactLevel: {
+          type: "string",
+          description: "Impact level: low, medium, high",
+          enum: ["low", "medium", "high"],
+        },
+      },
+      required: ["projectId", "title", "summary"],
+    },
+  },
 ];
 
 
@@ -215,6 +257,155 @@ async function handleToolCall(
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
 
   switch (name) {
+
+    case "initial_instructions": {
+      return jsonResponse({
+        instruction_for_agent:
+          "Call this tool once at the start of every session. It defines the RoadBoard 2.0 MCP operational protocol.",
+        system: {
+          name: "RoadBoard 2.0",
+          description:
+            "Multi-project execution, memory, and collaboration platform for humans and AI agents.",
+          transport: "MCP (stdio or HTTP StreamableHTTP)",
+        },
+        tools: {
+          read: [
+            {
+              name: "list_projects",
+              purpose: "Discover all projects accessible with the current token.",
+              when: "At session start or when switching project context.",
+              required_args: [],
+              optional_args: ["status"],
+            },
+            {
+              name: "get_project",
+              purpose: "Get full project details including phases and milestones.",
+              when: "When you need structured project metadata.",
+              required_args: ["projectId"],
+              optional_args: [],
+            },
+            {
+              name: "list_active_tasks",
+              purpose: "List tasks for a project, optionally filtered by status.",
+              when: "When browsing or searching for tasks.",
+              required_args: ["projectId"],
+              optional_args: ["status"],
+            },
+            {
+              name: "get_project_memory",
+              purpose: "Retrieve memory entries (decisions, handoffs, notes) for a project.",
+              when: "When you need historical context or past decisions.",
+              required_args: ["projectId"],
+              optional_args: ["type"],
+            },
+          ],
+          context: [
+            {
+              name: "prepare_project_summary",
+              purpose:
+                "Generate a full onboarding snapshot: project details, task counts by status, open tasks, memory entries.",
+              when: "Use at the start of work on a project to load its full context in one call.",
+              required_args: ["projectId"],
+              optional_args: [],
+            },
+            {
+              name: "prepare_task_context",
+              purpose:
+                "Assemble all context for a specific task: project info, the task itself, sibling tasks in the same phase, and recent memory.",
+              when: "Before starting work on a specific task.",
+              required_args: ["projectId", "taskId"],
+              optional_args: [],
+            },
+          ],
+          write: [
+            {
+              name: "create_task",
+              purpose: "Create a new task in a project.",
+              when: "Before starting any unit of work — always open a task first.",
+              required_args: ["projectId", "title"],
+              optional_args: ["priority"],
+            },
+            {
+              name: "update_task_status",
+              purpose: "Update the status of a task.",
+              when: "As work progresses and on completion.",
+              required_args: ["taskId", "status"],
+              optional_args: [],
+            },
+            {
+              name: "create_memory_entry",
+              purpose: "Store a decision, note, or context entry for future sessions.",
+              when: "After any meaningful decision, architectural choice, or discovery.",
+              required_args: ["projectId", "type", "title"],
+              optional_args: ["body"],
+            },
+            {
+              name: "create_handoff",
+              purpose:
+                "Create a structured handoff memory entry summarizing the session and next steps.",
+              when: "At the END of every session, before disconnecting.",
+              required_args: ["projectId", "summary"],
+              optional_args: ["next_steps"],
+            },
+            {
+              name: "create_decision",
+              purpose: "Record an architectural or project decision with rationale.",
+              when: "After any architectural choice, technology selection, or significant design decision.",
+              required_args: ["projectId", "title", "summary"],
+              optional_args: ["rationale", "impactLevel"],
+            },
+          ],
+          decisions: [
+            {
+              name: "list_recent_decisions",
+              purpose: "Retrieve recorded decisions for a project.",
+              when: "When onboarding on a project or before making a new decision to avoid duplication.",
+              required_args: ["projectId"],
+              optional_args: ["status"],
+            },
+          ],
+        },
+        recommended_workflow: [
+          {
+            step: 1,
+            action: "Call prepare_project_summary(projectId) to load full project context.",
+          },
+          {
+            step: 2,
+            action:
+              "If working on a specific task, call prepare_task_context(projectId, taskId).",
+          },
+          {
+            step: 3,
+            action:
+              "Before starting work, ensure a task exists. Use create_task if needed.",
+          },
+          {
+            step: 4,
+            action: "Update task status as work progresses via update_task_status.",
+          },
+          {
+            step: 5,
+            action:
+              "Store important decisions or discoveries with create_memory_entry.",
+          },
+          {
+            step: 6,
+            action:
+              "At session end, call create_handoff to preserve context for the next agent or session.",
+          },
+        ],
+        operating_rules: [
+          "Always call initial_instructions once at session start.",
+          "Always open or identify a task before starting work.",
+          "Do not report completion without updating the task status.",
+          "Use create_memory_entry to persist architectural decisions and key findings.",
+          "Always call create_handoff at the end of every session.",
+          "Prefer prepare_project_summary over multiple individual reads for onboarding.",
+          "If a projectId is unknown, call list_projects first.",
+        ],
+      });
+    }
 
     case "list_projects": {
       const result = await client.listProjects(args.status as string | undefined);
@@ -344,6 +535,25 @@ async function handleToolCall(
       return jsonResponse(result);
     }
 
+    case "list_recent_decisions": {
+      const result = await client.listDecisions(
+        args.projectId as string,
+        args.status as string | undefined,
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_decision": {
+      const result = await client.createDecision({
+        projectId: args.projectId as string,
+        title: args.title as string,
+        summary: args.summary as string,
+        rationale: args.rationale as string | undefined,
+        impactLevel: args.impactLevel as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
     default:
       return errorResponse(`Unknown tool: ${name}`);
   }
@@ -415,7 +625,7 @@ async function startHttp(): Promise<void> {
     next();
   });
 
-  app.all("/mcp", async (req, res) => {
+  app.post("/mcp", async (req, res) => {
 
     const token = (req as Record<string, unknown> & typeof req).mcpToken as string;
     const client = new CoreApiClient(token);
@@ -430,8 +640,16 @@ async function startHttp(): Promise<void> {
     try {
       await transport.handleRequest(req, res, req.body as unknown);
     } finally {
-      await server.close();
+      res.on("close", () => server.close());
     }
+  });
+
+  app.get("/mcp", (_req, res) => {
+    res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
+  });
+
+  app.delete("/mcp", (_req, res) => {
+    res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
   });
 
   app.listen(MCP_HTTP_PORT, "0.0.0.0", () => {
