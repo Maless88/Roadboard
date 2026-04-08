@@ -2,7 +2,29 @@
 
 Multi-project execution, memory, and collaboration platform for humans and AI agents.
 
-RoadBoard is a TypeScript monorepo that exposes a REST API, an MCP server (Model Context Protocol), a web UI, and an async job layer — designed so that agents and humans share the same project state.
+[![CI](https://github.com/Maless88/rb/actions/workflows/ci.yml/badge.svg)](https://github.com/Maless88/rb/actions/workflows/ci.yml)
+
+---
+
+## Why RoadBoard exists
+
+Context loss is one of the most expensive problems in modern project work.
+
+Teams lose track of decisions. Agents restart sessions without knowing what happened. Progress is scattered across chat threads, documents, and memory that belongs to no system. Work is repeated because no one can find what was already done.
+
+RoadBoard is designed to be the operational control plane for complex project work — a single place where humans and AI agents share structured project state, preserve memory across sessions, and coordinate without losing context.
+
+---
+
+## Core capabilities
+
+- **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
+- **Operational memory** — persistent memory entries, decision records, and session handoffs
+- **Team collaboration** — users, teams, project grants, role-based access control
+- **MCP agent access** — 10 tools for agents to read and write project state via Model Context Protocol
+- **Web dashboard** — project status, task management, and memory entries via browser
+- **Async job layer** — background refresh, summary generation, and cleanup via BullMQ
+- **Local sync bridge** — offline-first SQLite journal with sync engine to the central database
 
 ---
 
@@ -59,7 +81,8 @@ cd rb
 # Install dependencies
 pnpm install
 
-# Start infrastructure
+# Copy env and start infrastructure
+cp .env.example .env
 docker compose -f infra/docker/docker-compose.yml up -d
 
 # Run migrations and seed
@@ -141,23 +164,28 @@ pnpm -r build        # build all packages and apps
 
 ---
 
-## Roadmap
+## Documentation
 
-| Phase | Title | Status |
-|-------|-------|--------|
-| 0 | Foundation Blueprint | done |
-| 1 | Core Domain Backbone | done |
-| 2 | Access Backbone | done |
-| 3 | MCP Foundation | done |
-| 4 | Memory Backbone | done |
-| 5 | Wave 1 Hardening | done |
-| 6 | Roadboard Builds Roadboard | done |
-| 7 | Human Web UI Layer | done |
-| 8 | MCP Workflow Tools | done |
-| 9 | Async & Operational Reliability | done |
-| 10 | Local Sync Bridge | done |
-| 11 | GitHub Publication Readiness | done |
-| 12 | Test Automation Hardening | in progress |
+- [ROADMAP.md](ROADMAP.md) — current milestone and upcoming phases
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to contribute
+- [SECURITY.md](SECURITY.md) — vulnerability reporting
+- [SUPPORT.md](SUPPORT.md) — where to ask questions
+- [CHANGELOG.md](CHANGELOG.md) — version history
+- [docs/planning/](docs/planning/) — architecture and design notes
+
+---
+
+## Current status
+
+Wave 1 is complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, and local sync bridge are all implemented and tested.
+
+Active work: **Phase 12 — Test Automation Hardening** (unit tests for shared packages, Playwright e2e, CI enforcement).
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
