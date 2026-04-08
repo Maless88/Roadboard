@@ -206,20 +206,18 @@ export default function McpGuidePage() {
             </p>
           </div>
 
-          <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-4 mb-8">
-            <p className="text-yellow-200 text-sm font-medium mb-1">⚙️ La pagina Settings è in arrivo</p>
-            <p className="text-yellow-300/70 text-sm">
-              La UI per creare i token MCP è in sviluppo. Per ora i token vengono generati dall&apos;amministratore
-              e consegnati direttamente. Contatta <strong className="text-yellow-200">alessio</strong> per ricevere il tuo.
+          <Step n={1} title="Vai su Settings → Token MCP">
+            <p className="text-gray-400 text-sm mb-2">
+              Dalla dashboard vai su{' '}
+              <a href="/settings" className="text-indigo-400 hover:text-indigo-300 underline">Settings</a>
+              {' '}→ tab <strong className="text-white">Token MCP</strong> → <strong className="text-white">Crea nuovo token</strong>.
             </p>
-          </div>
-
-          <Step n={1} title="Ricevi il tuo token dall'amministratore">
-            <p className="text-gray-400 text-sm">
-              L&apos;amministratore crea il token associato al tuo account e te lo consegna.
-              Il token è una stringa esadecimale da 64 caratteri. Conservala in modo sicuro —
-              non può essere recuperata dopo la consegna.
-            </p>
+            <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-4">
+              <p className="text-yellow-200 text-sm">
+                ⚠️ Il token raw viene mostrato <strong>una sola volta</strong> subito dopo la creazione.
+                Copialo immediatamente.
+              </p>
+            </div>
           </Step>
 
           <Step n={2} title="Sostituisci il placeholder nelle configurazioni">

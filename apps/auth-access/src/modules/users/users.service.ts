@@ -1,8 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaClient, User } from '@roadboard/database';
-import { hashPassword } from '@roadboard/auth';
+import { hashPassword, verifyPassword } from '@roadboard/auth';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
+import { ChangePasswordDto } from './change-password.dto';
 
 
 @Injectable()
@@ -86,5 +87,30 @@ export class UsersService {
     await this.findOne(id);
 
     return this.prisma.user.delete({ where: { id } });
+  }
+
+
+  async changePassword(id: string, dto: ChangePasswordDto): Promise<{ success: boolean }> {
+
+    const user = await this.prisma.user.findUnique({ where: { id } });
+
+    if (!user) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
+
+    const valid = await verifyPassword(dto.currentPassword, user.password);
+
+    if (!valid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const hashed = await hashPassword(dto.newPassword);
+
+    await this.prisma.user.update({
+      where: { id },
+      data: { password: hashed },
+    });
+
+    return { success: true };
   }
 }
