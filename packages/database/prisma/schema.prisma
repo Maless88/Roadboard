@@ -15,9 +15,14 @@ model User {
   displayName String   @map("display_name")
   email       String   @unique
   password    String
+  role        String   @default("developer")
+  managerId   String?  @map("manager_id")
   status      String   @default("active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+
+  manager      User?   @relation("UserManager", fields: [managerId], references: [id])
+  managedUsers User[]  @relation("UserManager")
 
   teamMemberships TeamMembership[]
   projectGrants   ProjectGrant[]   @relation("GrantedByUser")
@@ -88,6 +93,7 @@ model Project {
   milestones    Milestone[]
   tasks         Task[]
   memoryEntries MemoryEntry[]
+  decisions     Decision[]
   projectGrants ProjectGrant[]
 
   @@map("projects")
@@ -150,6 +156,44 @@ model Task {
   milestone Milestone? @relation(fields: [milestoneId], references: [id])
 
   @@map("tasks")
+}
+
+// ── Decisions ────────────────────────────────────────
+
+model Decision {
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  title           String
+  summary         String
+  rationale       String?
+  status          String   @default("open")
+  impactLevel     String   @default("medium") @map("impact_level")
+  createdByUserId String?  @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("decisions")
+}
+
+// ── Activity Events ──────────────────────────────────
+
+model ActivityEvent {
+  id         String   @id @default(cuid())
+  projectId  String?  @map("project_id")
+  actorType  String   @map("actor_type")
+  actorId    String   @map("actor_id")
+  eventType  String   @map("event_type")
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([projectId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("activity_events")
 }
 
 // ── Memory ───────────────────────────────────────────

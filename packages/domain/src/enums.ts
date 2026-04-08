@@ -38,6 +38,13 @@ export enum TaskPriority {
 export enum MemoryEntryType {
   DONE = 'done',
   NEXT = 'next',
+  DECISION = 'decision',
+  HANDOFF = 'handoff',
+  ARCHITECTURE = 'architecture',
+  ISSUE = 'issue',
+  LEARNING = 'learning',
+  OPERATIONAL_NOTE = 'operational_note',
+  OPEN_QUESTION = 'open_question',
 }
 
 export enum GrantType {
@@ -75,4 +82,11 @@ export enum McpTokenStatus {
 export enum UserStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
+}
+
+export enum UserRole {
+  ADMIN = 'admin',
+  TEAM_LEADER = 'team_leader',
+  DEVELOPER = 'developer',
+  GUEST = 'guest',
 }
