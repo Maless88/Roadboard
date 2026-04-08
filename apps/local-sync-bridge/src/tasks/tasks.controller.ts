@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Param, Body, Query } from '@nestjs/common';
 
 import { TasksService, CreateTaskDto, UpdateTaskStatusDto } from './tasks.service';
 
@@ -7,6 +7,16 @@ import { TasksService, CreateTaskDto, UpdateTaskStatusDto } from './tasks.servic
 export class TasksController {
 
   constructor(private readonly tasks: TasksService) {}
+
+
+  @Get()
+  async list(
+    @Query('projectId') projectId: string,
+    @Query('status') status?: string,
+  ): Promise<unknown[]> {
+
+    return this.tasks.listTasks(projectId, status);
+  }
 
 
   @Post()

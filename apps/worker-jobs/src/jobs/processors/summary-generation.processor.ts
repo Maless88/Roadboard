@@ -59,7 +59,7 @@ export class SummaryGenerationProcessor extends WorkerHost {
       headers,
       body: JSON.stringify({
         projectId,
-        type: 'context',
+        type: 'operational_note',
         title: `Auto-summary — ${new Date().toISOString().slice(0, 10)}`,
         body: summary,
       }),
