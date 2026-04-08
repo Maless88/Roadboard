@@ -15,19 +15,36 @@ export class DashboardRefreshProcessor extends WorkerHost {
   private readonly logger = new Logger(DashboardRefreshProcessor.name);
 
 
-  async process(job: Job<{ projectId: string }>): Promise<void> {
+  async process(job: Job<{ projectId: string; token?: string }>): Promise<void> {
 
-    const { projectId } = job.data;
+    const { projectId, token } = job.data;
     this.logger.log(`[dashboard-refresh] project=${projectId}`);
 
-    const res = await fetch(`${CORE_API_URL}/projects/${projectId}`).catch(() => null);
+    const headers: Record<string, string> = {};
 
-    if (!res?.ok) {
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const [projectRes, snapshotRes] = await Promise.all([
+      fetch(`${CORE_API_URL}/projects/${projectId}`, { headers }).catch(() => null),
+      fetch(`${CORE_API_URL}/projects/${projectId}/dashboard`, { headers }).catch(() => null),
+    ]);
+
+    if (!projectRes?.ok) {
       this.logger.warn(`[dashboard-refresh] project ${projectId} not reachable, skipping`);
       return;
     }
 
-    const project = (await res.json()) as { name: string; status: string };
-    this.logger.log(`[dashboard-refresh] project "${project.name}" status=${project.status} — OK`);
+    const project = (await projectRes.json()) as { name: string; status: string };
+
+    if (snapshotRes?.ok) {
+      const snapshot = (await snapshotRes.json()) as { tasksByStatus: Record<string, number> };
+      this.logger.log(
+        `[dashboard-refresh] project "${project.name}" tasks=${JSON.stringify(snapshot.tasksByStatus)}`,
+      );
+    } else {
+      this.logger.log(`[dashboard-refresh] project "${project.name}" status=${project.status} — OK`);
+    }
   }
 }
