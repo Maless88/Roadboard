@@ -17,8 +17,8 @@ import {
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 10 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(10);
+  it('exports exactly 12 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(12);
   });
 
   it('all tools have name, description and inputSchema', () => {
