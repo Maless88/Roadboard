@@ -3,6 +3,9 @@
 Multi-project execution, memory, and collaboration platform for humans and AI agents.
 
 [![CI](https://github.com/Maless88/rb/actions/workflows/ci.yml/badge.svg)](https://github.com/Maless88/rb/actions/workflows/ci.yml)
+![Status](https://img.shields.io/badge/status-pre--beta%20%7C%20active%20development-orange)
+
+> **Work in progress.** RoadBoard 2.0 is under active development and not yet in beta. APIs, data models, and interfaces may change without notice. Not recommended for production use.
 
 ---
 
@@ -180,6 +183,8 @@ pnpm -r build        # build all packages and apps
 Wave 1 is complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, and local sync bridge are all implemented and tested.
 
 Active work: **Phase 12 — Test Automation Hardening** (unit tests for shared packages, Playwright e2e, CI enforcement).
+
+> The project is pre-beta. No stable release has been published yet. Breaking changes may occur on `main`.
 
 ---
 

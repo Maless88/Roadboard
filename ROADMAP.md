@@ -1,5 +1,7 @@
 # Roadmap
 
+> **Status: pre-beta — active development.** No stable release has been published. APIs and interfaces may change without notice.
+
 ## Current milestone
 
 **Phase 12 — Test Automation Hardening** *(in progress)*
