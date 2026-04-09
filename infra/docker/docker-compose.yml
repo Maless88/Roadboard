@@ -1,9 +1,28 @@
-name: rb
+name: roadboard
+
+# ── Shared build context ─────────────────────────────────────────────────────
+# All NestJS services are built from the root Dockerfile with ARG APP_NAME.
+# The web-app uses its own Dockerfile (apps/web-app/Dockerfile).
+# Both Dockerfiles must be built from the monorepo root (context: ../..).
+
+x-nestjs-build: &nestjs-build
+  context: ../..
+  dockerfile: Dockerfile
+
+x-common-env: &common-env
+  DATABASE_URL: postgresql://roadboard:roadboard@postgres:5432/roadboard
+  REDIS_URL: redis://redis:6379
+  NODE_ENV: production
+
 
 services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
   postgres:
     image: postgres:16-alpine
     container_name: rb-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: roadboard
       POSTGRES_PASSWORD: roadboard
@@ -16,11 +35,12 @@ services:
       test: ["CMD-SHELL", "pg_isready -U roadboard"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
   redis:
     image: redis:7-alpine
     container_name: rb-redis
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -29,8 +49,124 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
+
+  # ── One-shot migration runner ────────────────────────────────────────────────
+
+  migrate:
+    build:
+      <<: *nestjs-build
+      target: builder
+    container_name: rb-migrate
+    environment:
+      DATABASE_URL: postgresql://roadboard:roadboard@postgres:5432/roadboard
+    command: >
+      sh -c "npx prisma migrate deploy
+        --schema packages/database/prisma/schema.prisma"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ── Backend services ─────────────────────────────────────────────────────────
+
+  core-api:
+    build:
+      <<: *nestjs-build
+      args:
+        APP_NAME: core-api
+    container_name: rb-core-api
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      CORE_API_PORT: "3001"
+      AUTH_ACCESS_PORT: "3002"
+    ports:
+      - "3001:3001"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  auth-access:
+    build:
+      <<: *nestjs-build
+      args:
+        APP_NAME: auth-access
+    container_name: rb-auth-access
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      AUTH_ACCESS_PORT: "3002"
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+    ports:
+      - "3002:3002"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker-jobs:
+    build:
+      <<: *nestjs-build
+      args:
+        APP_NAME: worker-jobs
+    container_name: rb-worker-jobs
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      WORKER_JOBS_PORT: "3003"
+      CORE_API_PORT: "3001"
+      AUTH_ACCESS_PORT: "3002"
+    ports:
+      - "3003:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
+      core-api:
+        condition: service_started
+
+  local-sync-bridge:
+    build:
+      <<: *nestjs-build
+      args:
+        APP_NAME: local-sync-bridge
+    container_name: rb-local-sync-bridge
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      LOCAL_SYNC_PORT: "3004"
+      JOURNAL_DB_PATH: /data/journal.db
+      CORE_API_PORT: "3001"
+      AUTH_ACCESS_PORT: "3002"
+    ports:
+      - "3004:3004"
+    volumes:
+      - journal-data:/data
+    depends_on:
+      core-api:
+        condition: service_started
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+
+  web-app:
+    build:
+      context: ../..
+      dockerfile: apps/web-app/Dockerfile
+    container_name: rb-web-app
+    restart: unless-stopped
+    environment:
+      CORE_API_URL: http://core-api:3001
+      AUTH_URL: http://auth-access:3002
+    ports:
+      - "3000:3000"
+    depends_on:
+      core-api:
+        condition: service_started
+      auth-access:
+        condition: service_started
+
 
 volumes:
   postgres-data:
   redis-data:
+  journal-data:
