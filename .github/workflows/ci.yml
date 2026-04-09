@@ -108,11 +108,11 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm db:generate
 
+      - name: Build all apps
+        run: pnpm turbo build
+
       - name: Run migrations and seed
         run: pnpm db:migrate && pnpm db:seed
-
-      - name: Build all apps
-        run: pnpm -r build
 
       - name: Install Playwright browsers
         run: pnpm --filter web-app exec playwright install chromium --with-deps
