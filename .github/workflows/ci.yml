@@ -118,21 +118,18 @@ jobs:
         run: pnpm --filter web-app exec playwright install chromium --with-deps
 
       - name: Start auth-access
-        run: >
-          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard
-          AUTH_ACCESS_PORT=3002
+        run: |
+          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard \
+          AUTH_ACCESS_PORT=3002 \
           node apps/auth-access/dist/main.js &
-          sleep 3
+          npx wait-on http://localhost:3002/health --timeout 30000
 
       - name: Start core-api
-        run: >
-          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard
-          CORE_API_PORT=3001 AUTH_ACCESS_PORT=3002
+        run: |
+          DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard \
+          CORE_API_PORT=3001 AUTH_ACCESS_PORT=3002 \
           node apps/core-api/dist/main.js &
-          sleep 3
-
-      - name: Build web-app
-        run: pnpm --filter web-app build
+          npx wait-on http://localhost:3001/health --timeout 30000
 
       - name: Run Playwright tests
         run: pnpm --filter web-app test:e2e
