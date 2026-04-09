@@ -9,6 +9,7 @@ import {
   Query,
   Inject,
 } from '@nestjs/common';
+import { FindByTeamQueryDto } from '../../common/query.dto';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './create-membership.dto';
 import { UpdateMembershipDto } from './update-membership.dto';
@@ -28,9 +29,9 @@ export class MembershipsController {
 
 
   @Get()
-  findByTeam(@Query('teamId') teamId: string) {
+  findByTeam(@Query() query: FindByTeamQueryDto) {
 
-    return this.membershipsService.findByTeam(teamId);
+    return this.membershipsService.findByTeam(query.teamId);
   }
 
 

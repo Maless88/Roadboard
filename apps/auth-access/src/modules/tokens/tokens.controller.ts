@@ -8,6 +8,7 @@ import {
   Query,
   Inject,
 } from '@nestjs/common';
+import { FindByUserQueryDto } from '../../common/query.dto';
 import { TokensService } from './tokens.service';
 import { CreateTokenDto } from './create-token.dto';
 import { ValidateTokenDto } from './validate-token.dto';
@@ -27,9 +28,9 @@ export class TokensController {
 
 
   @Get()
-  findByUser(@Query('userId') userId: string) {
+  findByUser(@Query() query: FindByUserQueryDto) {
 
-    return this.tokensService.findByUser(userId);
+    return this.tokensService.findByUser(query.userId);
   }
 
 

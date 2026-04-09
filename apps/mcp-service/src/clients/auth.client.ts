@@ -1,8 +1,9 @@
 import { optionalEnv } from "@roadboard/config";
 
 
+const AUTH_ACCESS_HOST = optionalEnv("AUTH_ACCESS_HOST", "localhost");
 const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "4002");
-const VALIDATE_URL = `http://localhost:${AUTH_ACCESS_PORT}/tokens/validate`;
+const VALIDATE_URL = `http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/tokens/validate`;
 
 
 interface ValidateResult {

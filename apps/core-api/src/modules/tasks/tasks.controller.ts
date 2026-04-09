@@ -10,9 +10,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { GrantType, TaskStatus } from '@roadboard/domain';
+import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { FindTasksQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './create-task.dto';
@@ -36,14 +37,14 @@ export class TasksController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(
-    @Query('projectId') projectId: string,
-    @Query('phaseId') phaseId?: string,
-    @Query('milestoneId') milestoneId?: string,
-    @Query('status') status?: TaskStatus,
-  ) {
+  findAll(@Query() query: FindTasksQueryDto) {
 
-    return this.tasksService.findAll({ projectId, phaseId, milestoneId, status });
+    return this.tasksService.findAll({
+      projectId: query.projectId,
+      phaseId: query.phaseId,
+      milestoneId: query.milestoneId,
+      status: query.status,
+    });
   }
 
 

@@ -13,6 +13,7 @@ import {
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { FindDecisionsQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { DecisionsService } from './decisions.service';
 import { CreateDecisionDto } from './create-decision.dto';
@@ -36,12 +37,9 @@ export class DecisionsController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(
-    @Query('projectId') projectId: string,
-    @Query('status') status?: string,
-  ) {
+  findAll(@Query() query: FindDecisionsQueryDto) {
 
-    return this.decisionsService.findAll(projectId, status);
+    return this.decisionsService.findAll(query.projectId, query.status);
   }
 
 

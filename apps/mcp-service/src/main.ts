@@ -10,6 +10,9 @@ import { optionalEnv } from "@roadboard/config";
 import { CoreApiClient } from "./clients/core-api.client.js";
 
 
+const CORE_API_HOST = optionalEnv("CORE_API_HOST", "localhost");
+const CORE_API_PORT = optionalEnv("CORE_API_PORT", "3001");
+const AUTH_ACCESS_HOST = optionalEnv("AUTH_ACCESS_HOST", "localhost");
 const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "3002");
 const MCP_TRANSPORT = optionalEnv("MCP_TRANSPORT", "stdio");
 const MCP_HTTP_PORT = Number(optionalEnv("MCP_HTTP_PORT", "3005"));
@@ -590,7 +593,7 @@ function buildServer(client: CoreApiClient): Server {
 
 async function validateMcpToken(rawToken: string): Promise<boolean> {
 
-  const res = await fetch(`http://localhost:${AUTH_ACCESS_PORT}/tokens/validate`, {
+  const res = await fetch(`http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/tokens/validate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: rawToken }),
@@ -600,9 +603,35 @@ async function validateMcpToken(rawToken: string): Promise<boolean> {
 }
 
 
+async function fetchDependencyHealth(url: string): Promise<"ok" | "unreachable"> {
+
+  const res = await fetch(url).catch(() => null);
+
+  return res?.ok ? "ok" : "unreachable";
+}
+
+
 async function startHttp(): Promise<void> {
 
   const app = createMcpExpressApp({ host: "0.0.0.0" });
+
+  app.get("/health", async (_req, res) => {
+    const [coreApi, authAccess] = await Promise.all([
+      fetchDependencyHealth(`http://${CORE_API_HOST}:${CORE_API_PORT}/health`),
+      fetchDependencyHealth(`http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/health`),
+    ]);
+    const healthy = coreApi === "ok" && authAccess === "ok";
+
+    res.status(healthy ? 200 : 503).json({
+      status: healthy ? "ok" : "degraded",
+      service: "mcp-service",
+      transport: "http",
+      dependencies: {
+        coreApi,
+        authAccess,
+      },
+    });
+  });
 
   app.use(async (req, res, next) => {
 

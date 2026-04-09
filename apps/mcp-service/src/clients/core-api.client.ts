@@ -1,8 +1,9 @@
 import { optionalEnv } from "@roadboard/config";
 
 
+const CORE_API_HOST = optionalEnv("CORE_API_HOST", "localhost");
 const CORE_API_PORT = optionalEnv("CORE_API_PORT", "4001");
-const BASE_URL = `http://localhost:${CORE_API_PORT}`;
+const BASE_URL = `http://${CORE_API_HOST}:${CORE_API_PORT}`;
 
 
 export class CoreApiClient {

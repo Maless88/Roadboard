@@ -5,7 +5,7 @@ import { optionalEnv } from '@roadboard/config';
 import { JournalService } from '../journal/journal.service';
 
 
-const CORE_API_URL = `http://localhost:${optionalEnv('CORE_API_PORT', '3001')}`;
+const CORE_API_URL = `http://${optionalEnv('CORE_API_HOST', 'localhost')}:${optionalEnv('CORE_API_PORT', '3001')}`;
 const SYNC_TOKEN = optionalEnv('SYNC_TOKEN', '');
 
 

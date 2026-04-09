@@ -8,6 +8,7 @@ import {
   Query,
   Inject,
 } from '@nestjs/common';
+import { FindByUserQueryDto } from '../../common/query.dto';
 import { SessionsService } from './sessions.service';
 import { ValidateSessionDto } from './validate-session.dto';
 
@@ -26,9 +27,9 @@ export class SessionsController {
 
 
   @Get()
-  findByUser(@Query('userId') userId: string) {
+  findByUser(@Query() query: FindByUserQueryDto) {
 
-    return this.sessionsService.findByUser(userId);
+    return this.sessionsService.findByUser(query.userId);
   }
 
 

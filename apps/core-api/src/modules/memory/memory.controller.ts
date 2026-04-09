@@ -10,9 +10,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { GrantType, MemoryEntryType } from '@roadboard/domain';
+import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { FindMemoryQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { MemoryService } from './memory.service';
 import { CreateMemoryEntryDto } from './create-memory-entry.dto';
@@ -36,12 +37,12 @@ export class MemoryController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(
-    @Query('projectId') projectId: string,
-    @Query('type') type?: MemoryEntryType,
-  ) {
+  findAll(@Query() query: FindMemoryQueryDto) {
 
-    return this.memoryService.findAll({ projectId, type });
+    return this.memoryService.findAll({
+      projectId: query.projectId,
+      type: query.type,
+    });
   }
 
 

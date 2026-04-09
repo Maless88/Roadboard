@@ -6,7 +6,7 @@ import { optionalEnv } from '@roadboard/config';
 import { QUEUE_SUMMARY_GENERATION } from '../queue-names';
 
 
-const CORE_API_URL = `http://localhost:${optionalEnv('CORE_API_PORT', '3001')}`;
+const CORE_API_URL = `http://${optionalEnv('CORE_API_HOST', 'localhost')}:${optionalEnv('CORE_API_PORT', '3001')}`;
 const WORKER_TOKEN = optionalEnv('WORKER_MCP_TOKEN', '');
 
 

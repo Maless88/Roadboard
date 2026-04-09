@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1
-# Multi-stage Dockerfile for all NestJS apps.
-# Build arg APP_NAME selects which app to run (core-api, auth-access, worker-jobs, local-sync-bridge).
+# Multi-stage Dockerfile for all service apps in the monorepo.
+# Build arg APP_NAME selects which app to run
+# (core-api, auth-access, mcp-service, worker-jobs, local-sync-bridge).
 #
 # Build example:
 #   docker build --build-arg APP_NAME=core-api -t roadboard-core-api .
@@ -35,20 +36,35 @@ RUN pnpm install --frozen-lockfile
 
 # ── Build all packages and apps ──────────────────────────────────────────────
 FROM deps AS builder
+ARG APP_NAME
 COPY . .
 RUN pnpm --filter @roadboard/database db:generate
-RUN pnpm -r build
+RUN test -n "$APP_NAME"
+RUN pnpm --filter @roadboard/${APP_NAME}... build
 
 
-# ── Deploy a specific app (resolves workspace deps into a standalone dir) ────
-FROM builder AS deployer
+# ── Workspace image for one-shot tasks (migrate/seed) ─────────────────────────
+FROM deps AS workspace
+COPY . .
+RUN pnpm --filter @roadboard/database db:generate
+
+
+# ── Assemble runtime filesystem for a specific service app ────────────────────
+FROM builder AS packager
 ARG APP_NAME
-RUN pnpm --filter @roadboard/${APP_NAME} deploy --prod /out
+RUN test -n "$APP_NAME"
+RUN mkdir -p /runtime/apps/${APP_NAME} \
+  && cp -R /app/node_modules /runtime/node_modules \
+  && cp -R /app/packages /runtime/packages \
+  && cp -R /app/apps/${APP_NAME}/. /runtime/apps/${APP_NAME}/
 
 
 # ── Lean runtime image ───────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
+ARG APP_NAME
 WORKDIR /app
 ENV NODE_ENV=production
-COPY --from=deployer /out .
+ENV APP_NAME=${APP_NAME}
+COPY --from=packager /runtime .
+WORKDIR /app/apps/${APP_NAME}
 CMD ["node", "dist/main.js"]

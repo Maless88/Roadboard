@@ -36,7 +36,7 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS builder
 COPY . .
 RUN pnpm --filter @roadboard/database db:generate
-RUN pnpm -r build --filter @roadboard/web-app...
+RUN pnpm --filter @roadboard/web-app... build
 
 
 # ── Lean runtime image (Next.js standalone) ──────────────────────────────────

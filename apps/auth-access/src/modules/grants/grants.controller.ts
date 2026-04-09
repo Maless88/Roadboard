@@ -8,6 +8,8 @@ import {
   Query,
   Inject,
 } from '@nestjs/common';
+import { FindGrantsQueryDto } from '../../common/query.dto';
+import { CheckPermissionDto } from './check-permission.dto';
 import { GrantsService } from './grants.service';
 import { CreateGrantDto } from './create-grant.dto';
 
@@ -26,26 +28,16 @@ export class GrantsController {
 
 
   @Get()
-  findByProject(@Query('projectId') projectId: string) {
+  findByProject(@Query() query: FindGrantsQueryDto) {
 
-    return this.grantsService.findByProject(projectId);
+    return this.grantsService.findByProject(query.projectId);
   }
 
 
   @Get('check')
-  checkPermission(
-    @Query('projectId') projectId: string,
-    @Query('subjectType') subjectType: string,
-    @Query('subjectId') subjectId: string,
-    @Query('grantType') grantType: string,
-  ) {
+  checkPermission(@Query() dto: CheckPermissionDto) {
 
-    return this.grantsService.checkPermission({
-      projectId,
-      subjectType,
-      subjectId,
-      grantType,
-    });
+    return this.grantsService.checkPermission(dto);
   }
 
 

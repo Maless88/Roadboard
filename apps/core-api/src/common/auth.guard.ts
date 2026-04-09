@@ -25,10 +25,12 @@ interface McpTokenValidateResponse {
 @Injectable()
 export class AuthGuard implements CanActivate {
 
+  private readonly authAccessHost: string;
   private readonly authAccessPort: string;
 
   constructor() {
 
+    this.authAccessHost = optionalEnv('AUTH_ACCESS_HOST', 'localhost');
     this.authAccessPort = optionalEnv('AUTH_ACCESS_PORT', '4002');
   }
 
@@ -43,7 +45,7 @@ export class AuthGuard implements CanActivate {
     }
 
     const token = authHeader.slice(7);
-    const base = `http://localhost:${this.authAccessPort}`;
+    const base = `http://${this.authAccessHost}:${this.authAccessPort}`;
 
     try {
 

@@ -13,6 +13,7 @@ import {
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
+import { FindMilestonesQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { MilestonesService } from './milestones.service';
 import { CreateMilestoneDto } from './create-milestone.dto';
@@ -36,12 +37,12 @@ export class MilestonesController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(
-    @Query('projectId') projectId: string,
-    @Query('phaseId') phaseId?: string,
-  ) {
+  findAll(@Query() query: FindMilestonesQueryDto) {
 
-    return this.milestonesService.findAll({ projectId, phaseId });
+    return this.milestonesService.findAll({
+      projectId: query.projectId,
+      phaseId: query.phaseId,
+    });
   }
 
 

@@ -88,12 +88,22 @@ pnpm install
 cp .env.example .env
 docker compose -f infra/docker/docker-compose.yml up -d
 
-# Run migrations and seed
-pnpm db:migrate
-pnpm db:seed
-
 # Build all packages
 pnpm build
+```
+
+The local Docker Compose stack now bootstraps Postgres, Redis, migrations, seed data,
+`core-api`, `auth-access`, `mcp-service` (HTTP on `:3005`), `worker-jobs`,
+`local-sync-bridge`, and the Next.js `web-app`.
+
+### Full local stack
+
+```bash
+# Build and run the full local stack
+docker compose -f infra/docker/docker-compose.yml up -d --build
+
+# Stop it
+docker compose -f infra/docker/docker-compose.yml down
 ```
 
 ### Start services
@@ -118,6 +128,10 @@ WORKER_JOBS_PORT=3003 node apps/worker-jobs/dist/main.js
 # local-sync-bridge
 LOCAL_SYNC_PORT=3004 JOURNAL_DB_PATH=.agent/journal.db \
   node apps/local-sync-bridge/dist/main.js
+
+# mcp-service (HTTP mode)
+MCP_TRANSPORT=http MCP_HTTP_PORT=3005 AUTH_ACCESS_PORT=3002 \
+  node apps/mcp-service/dist/main.js
 ```
 
 ### MCP server (for Claude / agent integration)
@@ -137,6 +151,32 @@ LOCAL_SYNC_PORT=3004 JOURNAL_DB_PATH=.agent/journal.db \
   }
 }
 ```
+
+For HTTP MCP clients, use `http://127.0.0.1:3005/mcp` with a bearer token issued by
+`auth-access`.
+
+### API docs
+
+- `core-api`: `http://127.0.0.1:3001/docs`
+- `auth-access`: `http://127.0.0.1:3002/docs`
+
+### Health endpoints
+
+- `core-api`: `http://127.0.0.1:3001/health`
+- `auth-access`: `http://127.0.0.1:3002/health`
+- `worker-jobs`: `http://127.0.0.1:3003/health`
+- `local-sync-bridge`: `http://127.0.0.1:3004/health`
+- `mcp-service`: `http://127.0.0.1:3005/health`
+- `web-app`: `http://127.0.0.1:3000/health`
+
+### Seeded onboarding data
+
+`db:seed` now creates a usable local onboarding state for `roadboard-2`:
+
+- demo users and team memberships
+- the `Roadboard 2.0` project and admin grant
+- the `Wave 2 — Platform Hardening` phase
+- Wave 2 task and memory history aligned with the current repo state
 
 ---
 

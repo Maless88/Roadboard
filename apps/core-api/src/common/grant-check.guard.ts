@@ -28,10 +28,12 @@ interface AuthenticatedUser {
 @Injectable()
 export class GrantCheckGuard implements CanActivate {
 
+  private readonly authAccessHost: string;
   private readonly authAccessPort: string;
 
   constructor(@Inject(Reflector) private readonly reflector: Reflector) {
 
+    this.authAccessHost = optionalEnv('AUTH_ACCESS_HOST', 'localhost');
     this.authAccessPort = optionalEnv('AUTH_ACCESS_PORT', '4002');
   }
 
@@ -62,7 +64,7 @@ export class GrantCheckGuard implements CanActivate {
 
     try {
 
-      const url = new URL(`http://localhost:${this.authAccessPort}/grants/check`);
+      const url = new URL(`http://${this.authAccessHost}:${this.authAccessPort}/grants/check`);
       url.searchParams.set('projectId', projectId);
       url.searchParams.set('subjectType', 'user');
       url.searchParams.set('subjectId', user.userId);

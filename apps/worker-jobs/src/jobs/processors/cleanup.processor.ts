@@ -6,7 +6,7 @@ import { optionalEnv } from '@roadboard/config';
 import { QUEUE_CLEANUP } from '../queue-names';
 
 
-const AUTH_URL = `http://localhost:${optionalEnv('AUTH_ACCESS_PORT', '3002')}`;
+const AUTH_URL = `http://${optionalEnv('AUTH_ACCESS_HOST', 'localhost')}:${optionalEnv('AUTH_ACCESS_PORT', '3002')}`;
 const WORKER_TOKEN = optionalEnv('WORKER_MCP_TOKEN', '');
 
 
