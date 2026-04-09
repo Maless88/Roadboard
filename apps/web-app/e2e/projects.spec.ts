@@ -16,15 +16,13 @@ test.describe('Projects', () => {
   test('dashboard shows project list', async ({ page }) => {
 
     await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-
-    const nav = page.getByText('RoadBoard');
-    await expect(nav).toBeVisible();
+    await expect(page.getByRole('link', { name: 'RoadBoard' })).toBeVisible();
   });
 
 
   test('nav shows RoadBoard title and sign out', async ({ page }) => {
 
-    await expect(page.getByText('RoadBoard')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'RoadBoard' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
   });
 
