@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getToken } from '@/lib/auth';
-import { listProjects } from '@/lib/api';
+import { listProjects, listTeams } from '@/lib/api';
 import { Nav } from '@/components/nav';
+import { CreateProjectForm } from './create-project-form';
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -22,16 +23,22 @@ export default async function ProjectsPage() {
     redirect('/login');
   }
 
-  const projects = await listProjects(token);
+  const [projects, teams] = await Promise.all([
+    listProjects(token),
+    listTeams(token).catch(() => []),
+  ]);
 
   return (
     <>
       <Nav />
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="text-lg font-semibold text-white mb-6">Projects</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-lg font-semibold text-white">Projects</h1>
+          <CreateProjectForm teams={teams} />
+        </div>
 
         {projects.length === 0 ? (
-          <p className="text-sm text-gray-500">No projects found.</p>
+          <p className="text-sm text-gray-500">Nessun progetto trovato.</p>
         ) : (
           <div className="grid gap-3">
             {projects.map((project) => (

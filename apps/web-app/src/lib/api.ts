@@ -387,3 +387,195 @@ export async function createMemoryEntry(
 
   return res.json() as Promise<MemoryEntry>;
 }
+
+
+export interface Decision {
+  id: string;
+  projectId: string;
+  title: string;
+  summary: string;
+  rationale: string | null;
+  status: string;
+  impactLevel: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export interface Milestone {
+  id: string;
+  projectId: string;
+  phaseId: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  dueDate: string | null;
+  orderIndex: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export interface DashboardSnapshot {
+  projectId: string;
+  tasks: Record<string, number>;
+  milestones: Record<string, number>;
+  activePhases: Array<{ id: string; title: string; status: string; orderIndex: number }>;
+  recentMemory: Array<{ id: string; type: string; title: string; createdAt: string }>;
+  recentDecisions: Array<{ id: string; title: string; status: string; impactLevel: string | null; createdAt: string }>;
+  urgentTasks: Array<{ id: string; title: string; status: string; priority: string }>;
+}
+
+
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+
+export async function createProject(
+  token: string,
+  data: { name: string; slug: string; description?: string; ownerTeamId: string; status?: string },
+): Promise<Project> {
+
+  const res = await fetch(`${CORE_API}/projects`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create project');
+  }
+
+  return res.json() as Promise<Project>;
+}
+
+
+export async function createTask(
+  token: string,
+  data: { projectId: string; phaseId?: string; title: string; description?: string; priority?: string; status?: string },
+): Promise<Task> {
+
+  const res = await fetch(`${CORE_API}/tasks`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create task');
+  }
+
+  return res.json() as Promise<Task>;
+}
+
+
+export async function createPhase(
+  token: string,
+  data: { projectId: string; title: string; description?: string; orderIndex?: number; status?: string },
+): Promise<Phase> {
+
+  const res = await fetch(`${CORE_API}/phases`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create phase');
+  }
+
+  return res.json() as Promise<Phase>;
+}
+
+
+export async function listDecisions(token: string, projectId: string): Promise<Decision[]> {
+
+  const res = await fetch(`${CORE_API}/decisions?projectId=${projectId}`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch decisions');
+
+  return res.json() as Promise<Decision[]>;
+}
+
+
+export async function createDecision(
+  token: string,
+  data: { projectId: string; title: string; summary: string; rationale?: string; status?: string; impactLevel?: string },
+): Promise<Decision> {
+
+  const res = await fetch(`${CORE_API}/decisions`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create decision');
+  }
+
+  return res.json() as Promise<Decision>;
+}
+
+
+export async function listMilestones(token: string, projectId: string, phaseId?: string): Promise<Milestone[]> {
+
+  const params = new URLSearchParams({ projectId });
+
+  if (phaseId) {
+    params.set('phaseId', phaseId);
+  }
+
+  const res = await fetch(`${CORE_API}/milestones?${params}`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch milestones');
+
+  return res.json() as Promise<Milestone[]>;
+}
+
+
+export async function createMilestone(
+  token: string,
+  data: { projectId: string; phaseId?: string; title: string; description?: string; dueDate?: string; status?: string },
+): Promise<Milestone> {
+
+  const res = await fetch(`${CORE_API}/milestones`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create milestone');
+  }
+
+  return res.json() as Promise<Milestone>;
+}
+
+
+export async function getDashboardSnapshot(token: string, projectId: string): Promise<DashboardSnapshot> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/dashboard`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch dashboard');
+
+  return res.json() as Promise<DashboardSnapshot>;
+}
+
+
+export async function listTeams(token: string): Promise<Team[]> {
+
+  const res = await fetch(`${AUTH_API}/teams`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch teams');
+
+  return res.json() as Promise<Team[]>;
+}

@@ -1,9 +1,24 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getToken } from '@/lib/auth';
-import { getProject, listTasks, listMemory } from '@/lib/api';
+import {
+  getProject,
+  listTasks,
+  listMemory,
+  listPhases,
+  listDecisions,
+  listMilestones,
+  getDashboardSnapshot,
+} from '@/lib/api';
 import { Nav } from '@/components/nav';
+import { TabNav } from './tab-nav';
 import { TaskStatusSelect } from './task-status';
+import { CreateTaskForm } from './create-task-form';
+import { CreatePhaseForm } from './create-phase-form';
+import { CreateMilestoneForm } from './create-milestone-form';
+import { CreateDecisionForm } from './create-decision-form';
+import { CreateMemoryForm } from './create-memory-form';
+import type { Task, Milestone } from '@/lib/api';
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -11,6 +26,7 @@ const STATUS_COLOR: Record<string, string> = {
   draft: 'bg-gray-700 text-gray-300',
   paused: 'bg-yellow-900 text-yellow-300',
   completed: 'bg-blue-900 text-blue-300',
+  in_progress: 'bg-indigo-900 text-indigo-300',
   archived: 'bg-gray-800 text-gray-500',
 };
 
@@ -35,49 +51,50 @@ const MEMORY_TYPE_COLOR: Record<string, string> = {
   decision: 'bg-yellow-900 text-yellow-300',
 };
 
+const DECISION_IMPACT_COLOR: Record<string, string> = {
+  high: 'text-red-400',
+  medium: 'text-yellow-400',
+  low: 'text-gray-400',
+};
+
+const MILESTONE_STATUS_COLOR: Record<string, string> = {
+  pending: 'bg-gray-700 text-gray-300',
+  in_progress: 'bg-indigo-900 text-indigo-300',
+  completed: 'bg-green-900 text-green-300',
+  missed: 'bg-red-900 text-red-300',
+};
+
 
 interface Props {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }
 
 
-export default async function ProjectDetailPage({ params }: Props) {
+export default async function ProjectDetailPage({ params, searchParams }: Props) {
 
   const { id } = await params;
+  const { tab = 'overview' } = await searchParams;
   const token = await getToken();
 
   if (!token) {
     redirect('/login');
   }
 
-  let project, tasks, memory;
+  let project;
 
   try {
-    [project, tasks, memory] = await Promise.all([
-      getProject(token, id),
-      listTasks(token, id),
-      listMemory(token, id),
-    ]);
+    project = await getProject(token, id);
   } catch {
     notFound();
   }
 
-  const grouped = tasks.reduce<Record<string, typeof tasks>>((acc, task) => {
-    const key = task.phaseId ?? '__none__';
-    (acc[key] ??= []).push(task);
-    return acc;
-  }, {});
-
-  const unassigned = grouped['__none__'] ?? [];
-  const byPhase = Object.entries(grouped).filter(([k]) => k !== '__none__');
-
   return (
     <>
       <Nav />
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-8">
+      <main className="mx-auto max-w-5xl px-4 py-8">
 
-        {/* Header */}
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between mb-6">
           <div>
             <Link href="/projects" className="text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2 block">
               ← Projects
@@ -88,67 +105,19 @@ export default async function ProjectDetailPage({ params }: Props) {
             )}
           </div>
           <span
-            className={`text-xs px-2 py-0.5 rounded-full font-medium mt-6 ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}
+            className={`text-xs px-2 py-0.5 rounded-full font-medium mt-6 shrink-0 ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}
           >
             {project.status}
           </span>
         </div>
 
-        {/* Tasks */}
-        <section>
-          <h2 className="text-sm font-semibold text-gray-300 mb-3">Tasks</h2>
+        <TabNav activeTab={tab} />
 
-          {tasks.length === 0 ? (
-            <p className="text-xs text-gray-500">No tasks found.</p>
-          ) : (
-            <div className="space-y-6">
-
-              {byPhase.map(([phaseId, phaseTasks]) => (
-                <div key={phaseId}>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Phase {phaseId.slice(0, 8)}</p>
-                  <TaskList tasks={phaseTasks} projectId={id} />
-                </div>
-              ))}
-
-              {unassigned.length > 0 && (
-                <div>
-                  {byPhase.length > 0 && (
-                    <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Unassigned</p>
-                  )}
-                  <TaskList tasks={unassigned} projectId={id} />
-                </div>
-              )}
-
-            </div>
-          )}
-        </section>
-
-        {/* Memory */}
-        {memory.length > 0 && (
-          <section>
-            <h2 className="text-sm font-semibold text-gray-300 mb-3">Memory</h2>
-            <div className="grid gap-2">
-              {memory.map((entry) => (
-                <div
-                  key={entry.id}
-                  className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3"
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className={`text-xs px-1.5 py-0.5 rounded font-medium ${MEMORY_TYPE_COLOR[entry.type] ?? 'bg-gray-700 text-gray-300'}`}
-                    >
-                      {entry.type}
-                    </span>
-                    <span className="text-xs font-medium text-white">{entry.title}</span>
-                  </div>
-                  {entry.body && (
-                    <p className="text-xs text-gray-400 whitespace-pre-wrap">{entry.body}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        {tab === 'overview' && <OverviewTab token={token} projectId={id} />}
+        {tab === 'tasks' && <TasksTab token={token} projectId={id} />}
+        {tab === 'phases' && <PhasesTab token={token} projectId={id} />}
+        {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
+        {tab === 'memory' && <MemoryTab token={token} projectId={id} />}
 
       </main>
     </>
@@ -156,16 +125,340 @@ export default async function ProjectDetailPage({ params }: Props) {
 }
 
 
-function TaskList({ tasks, projectId }: { tasks: Awaited<ReturnType<typeof listTasks>>; projectId: string }) {
+async function OverviewTab({ token, projectId }: { token: string; projectId: string }) {
+
+  let snap;
+
+  try {
+    snap = await getDashboardSnapshot(token, projectId);
+  } catch {
+    return <p className="text-xs text-gray-500">Dashboard non disponibile.</p>;
+  }
+
+  const totalTasks = Object.values(snap.tasks).reduce((a, b) => a + b, 0);
+  const doneTasks = snap.tasks['done'] ?? 0;
+  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {(['todo', 'in_progress', 'done', 'blocked'] as const).map((s) => (
+          <div key={s} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+            <p className="text-xs text-gray-500 mb-1">{s.replace('_', ' ')}</p>
+            <p className="text-xl font-semibold text-white">{snap.tasks[s] ?? 0}</p>
+          </div>
+        ))}
+      </div>
+
+      {totalTasks > 0 && (
+        <div>
+          <div className="flex justify-between text-xs text-gray-500 mb-1">
+            <span>Task completati</span>
+            <span>{progressPct}%</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-indigo-500 rounded-full transition-all"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {snap.activePhases.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Fasi attive</h2>
+          <div className="grid gap-2">
+            {snap.activePhases.map((p) => (
+              <div key={p.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2.5 flex items-center justify-between">
+                <span className="text-sm text-white">{p.title}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-gray-700 text-gray-300'}`}>
+                  {p.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {snap.urgentTasks.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Task urgenti</h2>
+          <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
+            {snap.urgentTasks.map((t) => (
+              <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-900">
+                <span className="text-sm text-white truncate">{t.title}</span>
+                <div className="flex items-center gap-2 ml-4 shrink-0">
+                  <span className={`text-xs font-medium ${TASK_PRIORITY_COLOR[t.priority] ?? 'text-gray-400'}`}>
+                    {t.priority}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${TASK_STATUS_COLOR[t.status] ?? 'bg-gray-700 text-gray-300'}`}>
+                    {t.status.replace('_', ' ')}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {snap.recentDecisions.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Decisioni recenti</h2>
+          <div className="grid gap-2">
+            {snap.recentDecisions.map((d) => (
+              <div key={d.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2.5 flex items-center justify-between">
+                <span className="text-sm text-white">{d.title}</span>
+                <div className="flex items-center gap-2 ml-4 shrink-0">
+                  {d.impactLevel && (
+                    <span className={`text-xs font-medium ${DECISION_IMPACT_COLOR[d.impactLevel] ?? 'text-gray-400'}`}>
+                      {d.impactLevel}
+                    </span>
+                  )}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status] ?? 'bg-gray-700 text-gray-300'}`}>
+                    {d.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+    </div>
+  );
+}
+
+
+async function TasksTab({ token, projectId }: { token: string; projectId: string }) {
+
+  const [tasks, phases] = await Promise.all([
+    listTasks(token, projectId),
+    listPhases(token, projectId),
+  ]);
+
+  const phaseMap = new Map(phases.map((p) => [p.id, p]));
+
+  const grouped = tasks.reduce<Record<string, Task[]>>((acc, task) => {
+    const key = task.phaseId ?? '__none__';
+    (acc[key] ??= []).push(task);
+    return acc;
+  }, {});
+
+  const unassigned = grouped['__none__'] ?? [];
+  const byPhase = phases
+    .map((p) => ({ phase: p, tasks: grouped[p.id] ?? [] }))
+    .filter(({ tasks: t }) => t.length > 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">{tasks.length} task totali</p>
+        <CreateTaskForm projectId={projectId} phases={phases} />
+      </div>
+
+      {tasks.length === 0 && (
+        <p className="text-xs text-gray-500">Nessun task ancora.</p>
+      )}
+
+      {byPhase.map(({ phase, tasks: phaseTasks }) => (
+        <div key={phase.id}>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{phase.title}</p>
+          <TaskList tasks={phaseTasks} projectId={projectId} />
+        </div>
+      ))}
+
+      {unassigned.length > 0 && (
+        <div>
+          {byPhase.length > 0 && (
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Senza fase</p>
+          )}
+          <TaskList tasks={unassigned} projectId={projectId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+async function PhasesTab({ token, projectId }: { token: string; projectId: string }) {
+
+  const [phases, milestones] = await Promise.all([
+    listPhases(token, projectId),
+    listMilestones(token, projectId),
+  ]);
+
+  const milestonesByPhase = milestones.reduce<Record<string, Milestone[]>>((acc, m) => {
+    const key = m.phaseId ?? '__none__';
+    (acc[key] ??= []).push(m);
+    return acc;
+  }, {});
+
+  const unlinkedMilestones = milestonesByPhase['__none__'] ?? [];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">{phases.length} fasi · {milestones.length} milestone</p>
+        <CreatePhaseForm projectId={projectId} />
+      </div>
+
+      {phases.length === 0 && (
+        <p className="text-xs text-gray-500">Nessuna fase ancora.</p>
+      )}
+
+      {phases.map((phase) => (
+        <div key={phase.id} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <span className="text-sm font-medium text-white">{phase.title}</span>
+              {phase.description && (
+                <p className="text-xs text-gray-400 mt-0.5">{phase.description}</p>
+              )}
+            </div>
+            <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ml-4 ${STATUS_COLOR[phase.status] ?? 'bg-gray-700 text-gray-300'}`}>
+              {phase.status}
+            </span>
+          </div>
+
+          {(milestonesByPhase[phase.id] ?? []).length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              {(milestonesByPhase[phase.id] ?? []).map((m) => (
+                <MilestoneRow key={m.id} milestone={m} />
+              ))}
+            </div>
+          )}
+
+          <CreateMilestoneForm projectId={projectId} phaseId={phase.id} />
+        </div>
+      ))}
+
+      {unlinkedMilestones.length > 0 && (
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Milestone senza fase</p>
+          <div className="space-y-1.5">
+            {unlinkedMilestones.map((m) => (
+              <MilestoneRow key={m.id} milestone={m} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="pt-2">
+        <CreateMilestoneForm projectId={projectId} />
+      </div>
+    </div>
+  );
+}
+
+
+function MilestoneRow({ milestone }: { milestone: Milestone }) {
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded bg-gray-800">
+      <span className="text-xs text-gray-200">{milestone.title}</span>
+      <div className="flex items-center gap-2 ml-4 shrink-0">
+        {milestone.dueDate && (
+          <span className="text-xs text-gray-500">
+            {new Date(milestone.dueDate).toLocaleDateString('it-IT')}
+          </span>
+        )}
+        <span className={`text-xs px-1.5 py-0.5 rounded ${MILESTONE_STATUS_COLOR[milestone.status] ?? 'bg-gray-700 text-gray-300'}`}>
+          {milestone.status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+
+async function DecisionsTab({ token, projectId }: { token: string; projectId: string }) {
+
+  const decisions = await listDecisions(token, projectId);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">{decisions.length} decisioni</p>
+        <CreateDecisionForm projectId={projectId} />
+      </div>
+
+      {decisions.length === 0 && (
+        <p className="text-xs text-gray-500">Nessuna decisione ancora.</p>
+      )}
+
+      <div className="grid gap-3">
+        {decisions.map((d) => (
+          <div key={d.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <span className="text-sm font-medium text-white">{d.title}</span>
+              <div className="flex items-center gap-2 shrink-0">
+                {d.impactLevel && (
+                  <span className={`text-xs font-medium ${DECISION_IMPACT_COLOR[d.impactLevel] ?? 'text-gray-400'}`}>
+                    {d.impactLevel}
+                  </span>
+                )}
+                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status] ?? 'bg-gray-700 text-gray-300'}`}>
+                  {d.status}
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400">{d.summary}</p>
+            {d.rationale && (
+              <p className="text-xs text-gray-500 mt-1 italic">{d.rationale}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+async function MemoryTab({ token, projectId }: { token: string; projectId: string }) {
+
+  const memory = await listMemory(token, projectId);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">{memory.length} entries</p>
+        <CreateMemoryForm projectId={projectId} />
+      </div>
+
+      {memory.length === 0 && (
+        <p className="text-xs text-gray-500">Nessuna entry ancora.</p>
+      )}
+
+      <div className="grid gap-2">
+        {memory.map((entry) => (
+          <div key={entry.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${MEMORY_TYPE_COLOR[entry.type] ?? 'bg-gray-700 text-gray-300'}`}>
+                {entry.type}
+              </span>
+              <span className="text-xs font-medium text-white">{entry.title}</span>
+            </div>
+            {entry.body && (
+              <p className="text-xs text-gray-400 whitespace-pre-wrap">{entry.body}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function TaskList({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
 
   return (
     <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
       {tasks.map((task) => (
         <div key={task.id} className="flex items-center justify-between px-4 py-3 bg-gray-900">
           <div className="flex items-center gap-3 min-w-0">
-            <span
-              className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLOR[task.status] ?? 'bg-gray-700 text-gray-300'}`}
-            >
+            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLOR[task.status] ?? 'bg-gray-700 text-gray-300'}`}>
               {task.status.replace('_', ' ')}
             </span>
             <span className="text-sm text-white truncate">{task.title}</span>
