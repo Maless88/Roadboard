@@ -4,12 +4,11 @@
 
 ## Current milestone
 
-**Wave 3 — Memory and intelligence layer** *(next)*
+**Wave 4 — Team and access hardening** *(next)*
 
-- Semantic search over memory entries
-- Automatic memory summarization via background jobs
-- Richer decision record model with outcome tracking
-- Agent-readable changelog per project
+- Fine-grained permission scopes on MCP tokens
+- Team-level dashboards
+- Invite and onboarding flows in web-app
 
 ---
 
@@ -30,18 +29,13 @@
 | 10 | Local Sync Bridge | done |
 | 11 | GitHub Publication Readiness | done |
 | 12 | Test Automation Hardening | done |
+| Wave 3 | Memory and intelligence layer | done |
 
 ---
 
 ## Upcoming
 
 These are planned directions, not committed delivery dates.
-
-### Wave 3 — Memory and intelligence layer
-- Semantic search over memory entries
-- Automatic memory summarization via background jobs
-- Richer decision record model with outcome tracking
-- Agent-readable changelog per project
 
 ### Wave 4 — Team and access hardening
 - Fine-grained permission scopes on MCP tokens

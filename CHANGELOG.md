@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-14
+
+### Added
+- Semantic search over memory entries: `GET /memory?q=` with case-insensitive full-text search on title and body
+- Memory search UI in the Memory tab with live URL-param-driven filtering
+- `search_memory` MCP tool that delegates to the memory search endpoint
+- Agent-readable project changelog via `get_project_changelog` MCP tool: aggregates tasks, phases, decisions, memory, and audit events into a structured snapshot
+- `GET /projects/:id/audit` endpoint returning paginated activity events
+- Richer decision model: `outcome` and `resolvedAt` fields on Decision records
+- Auto-set `resolvedAt` when decision status transitions to accepted/rejected/superseded
+- `outcome` field in decision create form and displayed in DecisionsTab UI
+- Memory summarization background job: groups memory entries by type, lists titles per group, creates an `operational_note` summary per project
+- `POST /jobs/summary-generation-all` bulk endpoint to trigger summaries across all projects
+
+### Fixed
+- `mcp-contracts` tool count updated to 14 (was 12 after adding changelog and search tools)
+
 ## [0.12.0] - 2026-04-14
 
 ### Added
