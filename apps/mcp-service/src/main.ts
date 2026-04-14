@@ -233,6 +233,33 @@ const TOOLS = [
       required: ["projectId", "title", "summary"],
     },
   },
+  {
+    name: "get_project_changelog",
+    description: "Generate a structured, agent-readable changelog for a project: task summary, active phases, recent decisions, recent memory entries, and recent audit events. Use this at session start for rapid onboarding.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        auditLimit: {
+          type: "number",
+          description: "Number of recent audit events to include (default: 15)",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "search_memory",
+    description: "Search memory entries for a project by keyword. Searches both title and body fields.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        q: { type: "string", description: "Search query" },
+      },
+      required: ["projectId", "q"],
+    },
+  },
 ];
 
 
@@ -367,11 +394,27 @@ async function handleToolCall(
               optional_args: ["status"],
             },
           ],
+          changelog: [
+            {
+              name: "get_project_changelog",
+              purpose: "Structured agent-readable changelog: task summary, phases, decisions, memory, recent audit events. Fastest way to onboard on what changed recently.",
+              when: "At session start as an alternative to prepare_project_summary when you need audit trail context too.",
+              required_args: ["projectId"],
+              optional_args: ["auditLimit"],
+            },
+            {
+              name: "search_memory",
+              purpose: "Full-text search over memory entries (title + body).",
+              when: "When looking for a specific past decision, note, or context by keyword.",
+              required_args: ["projectId", "q"],
+              optional_args: [],
+            },
+          ],
         },
         recommended_workflow: [
           {
             step: 1,
-            action: "Call prepare_project_summary(projectId) to load full project context.",
+            action: "Call get_project_changelog(projectId) or prepare_project_summary(projectId) to load full project context.",
           },
           {
             step: 2,
@@ -554,6 +597,48 @@ async function handleToolCall(
         rationale: args.rationale as string | undefined,
         impactLevel: args.impactLevel as string | undefined,
       });
+      return jsonResponse(result);
+    }
+
+    case "get_project_changelog": {
+      const projectId = args.projectId as string;
+      const auditLimit = (args.auditLimit as number | undefined) ?? 15;
+
+      const [project, dashboard, decisions, memory, auditPage] = await Promise.all([
+        client.getProject(projectId),
+        client.getDashboard(projectId),
+        client.listDecisions(projectId),
+        client.listMemory(projectId),
+        client.getAuditEvents(projectId, auditLimit),
+      ]);
+
+      const snap = dashboard as Record<string, unknown>;
+      const memoryList = memory as Array<Record<string, unknown>>;
+      const decisionList = decisions as Array<Record<string, unknown>>;
+      const audit = auditPage as { events: Array<Record<string, unknown>>; total: number };
+
+      const recentMemory = memoryList.slice(0, 10);
+
+      return jsonResponse({
+        generated_at: new Date().toISOString(),
+        project,
+        task_summary: snap.tasks,
+        milestone_summary: snap.milestones,
+        active_phases: snap.activePhases,
+        urgent_tasks: snap.urgentTasks,
+        open_decisions: decisionList.filter((d) => d.status === "open"),
+        recent_decisions: decisionList.slice(0, 5),
+        recent_memory: recentMemory,
+        recent_activity: audit.events,
+        total_audit_events: audit.total,
+      });
+    }
+
+    case "search_memory": {
+      const result = await client.searchMemory(
+        args.projectId as string,
+        args.q as string,
+      );
       return jsonResponse(result);
     }
 

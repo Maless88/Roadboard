@@ -251,6 +251,46 @@ export const CREATE_DECISION_TOOL: McpToolDefinition = {
   },
 };
 
+export const GET_PROJECT_CHANGELOG_TOOL: McpToolDefinition = {
+  name: 'get_project_changelog',
+  description: 'Generate a structured, agent-readable changelog for a project: task summary, active phases, recent decisions, recent memory entries, and recent audit events.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      auditLimit: {
+        type: 'number',
+        description: 'Number of recent audit events to include (default: 15)',
+      },
+    },
+    required: ['projectId'],
+  },
+};
+
+
+export const SEARCH_MEMORY_TOOL: McpToolDefinition = {
+  name: 'search_memory',
+  description: 'Search memory entries for a project by keyword. Searches both title and body fields.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      q: {
+        type: 'string',
+        description: 'Search query',
+      },
+    },
+    required: ['projectId', 'q'],
+  },
+};
+
+
 export const MCP_TOOLS = [
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
@@ -264,4 +304,6 @@ export const MCP_TOOLS = [
   CREATE_HANDOFF_TOOL,
   LIST_RECENT_DECISIONS_TOOL,
   CREATE_DECISION_TOOL,
+  GET_PROJECT_CHANGELOG_TOOL,
+  SEARCH_MEMORY_TOOL,
 ] as const;

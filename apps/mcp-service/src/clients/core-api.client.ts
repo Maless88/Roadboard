@@ -190,6 +190,50 @@ export class CoreApiClient {
   }
 
 
+  async getDashboard(projectId: string): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/dashboard`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api getDashboard failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async getAuditEvents(projectId: string, take = 20): Promise<unknown> {
+
+    const params = new URLSearchParams({ take: String(take) });
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/audit?${params}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api getAuditEvents failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async searchMemory(projectId: string, q: string): Promise<unknown[]> {
+
+    const params = new URLSearchParams({ projectId, q });
+    const res = await fetch(`${BASE_URL}/memory?${params.toString()}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api searchMemory failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown[]>;
+  }
+
+
   private headers(): Record<string, string> {
 
     return {

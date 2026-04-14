@@ -12,13 +12,15 @@ import {
   PREPARE_TASK_CONTEXT_TOOL,
   PREPARE_PROJECT_SUMMARY_TOOL,
   CREATE_HANDOFF_TOOL,
+  GET_PROJECT_CHANGELOG_TOOL,
+  SEARCH_MEMORY_TOOL,
 } from './tools';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 12 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(12);
+  it('exports exactly 14 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(14);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -103,5 +105,20 @@ describe('workflow tools', () => {
     expect(CREATE_HANDOFF_TOOL.name).toBe('create_handoff');
     expect(CREATE_HANDOFF_TOOL.inputSchema.required).toContain('projectId');
     expect(CREATE_HANDOFF_TOOL.inputSchema.required).toContain('summary');
+  });
+});
+
+
+describe('changelog and search tools', () => {
+
+  it('get_project_changelog requires projectId', () => {
+    expect(GET_PROJECT_CHANGELOG_TOOL.name).toBe('get_project_changelog');
+    expect(GET_PROJECT_CHANGELOG_TOOL.inputSchema.required).toContain('projectId');
+  });
+
+  it('search_memory requires projectId and q', () => {
+    expect(SEARCH_MEMORY_TOOL.name).toBe('search_memory');
+    expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('projectId');
+    expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('q');
   });
 });
