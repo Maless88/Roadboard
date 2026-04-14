@@ -34,6 +34,15 @@ export class JobsController {
   }
 
 
+  @Post('summary-generation-all')
+  @HttpCode(202)
+  async triggerSummaryGenerationAll(): Promise<{ queued: number }> {
+
+    const count = await this.jobs.enqueueAllProjectsSummary();
+    return { queued: count };
+  }
+
+
   @Post('cleanup')
   @HttpCode(202)
   async triggerCleanup(): Promise<{ queued: boolean }> {
