@@ -6,8 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-14
+
 ### Added
-- FASE 12: unit tests for shared packages, Playwright e2e for web-app, CI enforcement
+- Project detail page with 6-tab UI: Overview, Tasks, Fasi, Decisioni, Memory, Audit
+- Inline create forms for tasks, phases, milestones, decisions, memory entries, projects
+- Dashboard snapshot tab with task counts, milestone progress, urgent tasks, recent decisions
+- Audit log tab with paginated activity events per project
+- Playwright e2e test suite: 19 tests covering auth, project list, project detail tabs, all create flows
+- Unit tests for all shared packages: domain, auth, grants, config, mcp-contracts
+- CI enforcement: both typecheck+unit and e2e jobs required on every push and PR
+- GitHub Actions artifact upload for Playwright reports on failure
+
+### Fixed
+- Memory entry type validation: aligned form options with backend allowed values
+- Tab navigation: scoped to `header` to avoid RSC payload duplicate link elements
+- E2E selector stability: strict mode violations resolved with `.first()` on repeated-data assertions
 
 ## [0.10.0] - 2026-04-07
 

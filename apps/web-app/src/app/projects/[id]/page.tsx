@@ -9,6 +9,7 @@ import {
   listDecisions,
   listMilestones,
   getDashboardSnapshot,
+  listAuditEvents,
 } from '@/lib/api';
 import { Nav } from '@/components/nav';
 import { TabNav } from './tab-nav';
@@ -47,8 +48,13 @@ const TASK_STATUS_COLOR: Record<string, string> = {
 const MEMORY_TYPE_COLOR: Record<string, string> = {
   done: 'bg-green-900 text-green-300',
   next: 'bg-indigo-900 text-indigo-300',
-  context: 'bg-gray-700 text-gray-300',
   decision: 'bg-yellow-900 text-yellow-300',
+  handoff: 'bg-purple-900 text-purple-300',
+  architecture: 'bg-blue-900 text-blue-300',
+  issue: 'bg-red-900 text-red-300',
+  learning: 'bg-teal-900 text-teal-300',
+  operational_note: 'bg-gray-700 text-gray-300',
+  open_question: 'bg-orange-900 text-orange-300',
 };
 
 const DECISION_IMPACT_COLOR: Record<string, string> = {
@@ -118,6 +124,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'phases' && <PhasesTab token={token} projectId={id} />}
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
         {tab === 'memory' && <MemoryTab token={token} projectId={id} />}
+        {tab === 'audit' && <AuditTab token={token} projectId={id} />}
 
       </main>
     </>
@@ -442,6 +449,61 @@ async function MemoryTab({ token, projectId }: { token: string; projectId: strin
             </div>
             {entry.body && (
               <p className="text-xs text-gray-400 whitespace-pre-wrap">{entry.body}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+async function AuditTab({ token, projectId }: { token: string; projectId: string }) {
+
+  let page;
+
+  try {
+    page = await listAuditEvents(token, projectId);
+  } catch {
+    return <p className="text-xs text-gray-500">Audit log non disponibile.</p>;
+  }
+
+  const { events, total } = page;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-500">{total} eventi totali</p>
+
+      {events.length === 0 && (
+        <p className="text-xs text-gray-500">Nessun evento registrato.</p>
+      )}
+
+      <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
+        {events.map((event) => (
+          <div key={event.id} className="px-4 py-3 bg-gray-900">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="shrink-0 text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">
+                  {event.eventType}
+                </span>
+                <span className="text-xs text-gray-300 truncate">
+                  {event.targetType} <span className="text-gray-500">{event.targetId.slice(0, 8)}</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-gray-500">{event.actorType}:{event.actorId.slice(0, 8)}</span>
+                <span className="text-xs text-gray-600">
+                  {new Date(event.createdAt).toLocaleString('it-IT', {
+                    month: 'short', day: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            </div>
+            {event.metadata && Object.keys(event.metadata).length > 0 && (
+              <p className="text-xs text-gray-600 mt-1 font-mono truncate">
+                {JSON.stringify(event.metadata)}
+              </p>
             )}
           </div>
         ))}

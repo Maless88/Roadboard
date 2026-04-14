@@ -4,11 +4,12 @@
 
 ## Current milestone
 
-**Phase 12 — Test Automation Hardening** *(in progress)*
+**Wave 3 — Memory and intelligence layer** *(next)*
 
-- Unit tests for all shared packages (`domain`, `auth`, `grants`, `config`)
-- Playwright end-to-end tests for `web-app`
-- CI enforcement: all tests required to pass on every push and PR
+- Semantic search over memory entries
+- Automatic memory summarization via background jobs
+- Richer decision record model with outcome tracking
+- Agent-readable changelog per project
 
 ---
 
@@ -28,19 +29,13 @@
 | 9 | Async & Operational Reliability | done |
 | 10 | Local Sync Bridge | done |
 | 11 | GitHub Publication Readiness | done |
+| 12 | Test Automation Hardening | done |
 
 ---
 
 ## Upcoming
 
 These are planned directions, not committed delivery dates.
-
-### Wave 2 — Stability and developer experience
-- Improved error reporting and validation messages across all APIs
-- OpenAPI / Swagger documentation for core-api and auth-access
-- Healthcheck endpoints for all services
-- Docker Compose profile for full local stack (all services)
-- Improved seed data for onboarding
 
 ### Wave 3 — Memory and intelligence layer
 - Semantic search over memory entries
@@ -51,7 +46,6 @@ These are planned directions, not committed delivery dates.
 ### Wave 4 — Team and access hardening
 - Fine-grained permission scopes on MCP tokens
 - Team-level dashboards
-- Audit log API for compliance use cases
 - Invite and onboarding flows in web-app
 
 ---

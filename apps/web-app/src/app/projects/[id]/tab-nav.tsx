@@ -10,6 +10,7 @@ const TABS = [
   { key: 'phases', label: 'Fasi' },
   { key: 'decisions', label: 'Decisioni' },
   { key: 'memory', label: 'Memory' },
+  { key: 'audit', label: 'Audit' },
 ] as const;
 
 

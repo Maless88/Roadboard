@@ -579,3 +579,42 @@ export async function listTeams(token: string): Promise<Team[]> {
 
   return res.json() as Promise<Team[]>;
 }
+
+
+export interface AuditEvent {
+  id: string;
+  actorType: string;
+  actorId: string;
+  eventType: string;
+  targetType: string;
+  targetId: string;
+  projectId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+  take: number;
+  skip: number;
+}
+
+
+export async function listAuditEvents(
+  token: string,
+  projectId: string,
+  take = 50,
+  skip = 0,
+): Promise<AuditPage> {
+
+  const params = new URLSearchParams({ take: String(take), skip: String(skip) });
+  const res = await fetch(`${CORE_API}/projects/${projectId}/audit?${params}`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error('Failed to fetch audit log');
+
+  return res.json() as Promise<AuditPage>;
+}

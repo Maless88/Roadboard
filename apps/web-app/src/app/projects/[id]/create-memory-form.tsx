@@ -14,7 +14,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
-  const [type, setType] = useState('context');
+  const [type, setType] = useState('done');
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
@@ -71,10 +71,15 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
           onChange={(e) => setType(e.target.value)}
           className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
-          <option value="context">context</option>
           <option value="done">done</option>
           <option value="next">next</option>
           <option value="decision">decision</option>
+          <option value="architecture">architecture</option>
+          <option value="issue">issue</option>
+          <option value="learning">learning</option>
+          <option value="handoff">handoff</option>
+          <option value="operational_note">operational note</option>
+          <option value="open_question">open question</option>
         </select>
       </div>
       <textarea
