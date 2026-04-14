@@ -51,6 +51,10 @@ export class FindMemoryQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsEnum(MemoryEntryType)
   type?: MemoryEntryType;
+
+  @IsOptional()
+  @IsString()
+  q?: string;
 }
 
 

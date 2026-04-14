@@ -19,6 +19,7 @@ import { CreatePhaseForm } from './create-phase-form';
 import { CreateMilestoneForm } from './create-milestone-form';
 import { CreateDecisionForm } from './create-decision-form';
 import { CreateMemoryForm } from './create-memory-form';
+import { MemorySearch } from './memory-search';
 import type { Task, Milestone } from '@/lib/api';
 
 
@@ -73,14 +74,14 @@ const MILESTONE_STATUS_COLOR: Record<string, string> = {
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string }>;
 }
 
 
 export default async function ProjectDetailPage({ params, searchParams }: Props) {
 
   const { id } = await params;
-  const { tab = 'overview' } = await searchParams;
+  const { tab = 'overview', q } = await searchParams;
   const token = await getToken();
 
   if (!token) {
@@ -123,7 +124,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'tasks' && <TasksTab token={token} projectId={id} />}
         {tab === 'phases' && <PhasesTab token={token} projectId={id} />}
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
-        {tab === 'memory' && <MemoryTab token={token} projectId={id} />}
+        {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} />}
         {tab === 'audit' && <AuditTab token={token} projectId={id} />}
 
       </main>
@@ -423,14 +424,17 @@ async function DecisionsTab({ token, projectId }: { token: string; projectId: st
 }
 
 
-async function MemoryTab({ token, projectId }: { token: string; projectId: string }) {
+async function MemoryTab({ token, projectId, q }: { token: string; projectId: string; q?: string }) {
 
-  const memory = await listMemory(token, projectId);
+  const memory = await listMemory(token, projectId, q);
 
   return (
     <div className="space-y-4">
+      <MemorySearch defaultValue={q ?? ''} />
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{memory.length} entries</p>
+        <p className="text-xs text-gray-500">
+          {memory.length} {q ? `risultati per "${q}"` : 'entries'}
+        </p>
         <CreateMemoryForm projectId={projectId} />
       </div>
 

@@ -202,9 +202,15 @@ export async function updateTaskStatus(token: string, taskId: string, status: st
 }
 
 
-export async function listMemory(token: string, projectId: string): Promise<MemoryEntry[]> {
+export async function listMemory(token: string, projectId: string, q?: string): Promise<MemoryEntry[]> {
 
-  const res = await fetch(`${CORE_API}/memory?projectId=${projectId}`, { headers: authHeaders(token) });
+  const params = new URLSearchParams({ projectId });
+
+  if (q) {
+    params.set('q', q);
+  }
+
+  const res = await fetch(`${CORE_API}/memory?${params}`, { headers: authHeaders(token) });
 
   if (!res.ok) throw new Error('Failed to fetch memory');
 

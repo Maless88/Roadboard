@@ -8,6 +8,7 @@ import { UpdateMemoryEntryDto } from './update-memory-entry.dto';
 interface FindAllFilters {
   projectId: string;
   type?: MemoryEntryType;
+  q?: string;
 }
 
 
@@ -32,13 +33,21 @@ export class MemoryService {
 
   async findAll(filters: FindAllFilters) {
 
-    const where: Record<string, unknown> = { projectId: filters.projectId };
-
-    if (filters.type) {
-      where.type = filters.type;
-    }
-
-    return this.prisma.memoryEntry.findMany({ where });
+    return this.prisma.memoryEntry.findMany({
+      where: {
+        projectId: filters.projectId,
+        ...(filters.type ? { type: filters.type } : {}),
+        ...(filters.q
+          ? {
+              OR: [
+                { title: { contains: filters.q, mode: 'insensitive' } },
+                { body: { contains: filters.q, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
 

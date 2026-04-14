@@ -42,6 +42,7 @@ export class MemoryController {
     return this.memoryService.findAll({
       projectId: query.projectId,
       type: query.type,
+      q: query.q,
     });
   }
 
