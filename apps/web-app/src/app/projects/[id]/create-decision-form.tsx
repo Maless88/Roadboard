@@ -15,6 +15,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
   const [rationale, setRationale] = useState('');
+  const [outcome, setOutcome] = useState('');
   const [impactLevel, setImpactLevel] = useState('medium');
   const [status, setStatus] = useState('open');
   const [error, setError] = useState('');
@@ -31,6 +32,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         title: title.trim(),
         summary: summary.trim(),
         rationale: rationale.trim() || undefined,
+        outcome: outcome.trim() || undefined,
         impactLevel,
         status,
       });
@@ -43,6 +45,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
       setTitle('');
       setSummary('');
       setRationale('');
+      setOutcome('');
       setImpactLevel('medium');
       setStatus('open');
       setError('');
@@ -82,6 +85,13 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         placeholder="Motivazione (opzionale)"
         value={rationale}
         onChange={(e) => setRationale(e.target.value)}
+        rows={2}
+        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+      />
+      <textarea
+        placeholder="Outcome (opzionale)"
+        value={outcome}
+        onChange={(e) => setOutcome(e.target.value)}
         rows={2}
         className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />

@@ -104,7 +104,7 @@ export async function createPhaseAction(
 
 export async function createDecisionAction(
   projectId: string,
-  data: { title: string; summary: string; rationale?: string; status?: string; impactLevel?: string },
+  data: { title: string; summary: string; rationale?: string; outcome?: string; status?: string; impactLevel?: string },
 ): Promise<{ error?: string }> {
 
   const token = await getToken();

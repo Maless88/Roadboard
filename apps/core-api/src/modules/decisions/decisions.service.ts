@@ -57,14 +57,21 @@ export class DecisionsService {
 
     await this.findOne(id);
 
+    const resolvedAt = dto.resolvedAt
+      ?? (dto.status && ['accepted', 'rejected', 'superseded'].includes(dto.status)
+        ? new Date()
+        : undefined);
+
     return this.prisma.decision.update({
       where: { id },
       data: {
         title: dto.title,
         summary: dto.summary,
         rationale: dto.rationale,
+        outcome: dto.outcome,
         status: dto.status,
         impactLevel: dto.impactLevel,
+        resolvedAt,
       },
     });
   }

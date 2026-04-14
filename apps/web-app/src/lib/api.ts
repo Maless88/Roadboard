@@ -401,8 +401,10 @@ export interface Decision {
   title: string;
   summary: string;
   rationale: string | null;
+  outcome: string | null;
   status: string;
   impactLevel: string | null;
+  resolvedAt: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -513,7 +515,7 @@ export async function listDecisions(token: string, projectId: string): Promise<D
 
 export async function createDecision(
   token: string,
-  data: { projectId: string; title: string; summary: string; rationale?: string; status?: string; impactLevel?: string },
+  data: { projectId: string; title: string; summary: string; rationale?: string; outcome?: string; status?: string; impactLevel?: string },
 ): Promise<Decision> {
 
   const res = await fetch(`${CORE_API}/decisions`, {

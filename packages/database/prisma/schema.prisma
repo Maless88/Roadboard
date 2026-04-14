@@ -161,16 +161,18 @@ model Task {
 // ── Decisions ────────────────────────────────────────
 
 model Decision {
-  id              String   @id @default(cuid())
-  projectId       String   @map("project_id")
+  id              String    @id @default(cuid())
+  projectId       String    @map("project_id")
   title           String
   summary         String
   rationale       String?
-  status          String   @default("open")
-  impactLevel     String   @default("medium") @map("impact_level")
-  createdByUserId String?  @map("created_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  outcome         String?
+  status          String    @default("open")
+  impactLevel     String    @default("medium") @map("impact_level")
+  resolvedAt      DateTime? @map("resolved_at")
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   project Project @relation(fields: [projectId], references: [id])
 
