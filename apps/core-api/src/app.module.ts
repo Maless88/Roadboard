@@ -10,6 +10,7 @@ import { MemoryModule } from "./modules/memory/memory.module";
 import { DecisionsModule } from "./modules/decisions/decisions.module";
 import { DashboardsModule } from "./modules/dashboards/dashboards.module";
 import { AuditModule } from "./modules/audit/audit.module";
+import { CodeflowModule } from "./modules/codeflow/codeflow.module";
 
 
 @Module({
@@ -24,6 +25,7 @@ import { AuditModule } from "./modules/audit/audit.module";
     DecisionsModule,
     DashboardsModule,
     AuditModule,
+    CodeflowModule,
   ],
 })
 export class AppModule {}

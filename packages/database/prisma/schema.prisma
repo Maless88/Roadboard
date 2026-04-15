@@ -88,13 +88,15 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  ownerTeam     Team           @relation(fields: [ownerTeamId], references: [id])
-  phases        Phase[]
-  milestones    Milestone[]
-  tasks         Task[]
-  memoryEntries MemoryEntry[]
-  decisions     Decision[]
-  projectGrants ProjectGrant[]
+  ownerTeam        Team               @relation(fields: [ownerTeamId], references: [id])
+  phases           Phase[]
+  milestones       Milestone[]
+  tasks            Task[]
+  memoryEntries    MemoryEntry[]
+  decisions        Decision[]
+  projectGrants    ProjectGrant[]
+  codeRepositories CodeRepository[]
+  architectureNodes ArchitectureNode[]
 
   @@map("projects")
 }
@@ -249,3 +251,155 @@ model McpToken {
 
   @@map("mcp_tokens")
 }
+
+// ── CodeFlow ─────────────────────────────────────────
+
+model CodeRepository {
+  id             String    @id @default(cuid())
+  projectId      String    @map("project_id")
+  name           String
+  repoUrl        String?   @map("repo_url")
+  provider       String    @default("manual")
+  defaultBranch  String    @default("main") @map("default_branch")
+  scanIntervalH  Int?      @map("scan_interval_h")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots ArchitectureSnapshot[]
+  nodes     ArchitectureNode[]
+
+  @@map("code_repositories")
+}
+
+model ArchitectureSnapshot {
+  id            String    @id @default(cuid())
+  repositoryId  String    @map("repository_id")
+  projectId     String    @map("project_id")
+  commitHash    String?   @map("commit_hash")
+  status        String    @default("pending")
+  scanType      String    @default("manual") @map("scan_type")
+  errorMessage  String?   @map("error_message")
+  nodeCount     Int       @default(0) @map("node_count")
+  edgeCount     Int       @default(0) @map("edge_count")
+  triggeredById String?   @map("triggered_by_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  completedAt   DateTime? @map("completed_at")
+
+  repository     CodeRepository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  nodes          ArchitectureNode[]
+  edges          ArchitectureEdge[]
+  impactAnalyses ImpactAnalysis[]
+
+  @@index([projectId, status])
+  @@index([repositoryId, createdAt])
+  @@map("architecture_snapshots")
+}
+
+model ArchitectureNode {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  repositoryId String   @map("repository_id")
+  snapshotId   String?  @map("snapshot_id")
+  type         String
+  name         String
+  path         String?
+  description  String?
+  domainGroup  String?  @map("domain_group")
+  isManual     Boolean  @default(false) @map("is_manual")
+  isCurrent    Boolean  @default(true) @map("is_current")
+  metadata     Json     @default("{}")
+  ownerUserId  String?  @map("owner_user_id")
+  ownerTeamId  String?  @map("owner_team_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repository    CodeRepository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot      ArchitectureSnapshot? @relation(fields: [snapshotId], references: [id])
+  outgoingEdges ArchitectureEdge[]    @relation("EdgeFrom")
+  incomingEdges ArchitectureEdge[]    @relation("EdgeTo")
+  annotations   ArchitectureAnnotation[]
+  links         ArchitectureLink[]
+  impactSources ImpactAnalysis[]      @relation("ImpactSource")
+
+  @@index([projectId, isCurrent])
+  @@index([projectId, type])
+  @@index([repositoryId, path])
+  @@map("architecture_nodes")
+}
+
+model ArchitectureEdge {
+  id           String   @id @default(cuid())
+  projectId    String   @map("project_id")
+  snapshotId   String?  @map("snapshot_id")
+  fromNodeId   String   @map("from_node_id")
+  toNodeId     String   @map("to_node_id")
+  edgeType     String   @map("edge_type")
+  weight       Float    @default(1.0)
+  isManual     Boolean  @default(false) @map("is_manual")
+  isCurrent    Boolean  @default(true) @map("is_current")
+  metadata     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  snapshot ArchitectureSnapshot? @relation(fields: [snapshotId], references: [id])
+  fromNode ArchitectureNode      @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   ArchitectureNode      @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, isCurrent])
+  @@index([fromNodeId])
+  @@index([toNodeId])
+  @@map("architecture_edges")
+}
+
+model ArchitectureAnnotation {
+  id              String   @id @default(cuid())
+  nodeId          String   @map("node_id")
+  projectId       String   @map("project_id")
+  createdByUserId String   @map("created_by_user_id")
+  content         String
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  node ArchitectureNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@map("architecture_annotations")
+}
+
+model ArchitectureLink {
+  id              String   @id @default(cuid())
+  nodeId          String   @map("node_id")
+  projectId       String   @map("project_id")
+  entityType      String   @map("entity_type")
+  entityId        String   @map("entity_id")
+  linkType        String   @map("link_type")
+  createdByUserId String   @map("created_by_user_id")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  node ArchitectureNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+
+  @@index([nodeId])
+  @@index([projectId, entityType, entityId])
+  @@map("architecture_links")
+}
+
+model ImpactAnalysis {
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  snapshotId      String   @map("snapshot_id")
+  triggerNodeId   String   @map("trigger_node_id")
+  directNodeIds   Json     @default("[]") @map("direct_node_ids")
+  indirectNodeIds Json     @default("[]") @map("indirect_node_ids")
+  remoteNodeIds   Json     @default("[]") @map("remote_node_ids")
+  computedAt      DateTime @default(now()) @map("computed_at")
+
+  snapshot    ArchitectureSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  triggerNode ArchitectureNode     @relation("ImpactSource", fields: [triggerNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([snapshotId, triggerNodeId])
+  @@index([projectId])
+  @@map("impact_analyses")
+}
+

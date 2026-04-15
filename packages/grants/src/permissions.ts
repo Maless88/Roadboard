@@ -9,6 +9,9 @@ const ADMIN_GRANTS: readonly GrantType[] = [
   GrantType.DASHBOARD_READ,
   GrantType.TOKEN_MANAGE,
   GrantType.PROJECT_ADMIN,
+  GrantType.CODEFLOW_READ,
+  GrantType.CODEFLOW_WRITE,
+  GrantType.CODEFLOW_SCAN,
 ];
 
 export interface EffectiveGrant {

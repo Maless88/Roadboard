@@ -56,6 +56,9 @@ export enum GrantType {
   DASHBOARD_READ = 'dashboard.read',
   TOKEN_MANAGE = 'token.manage',
   PROJECT_ADMIN = 'project.admin',
+  CODEFLOW_READ = 'codeflow.read',
+  CODEFLOW_WRITE = 'codeflow.write',
+  CODEFLOW_SCAN = 'codeflow.scan',
 }
 
 export enum GrantSubjectType {
@@ -77,6 +80,62 @@ export enum McpTokenStatus {
   ACTIVE = 'active',
   REVOKED = 'revoked',
   EXPIRED = 'expired',
+}
+
+
+export enum ArchitectureNodeType {
+  REPOSITORY = 'repository',
+  APP = 'app',
+  PACKAGE = 'package',
+  MODULE = 'module',
+  SERVICE = 'service',
+  FILE = 'file',
+}
+
+
+export enum ArchitectureEdgeType {
+  CONTAINS = 'contains',
+  DEPENDS_ON = 'depends_on',
+  IMPORTS = 'imports',
+  OWNS = 'owns',
+  RELATES_TO = 'relates_to',
+}
+
+
+export enum ArchitectureNodeLinkType {
+  IMPLEMENTS = 'implements',
+  MODIFIES = 'modifies',
+  FIXES = 'fixes',
+  ADDRESSES = 'addresses',
+  MOTIVATES = 'motivates',
+  CONSTRAINS = 'constrains',
+  DELIVERS = 'delivers',
+  DESCRIBES = 'describes',
+  WARNS_ABOUT = 'warns_about',
+}
+
+
+export enum ArchitectureEntityType {
+  TASK = 'task',
+  DECISION = 'decision',
+  MILESTONE = 'milestone',
+  MEMORY_ENTRY = 'memory_entry',
+}
+
+
+export enum CodeRepositoryProvider {
+  GITHUB = 'github',
+  GITLAB = 'gitlab',
+  LOCAL = 'local',
+  MANUAL = 'manual',
+}
+
+
+export enum ArchitectureScanStatus {
+  PENDING = 'pending',
+  RUNNING = 'running',
+  COMPLETED = 'completed',
+  FAILED = 'failed',
 }
 
 export enum UserStatus {
