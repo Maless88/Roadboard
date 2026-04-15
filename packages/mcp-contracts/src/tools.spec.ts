@@ -14,13 +14,15 @@ import {
   CREATE_HANDOFF_TOOL,
   GET_PROJECT_CHANGELOG_TOOL,
   SEARCH_MEMORY_TOOL,
+  GET_ARCHITECTURE_MAP_TOOL,
+  GET_NODE_CONTEXT_TOOL,
 } from './tools';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 14 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(14);
+  it('exports exactly 16 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(16);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -120,5 +122,20 @@ describe('changelog and search tools', () => {
     expect(SEARCH_MEMORY_TOOL.name).toBe('search_memory');
     expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('projectId');
     expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('q');
+  });
+});
+
+
+describe('codeflow tools', () => {
+
+  it('get_architecture_map requires projectId', () => {
+    expect(GET_ARCHITECTURE_MAP_TOOL.name).toBe('get_architecture_map');
+    expect(GET_ARCHITECTURE_MAP_TOOL.inputSchema.required).toContain('projectId');
+  });
+
+  it('get_node_context requires projectId and nodeId', () => {
+    expect(GET_NODE_CONTEXT_TOOL.name).toBe('get_node_context');
+    expect(GET_NODE_CONTEXT_TOOL.inputSchema.required).toContain('projectId');
+    expect(GET_NODE_CONTEXT_TOOL.inputSchema.required).toContain('nodeId');
   });
 });
