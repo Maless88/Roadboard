@@ -1,7 +1,7 @@
+import express, { Request, Response, NextFunction } from "express";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -698,9 +698,10 @@ async function fetchDependencyHealth(url: string): Promise<"ok" | "unreachable">
 
 async function startHttp(): Promise<void> {
 
-  const app = createMcpExpressApp({ host: "0.0.0.0" });
+  const app = express();
+  app.use(express.json());
 
-  app.get("/health", async (_req, res) => {
+  app.get("/health", async (_req: Request, res: Response) => {
     const [coreApi, authAccess] = await Promise.all([
       fetchDependencyHealth(`http://${CORE_API_HOST}:${CORE_API_PORT}/health`),
       fetchDependencyHealth(`http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/health`),
@@ -711,14 +712,16 @@ async function startHttp(): Promise<void> {
       status: healthy ? "ok" : "degraded",
       service: "mcp-service",
       transport: "http",
-      dependencies: {
-        coreApi,
-        authAccess,
-      },
+      dependencies: { coreApi, authAccess },
     });
   });
 
-  app.use(async (req, res, next) => {
+  app.use(async (req: Request, res: Response, next: NextFunction) => {
+
+    if (req.path === "/health") {
+      next();
+      return;
+    }
 
     const auth = req.headers.authorization;
 
@@ -735,13 +738,13 @@ async function startHttp(): Promise<void> {
       return;
     }
 
-    (req as Record<string, unknown> & typeof req).mcpToken = token;
+    (req as Request & { mcpToken: string }).mcpToken = token;
     next();
   });
 
-  app.post("/mcp", async (req, res) => {
+  app.post("/mcp", async (req: Request, res: Response) => {
 
-    const token = (req as Record<string, unknown> & typeof req).mcpToken as string;
+    const token = (req as Request & { mcpToken: string }).mcpToken;
     const client = new CoreApiClient(token);
     const server = buildServer(client);
 
@@ -754,15 +757,11 @@ async function startHttp(): Promise<void> {
     try {
       await transport.handleRequest(req, res, req.body as unknown);
     } finally {
-      res.on("close", () => server.close());
+      res.on("close", () => void server.close());
     }
   });
 
-  app.get("/mcp", (_req, res) => {
-    res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
-  });
-
-  app.delete("/mcp", (_req, res) => {
+  app.all("/mcp", (_req: Request, res: Response) => {
     res.status(405).json({ jsonrpc: "2.0", error: { code: -32000, message: "Method not allowed." }, id: null });
   });
 
