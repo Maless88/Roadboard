@@ -260,7 +260,77 @@ const TOOLS = [
       required: ["projectId", "q"],
     },
   },
+  {
+    name: "get_architecture_map",
+    description: "Get the architecture graph for a project: all current nodes (apps, packages, modules) and edges (depends_on, imports, etc.).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "get_node_context",
+    description: "Get full context for an architecture node: annotations, links to tasks/decisions/memory, and impacted-by analysis.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        nodeId: { type: "string", description: "The architecture node ID" },
+      },
+      required: ["projectId", "nodeId"],
+    },
+  },
 ];
+
+
+// Tools that require no scope (meta / protocol bootstrap)
+const NO_SCOPE_TOOLS = new Set(["initial_instructions"]);
+
+// Maps each tool to the minimum GrantType required
+const TOOL_REQUIRED_SCOPES: Record<string, string> = {
+  list_projects: "project.read",
+  get_project: "project.read",
+  list_active_tasks: "project.read",
+  get_project_memory: "project.read",
+  prepare_task_context: "project.read",
+  prepare_project_summary: "project.read",
+  get_project_changelog: "project.read",
+  search_memory: "project.read",
+  list_recent_decisions: "project.read",
+  create_task: "task.write",
+  update_task_status: "task.write",
+  create_memory_entry: "memory.write",
+  create_handoff: "memory.write",
+  create_decision: "decision.write",
+  get_architecture_map: "codeflow.read",
+  get_node_context: "codeflow.read",
+};
+
+
+function checkScope(toolName: string, allowedScopes: string[]): string | null {
+
+  if (NO_SCOPE_TOOLS.has(toolName)) {
+    return null;
+  }
+
+  const required = TOOL_REQUIRED_SCOPES[toolName];
+
+  if (!required) {
+    return null;
+  }
+
+  const hasScope =
+    allowedScopes.includes(required) || allowedScopes.includes("project.admin");
+
+  if (!hasScope) {
+    return `Insufficient scope: tool '${toolName}' requires '${required}'`;
+  }
+
+  return null;
+}
 
 
 function jsonResponse(data: unknown): { content: { type: "text"; text: string }[] } {
@@ -284,7 +354,14 @@ async function handleToolCall(
   client: CoreApiClient,
   name: string,
   args: Record<string, unknown>,
+  allowedScopes: string[],
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
+
+  const scopeError = checkScope(name, allowedScopes);
+
+  if (scopeError) {
+    return errorResponse(scopeError);
+  }
 
   switch (name) {
 
@@ -397,11 +474,13 @@ async function handleToolCall(
           changelog: [
             {
               name: "get_project_changelog",
-              purpose: "Structured agent-readable changelog: task summary, phases, decisions, memory, recent audit events. Fastest way to onboard on what changed recently.",
+              purpose: "Structured agent-readable changelog: task summary, active roadmap phases, decisions, memory, recent audit events. Fastest way to onboard on what changed recently.",
               when: "At session start as an alternative to prepare_project_summary when you need audit trail context too.",
               required_args: ["projectId"],
               optional_args: ["auditLimit"],
             },
+          ],
+          memory: [
             {
               name: "search_memory",
               purpose: "Full-text search over memory entries (title + body).",
@@ -410,35 +489,51 @@ async function handleToolCall(
               optional_args: [],
             },
           ],
+          architecture: [
+            {
+              name: "get_architecture_map",
+              purpose: "Retrieve the architecture graph for a project: nodes (apps, packages, modules) and edges (depends_on, imports, etc.) at overview or module level.",
+              when: "When working on CodeFlow tasks, assessing change impact, or understanding the codebase structure before making architectural decisions.",
+              required_args: ["projectId"],
+              optional_args: ["level"],
+            },
+            {
+              name: "get_node_context",
+              purpose: "Get full context for a specific architecture node: annotations, linked Tasks, Decisions, Memory entries, and impacted-by analysis.",
+              when: "When investigating a specific component, before modifying a node, or to understand what RB entities are linked to it.",
+              required_args: ["projectId", "nodeId"],
+              optional_args: [],
+            },
+          ],
         },
         recommended_workflow: [
           {
             step: 1,
-            action: "Call get_project_changelog(projectId) or prepare_project_summary(projectId) to load full project context.",
+            action: "Call get_project_changelog(projectId) or prepare_project_summary(projectId) to load full project context including active roadmap phases.",
           },
           {
             step: 2,
-            action:
-              "If working on a specific task, call prepare_task_context(projectId, taskId).",
+            action: "If working on a specific task, call prepare_task_context(projectId, taskId).",
           },
           {
             step: 3,
-            action:
-              "Before starting work, ensure a task exists. Use create_task if needed.",
+            action: "Before starting work, ensure a task exists. Use create_task if needed.",
           },
           {
             step: 4,
-            action: "Update task status as work progresses via update_task_status.",
+            action: "If the task involves architecture or CodeFlow, call get_architecture_map(projectId) to understand the current graph state.",
           },
           {
             step: 5,
-            action:
-              "Store important decisions or discoveries with create_memory_entry.",
+            action: "Update task status as work progresses via update_task_status.",
           },
           {
             step: 6,
-            action:
-              "At session end, call create_handoff to preserve context for the next agent or session.",
+            action: "Store important decisions or discoveries with create_memory_entry or create_decision.",
+          },
+          {
+            step: 7,
+            action: "At session end, call create_handoff to preserve context for the next agent or session.",
           },
         ],
         operating_rules: [
@@ -446,9 +541,12 @@ async function handleToolCall(
           "Always open or identify a task before starting work.",
           "Do not report completion without updating the task status.",
           "Use create_memory_entry to persist architectural decisions and key findings.",
+          "Use create_decision for any architectural choice, technology selection, or significant design decision.",
           "Always call create_handoff at the end of every session.",
-          "Prefer prepare_project_summary over multiple individual reads for onboarding.",
+          "Prefer get_project_changelog over multiple individual reads for onboarding — it includes roadmap phases, decisions, memory, and audit in one call.",
           "If a projectId is unknown, call list_projects first.",
+          "For CodeFlow or architecture tasks, always call get_architecture_map before proposing changes.",
+          "Use search_memory before creating a new memory entry to avoid duplicates.",
         ],
       });
     }
@@ -642,13 +740,26 @@ async function handleToolCall(
       return jsonResponse(result);
     }
 
+    case "get_architecture_map": {
+      const result = await client.getArchitectureMap(args.projectId as string);
+      return jsonResponse(result);
+    }
+
+    case "get_node_context": {
+      const result = await client.getNodeContext(
+        args.projectId as string,
+        args.nodeId as string,
+      );
+      return jsonResponse(result);
+    }
+
     default:
       return errorResponse(`Unknown tool: ${name}`);
   }
 }
 
 
-function buildServer(client: CoreApiClient): Server {
+function buildServer(client: CoreApiClient, allowedScopes: string[]): Server {
 
   const server = new Server(
     { name: "roadboard-mcp", version: "0.0.1" },
@@ -665,7 +776,7 @@ function buildServer(client: CoreApiClient): Server {
     const { name, arguments: args } = request.params;
 
     try {
-      return await handleToolCall(client, name, (args ?? {}) as Record<string, unknown>);
+      return await handleToolCall(client, name, (args ?? {}) as Record<string, unknown>, allowedScopes);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message);
@@ -676,7 +787,13 @@ function buildServer(client: CoreApiClient): Server {
 }
 
 
-async function validateMcpToken(rawToken: string): Promise<boolean> {
+interface TokenValidation {
+  userId: string;
+  scopes: string[];
+}
+
+
+async function validateMcpToken(rawToken: string): Promise<TokenValidation | null> {
 
   const res = await fetch(`http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/tokens/validate`, {
     method: "POST",
@@ -684,7 +801,11 @@ async function validateMcpToken(rawToken: string): Promise<boolean> {
     body: JSON.stringify({ token: rawToken }),
   }).catch(() => null);
 
-  return res?.ok === true;
+  if (!res?.ok) {
+    return null;
+  }
+
+  return res.json() as Promise<TokenValidation>;
 }
 
 
@@ -731,22 +852,24 @@ async function startHttp(): Promise<void> {
     }
 
     const token = auth.slice(7);
-    const valid = await validateMcpToken(token);
+    const validation = await validateMcpToken(token);
 
-    if (!valid) {
+    if (!validation) {
       res.status(401).json({ error: "Invalid or revoked MCP token" });
       return;
     }
 
-    (req as Request & { mcpToken: string }).mcpToken = token;
+    const enriched = req as Request & { mcpToken: string; mcpScopes: string[] };
+    enriched.mcpToken = token;
+    enriched.mcpScopes = validation.scopes;
     next();
   });
 
   app.post("/mcp", async (req: Request, res: Response) => {
 
-    const token = (req as Request & { mcpToken: string }).mcpToken;
-    const client = new CoreApiClient(token);
-    const server = buildServer(client);
+    const enriched = req as Request & { mcpToken: string; mcpScopes: string[] };
+    const client = new CoreApiClient(enriched.mcpToken);
+    const server = buildServer(client, enriched.mcpScopes);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -775,7 +898,18 @@ async function startHttp(): Promise<void> {
 async function startStdio(): Promise<void> {
 
   const client = new CoreApiClient(MCP_TOKEN);
-  const server = buildServer(client);
+
+  let scopes: string[] = ["project.admin"];
+
+  if (MCP_TOKEN) {
+    const validation = await validateMcpToken(MCP_TOKEN).catch(() => null);
+
+    if (validation) {
+      scopes = validation.scopes;
+    }
+  }
+
+  const server = buildServer(client, scopes);
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
