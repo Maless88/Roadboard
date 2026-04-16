@@ -291,6 +291,42 @@ export const SEARCH_MEMORY_TOOL: McpToolDefinition = {
 };
 
 
+export const GET_ARCHITECTURE_MAP_TOOL: McpToolDefinition = {
+  name: 'get_architecture_map',
+  description: 'Get the architecture graph for a project: all current nodes (apps, packages, modules) and edges.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+    },
+    required: ['projectId'],
+  },
+};
+
+
+export const GET_NODE_CONTEXT_TOOL: McpToolDefinition = {
+  name: 'get_node_context',
+  description: 'Get full context for an architecture node: annotations, links to tasks/decisions/memory, and impacted-by analysis.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+      nodeId: {
+        type: 'string',
+        description: 'The architecture node ID',
+      },
+    },
+    required: ['projectId', 'nodeId'],
+  },
+};
+
+
 export const MCP_TOOLS = [
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
@@ -306,4 +342,6 @@ export const MCP_TOOLS = [
   CREATE_DECISION_TOOL,
   GET_PROJECT_CHANGELOG_TOOL,
   SEARCH_MEMORY_TOOL,
+  GET_ARCHITECTURE_MAP_TOOL,
+  GET_NODE_CONTEXT_TOOL,
 ] as const;
