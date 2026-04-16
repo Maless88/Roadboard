@@ -25,7 +25,16 @@
 - **RoadBoard 2.0 MCP**: If tools are available, you MUST execute `initial_instructions()` at the start of every session to load the operational protocol, tool catalog, and workflow rules.
 - **Context7 Module**: You MUST use Context7 tools whenever the user asks a question about any programming language, framework, library, API, software tool, or technology stack.
 
-## 4. EXECUTION GUIDELINES
+## 4. ROADBOARD 2.0 — WORKFLOW RULES
+- **Session start**: Always call `prepare_project_summary` or `get_project_changelog` to load the current project context before starting any work.
+- **Planning**: Before proposing or starting any implementation, verify existing tasks on RoadBoard 2.0 with `list_active_tasks`. If the planned work has no corresponding task, create one with `create_task` before proceeding.
+- **Task tracking**: Update task status via `update_task_status` as work progresses (`in_progress` when starting, `done` when complete). Never report a task as complete without updating its status first.
+- **Decisions**: After any architectural or significant design decision, record it with `create_decision` including rationale and impact level.
+- **Memory**: After any meaningful discovery, technical finding, or completed milestone, store a `create_memory_entry` autonomously — do NOT ask for permission.
+- **Session end**: Always call `create_handoff` at the end of every session with a summary and next steps.
+- **Autonomy**: All RoadBoard 2.0 write operations (create_task, update_task_status, create_memory_entry, create_decision, create_handoff) are background autonomous processes. DO NOT ask for permission.
+
+## 5. EXECUTION GUIDELINES
 - **Syntax**: Always use language markers in code blocks (e.g., ```typescript).
 - **Autonomy**: For Memento storage, DO NOT ask for permission. It is a background autonomous process.
 - **Performance**: Target 1-3 tool calls for simple info, max 5 for complex tasks.

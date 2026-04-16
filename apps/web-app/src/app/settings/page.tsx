@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
 import { validateSession, listTokens, listUsers, listProjects, listGrants } from '@/lib/api';
-import { Nav } from '@/components/nav';
+import { AppShell } from '@/components/app-shell';
 import { SettingsTabs } from './settings-tabs';
 
 
@@ -32,8 +32,7 @@ export default async function SettingsPage() {
   const isTeamLeader = session.role === 'team_leader';
 
   return (
-    <>
-      <Nav />
+    <AppShell username={session.username} displayName={session.displayName}>
       <main className="mx-auto max-w-4xl px-4 py-8">
         <div className="mb-6">
           <h1 className="text-lg font-semibold text-white">Settings</h1>
@@ -51,6 +50,6 @@ export default async function SettingsPage() {
           isTeamLeader={isTeamLeader}
         />
       </main>
-    </>
+    </AppShell>
   );
 }

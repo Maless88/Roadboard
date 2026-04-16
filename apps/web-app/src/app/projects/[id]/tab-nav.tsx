@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 const TABS = [
   { key: 'overview', label: 'Overview' },
   { key: 'tasks', label: 'Tasks' },
-  { key: 'phases', label: 'Fasi' },
+  { key: 'phases', label: 'Roadmap' },
   { key: 'decisions', label: 'Decisioni' },
   { key: 'memory', label: 'Memory' },
   { key: 'audit', label: 'Audit' },

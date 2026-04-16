@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getToken } from '@/lib/auth';
-import { listProjects, listTeams } from '@/lib/api';
-import { Nav } from '@/components/nav';
+import { listProjects, listTeams, validateSession } from '@/lib/api';
+import { AppShell } from '@/components/app-shell';
 import { CreateProjectForm } from './create-project-form';
 
 
@@ -23,14 +23,16 @@ export default async function ProjectsPage() {
     redirect('/login');
   }
 
-  const [projects, teams] = await Promise.all([
+  const [session, projects, teams] = await Promise.all([
+    validateSession(token),
     listProjects(token),
     listTeams(token).catch(() => []),
   ]);
 
+  if (!session) redirect('/login');
+
   return (
-    <>
-      <Nav />
+    <AppShell username={session.username} displayName={session.displayName}>
       <main className="mx-auto max-w-5xl px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold text-white">Projects</h1>
@@ -63,6 +65,6 @@ export default async function ProjectsPage() {
           </div>
         )}
       </main>
-    </>
+    </AppShell>
   );
 }
