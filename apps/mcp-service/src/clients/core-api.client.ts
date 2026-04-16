@@ -234,6 +234,42 @@ export class CoreApiClient {
   }
 
 
+  async getArchitectureMap(projectId: string): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api getArchitectureMap failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+
+  async getNodeContext(projectId: string, nodeId: string): Promise<unknown> {
+
+    const [nodeRes, impactRes] = await Promise.all([
+      fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/nodes/${nodeId}`, {
+        headers: this.headers(),
+      }),
+      fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/nodes/${nodeId}/impact`, {
+        headers: this.headers(),
+      }),
+    ]);
+
+    if (!nodeRes.ok) {
+      throw new Error(`core-api getNodeContext failed: ${nodeRes.status}`);
+    }
+
+    const node = await nodeRes.json();
+    const impact = impactRes.ok ? await impactRes.json() : null;
+
+    return { node, impact };
+  }
+
+
   private headers(): Record<string, string> {
 
     return {
