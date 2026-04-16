@@ -8,7 +8,7 @@ const VALIDATE_URL = `http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}/tokens/vali
 
 interface ValidateResult {
   userId: string;
-  scope: string;
+  scopes: string[];
 }
 
 

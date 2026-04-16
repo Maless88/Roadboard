@@ -1,4 +1,5 @@
-import { IsISO8601, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsISO8601, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { GrantType } from '@roadboard/domain';
 
 
 export class CreateTokenDto {
@@ -11,9 +12,9 @@ export class CreateTokenDto {
   @IsNotEmpty()
   name!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  scope!: string;
+  @IsArray()
+  @IsEnum(GrantType, { each: true })
+  scopes!: GrantType[];
 
   @IsOptional()
   @IsISO8601()

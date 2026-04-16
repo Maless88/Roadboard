@@ -26,7 +26,7 @@ export class TokensService {
         userId: dto.userId,
         name: dto.name,
         tokenHash,
-        scope: dto.scope,
+        scopes: dto.scopes,
         status: McpTokenStatus.ACTIVE,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       },
@@ -36,7 +36,7 @@ export class TokensService {
       id: mcpToken.id,
       token: rawToken,
       name: mcpToken.name,
-      scope: mcpToken.scope,
+      scopes: mcpToken.scopes,
       expiresAt: mcpToken.expiresAt,
       createdAt: mcpToken.createdAt,
     };
@@ -50,7 +50,7 @@ export class TokensService {
       select: {
         id: true,
         name: true,
-        scope: true,
+        scopes: true,
         status: true,
         expiresAt: true,
         createdAt: true,
@@ -83,7 +83,7 @@ export class TokensService {
 
     return {
       userId: mcpToken.userId,
-      scope: mcpToken.scope,
+      scopes: mcpToken.scopes,
     };
   }
 

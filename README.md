@@ -24,7 +24,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
 - **Operational memory** — persistent memory entries, decision records, and session handoffs
 - **Team collaboration** — users, teams, project grants, role-based access control
-- **MCP agent access** — 10 tools for agents to read and write project state via Model Context Protocol
+- **MCP agent access** — 17 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
 - **Web dashboard** — project status, task management, and memory entries via browser
 - **Async job layer** — background refresh, summary generation, and cleanup via BullMQ
 - **Local sync bridge** — offline-first SQLite journal with sync engine to the central database
@@ -61,7 +61,7 @@ infra/
 - **Frontend**: Next.js 15 App Router, Tailwind CSS 4
 - **Database**: PostgreSQL 16 (Prisma ORM), SQLite (local journal)
 - **Queue**: Redis 7 + BullMQ
-- **Agent protocol**: MCP (Model Context Protocol) via stdio
+- **Agent protocol**: MCP (Model Context Protocol) via HTTP StreamableHTTP or stdio
 - **Monorepo**: pnpm workspaces + Turborepo
 
 ---
@@ -153,7 +153,8 @@ MCP_TRANSPORT=http MCP_HTTP_PORT=3005 AUTH_ACCESS_PORT=3002 \
 ```
 
 For HTTP MCP clients, use `http://127.0.0.1:3005/mcp` with a bearer token issued by
-`auth-access`.
+`auth-access`. Tokens carry a `scopes` array (`GrantType[]`) — each tool enforces
+the minimum required scope at call time.
 
 ### API docs
 
@@ -182,18 +183,27 @@ For HTTP MCP clients, use `http://127.0.0.1:3005/mcp` with a bearer token issued
 
 ## MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `list_projects` | List accessible projects |
-| `get_project` | Get project details |
-| `list_active_tasks` | List tasks, optionally filtered by status |
-| `get_project_memory` | List memory entries |
-| `create_task` | Create a new task |
-| `update_task_status` | Update task status |
-| `create_memory_entry` | Create a memory entry |
-| `prepare_task_context` | Full context bundle for a task (project + siblings + memory) |
-| `prepare_project_summary` | Project snapshot for agent onboarding |
-| `create_handoff` | Structured handoff entry for session continuity |
+Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all checks.
+
+| Tool | Required scope | Description |
+|------|---------------|-------------|
+| `initial_instructions` | — | Operational protocol bootstrap (call once per session) |
+| `list_projects` | `project.read` | List accessible projects |
+| `get_project` | `project.read` | Get project details with phases and milestones |
+| `list_active_tasks` | `project.read` | List tasks, optionally filtered by status |
+| `get_project_memory` | `project.read` | List memory entries |
+| `prepare_task_context` | `project.read` | Full context bundle for a specific task |
+| `prepare_project_summary` | `project.read` | Project snapshot for agent onboarding |
+| `get_project_changelog` | `project.read` | Structured changelog: tasks, phases, decisions, memory, audit |
+| `search_memory` | `project.read` | Full-text search over memory entries |
+| `list_recent_decisions` | `project.read` | List decisions, optionally filtered by status |
+| `create_task` | `task.write` | Create a new task |
+| `update_task_status` | `task.write` | Update task status |
+| `create_memory_entry` | `memory.write` | Create a memory entry |
+| `create_handoff` | `memory.write` | Structured handoff entry for session continuity |
+| `create_decision` | `decision.write` | Record an architectural or project decision |
+| `get_architecture_map` | `codeflow.read` | Get the architecture graph (nodes + edges) |
+| `get_node_context` | `codeflow.read` | Full context for an architecture node |
 
 ---
 
@@ -220,9 +230,11 @@ pnpm -r build        # build all packages and apps
 
 ## Current status
 
-Wave 1 is complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, and local sync bridge are all implemented and tested.
+Waves 1–3 are complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, and local sync bridge are all implemented.
 
-Active work: **Phase 12 — Test Automation Hardening** (unit tests for shared packages, Playwright e2e, CI enforcement).
+Wave 3 delivered: semantic memory search, agent-readable project changelog, richer decision model, and memory summarization background jobs.
+
+Active work: **Wave 4 — Team and access hardening** (fine-grained MCP token scopes ✓, team dashboards, invite flows).
 
 > The project is pre-beta. No stable release has been published yet. Breaking changes may occur on `main`.
 
