@@ -10,8 +10,10 @@ import {
   listMilestones,
   getDashboardSnapshot,
   listAuditEvents,
+  validateSession,
 } from '@/lib/api';
-import { Nav } from '@/components/nav';
+import { AppShell } from '@/components/app-shell';
+import { ProgressRing } from '@/components/progress-ring';
 import { TabNav } from './tab-nav';
 import { TaskStatusSelect } from './task-status';
 import { CreateTaskForm } from './create-task-form';
@@ -96,28 +98,109 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     notFound();
   }
 
+  const [session, snap] = await Promise.all([
+    validateSession(token),
+    getDashboardSnapshot(token, id).catch(() => null),
+  ]);
+
+  if (!session) redirect('/login');
+
+  const taskDone = snap?.tasks['done'] ?? 0;
+  const taskTotal = snap ? Object.values(snap.tasks).reduce((a, b) => a + b, 0) : 0;
+
+  const activeTask = snap?.urgentTasks.find((t) => t.status === 'in_progress');
+
   return (
-    <>
-      <Nav />
-      <main className="mx-auto max-w-5xl px-4 py-8">
+    <AppShell
+      username={session.username}
+      displayName={session.displayName}
+      activeProject={{ id, name: project.name, taskDone, taskTotal }}
+    >
+      {/* Project header with glass health bar */}
+      <div
+        className="px-8 py-5"
+        style={{
+          background: 'rgba(17,17,27,0.6)',
+          backdropFilter: 'blur(12px)',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
+        }}
+      >
+        <div className="max-w-5xl mx-auto">
+          <div className="flex items-start gap-6">
+            <div className="flex-1 min-w-0">
+              <Link href="/projects" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mb-2 block">
+                ← Progetti
+              </Link>
+              <div className="flex items-center gap-3 mb-1">
+                <h1 className="text-lg font-semibold text-white">{project.name}</h1>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}>
+                  {project.status}
+                </span>
+              </div>
+              {project.description && (
+                <p className="text-xs text-gray-500 mb-4">{project.description}</p>
+              )}
 
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <Link href="/projects" className="text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2 block">
-              ← Projects
-            </Link>
-            <h1 className="text-lg font-semibold text-white">{project.name}</h1>
-            {project.description && (
-              <p className="mt-1 text-sm text-gray-400">{project.description}</p>
-            )}
+              {taskTotal > 0 && (
+                <div>
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-gray-600">Avanzamento</span>
+                    <span className="text-gray-500 font-mono">{taskDone} / {taskTotal}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                    <div
+                      className="h-full rounded-full transition-all duration-700"
+                      style={{
+                        width: `${taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0}%`,
+                        background: 'linear-gradient(90deg,#6366f1,#818cf8)',
+                      }}
+                    />
+                  </div>
+                  <div className="flex gap-4 mt-2">
+                    {(['todo', 'in_progress', 'done', 'blocked'] as const).map((s) => {
+                      const count = snap?.tasks[s] ?? 0;
+                      if (count === 0) return null;
+                      const colors: Record<string, string> = {
+                        todo: 'text-gray-500',
+                        in_progress: 'text-indigo-400',
+                        done: 'text-green-500',
+                        blocked: 'text-red-400',
+                      };
+
+                      return (
+                        <span key={s} className={`text-xs flex items-center gap-1 ${colors[s]}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                          {count} {s.replace('_', ' ')}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <ProgressRing value={taskDone} total={taskTotal} size={72} stroke={6} />
           </div>
-          <span
-            className={`text-xs px-2 py-0.5 rounded-full font-medium mt-6 shrink-0 ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}
-          >
-            {project.status}
-          </span>
-        </div>
 
+          {/* Active task banner */}
+          {activeTask && (
+            <div
+              className="mt-4 flex items-center gap-3 rounded-lg px-4 py-2.5"
+              style={{ background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)' }}
+            >
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ background: '#6366f1', animation: 'pulse 2s infinite' }}
+              />
+              <span className="text-xs text-gray-400">In progress:</span>
+              <span className="text-xs text-indigo-300 flex-1 truncate font-medium">{activeTask.title}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tab nav + content */}
+      <main className="mx-auto max-w-5xl px-8 py-6">
         <TabNav activeTab={tab} />
 
         {tab === 'overview' && <OverviewTab token={token} projectId={id} />}
@@ -126,9 +209,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
         {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} />}
         {tab === 'audit' && <AuditTab token={token} projectId={id} />}
-
       </main>
-    </>
+    </AppShell>
   );
 }
 

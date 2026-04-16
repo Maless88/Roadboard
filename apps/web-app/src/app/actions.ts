@@ -24,7 +24,7 @@ export async function loginAction(
     return { error: 'Username o password non corretti.' };
   }
 
-  redirect('/projects');
+  redirect('/dashboard');
 }
 
 
