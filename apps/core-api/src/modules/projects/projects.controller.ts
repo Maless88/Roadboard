@@ -15,6 +15,7 @@ import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { FindProjectsQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
+import { CurrentUser } from '../../common/user.decorator';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
@@ -29,9 +30,9 @@ export class ProjectsController {
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Post()
-  create(@Body() dto: CreateProjectDto) {
+  create(@Body() dto: CreateProjectDto, @CurrentUser() user: { userId: string }) {
 
-    return this.projectsService.create(dto);
+    return this.projectsService.create(dto, user?.userId);
   }
 
 

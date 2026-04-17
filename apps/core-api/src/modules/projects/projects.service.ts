@@ -1,6 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
-import { ProjectStatus } from '@roadboard/domain';
+import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
 
@@ -11,9 +11,9 @@ export class ProjectsService {
   constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
 
 
-  async create(dto: CreateProjectDto) {
+  async create(dto: CreateProjectDto, createdByUserId?: string) {
 
-    return this.prisma.project.create({
+    const project = await this.prisma.project.create({
       data: {
         name: dto.name,
         slug: dto.slug,
@@ -22,6 +22,18 @@ export class ProjectsService {
         status: dto.status,
       },
     });
+
+    await this.prisma.projectGrant.create({
+      data: {
+        projectId: project.id,
+        subjectType: GrantSubjectType.TEAM,
+        subjectId: dto.ownerTeamId,
+        grantType: GrantType.PROJECT_ADMIN,
+        grantedByUserId: createdByUserId ?? null,
+      },
+    });
+
+    return project;
   }
 
 

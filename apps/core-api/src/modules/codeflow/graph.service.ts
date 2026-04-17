@@ -16,7 +16,7 @@ export class GraphService {
 
   // ── Graph ────────────────────────────────────────────
 
-  async getGraph(projectId: string) {
+  async getGraph(projectId: string): Promise<unknown> {
 
     const [nodes, edges, latestSnapshot] = await Promise.all([
       this.prisma.architectureNode.findMany({
@@ -89,7 +89,7 @@ export class GraphService {
 
   // ── Nodes ────────────────────────────────────────────
 
-  async createNode(projectId: string, dto: CreateNodeDto, createdByUserId: string) {
+  async createNode(projectId: string, dto: CreateNodeDto, createdByUserId: string): Promise<unknown> {
 
     return this.prisma.architectureNode.create({
       data: {
@@ -108,7 +108,7 @@ export class GraphService {
   }
 
 
-  async getNode(id: string) {
+  async getNode(id: string): Promise<unknown> {
 
     const node = await this.prisma.architectureNode.findUnique({
       where: { id },
@@ -126,7 +126,7 @@ export class GraphService {
   }
 
 
-  async updateNode(id: string, dto: UpdateNodeDto) {
+  async updateNode(id: string, dto: UpdateNodeDto): Promise<unknown> {
 
     await this.getNode(id);
 
@@ -143,9 +143,9 @@ export class GraphService {
   }
 
 
-  async deleteNode(id: string) {
+  async deleteNode(id: string): Promise<unknown> {
 
-    const node = await this.getNode(id);
+    const node = await this.getNode(id) as { isManual: boolean };
 
     if (!node.isManual) {
       throw new Error('Cannot delete auto-generated nodes; set isCurrent=false via rescan');
@@ -157,7 +157,7 @@ export class GraphService {
 
   // ── Edges ────────────────────────────────────────────
 
-  async createEdge(projectId: string, dto: CreateEdgeDto) {
+  async createEdge(projectId: string, dto: CreateEdgeDto): Promise<unknown> {
 
     return this.prisma.architectureEdge.create({
       data: {
@@ -172,7 +172,7 @@ export class GraphService {
   }
 
 
-  async deleteEdge(id: string) {
+  async deleteEdge(id: string): Promise<unknown> {
 
     const edge = await this.prisma.architectureEdge.findUnique({ where: { id } });
 
@@ -305,9 +305,9 @@ export class GraphService {
 
   // ── Impact ───────────────────────────────────────────
 
-  async getImpact(nodeId: string, projectId: string) {
+  async getImpact(nodeId: string, projectId: string): Promise<unknown> {
 
-    const node = await this.getNode(nodeId);
+    const node = await this.getNode(nodeId) as { id: string; type: string; name: string; path: string | null };
 
     const edges = await this.prisma.architectureEdge.findMany({
       where: { projectId, isCurrent: true, edgeType: 'depends_on' },
