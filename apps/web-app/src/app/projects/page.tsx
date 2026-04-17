@@ -1,18 +1,9 @@
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { getToken } from '@/lib/auth';
 import { listProjects, listTeams, validateSession } from '@/lib/api';
 import { AppShell } from '@/components/app-shell';
 import { CreateProjectForm } from './create-project-form';
-
-
-const STATUS_COLOR: Record<string, string> = {
-  active: 'bg-green-900 text-green-300',
-  draft: 'bg-gray-700 text-gray-300',
-  paused: 'bg-yellow-900 text-yellow-300',
-  completed: 'bg-blue-900 text-blue-300',
-  archived: 'bg-gray-800 text-gray-500',
-};
+import { SwipeableProjectRow } from './swipeable-project-row';
 
 
 export default async function ProjectsPage() {
@@ -44,23 +35,13 @@ export default async function ProjectsPage() {
         ) : (
           <div className="grid gap-3">
             {projects.map((project) => (
-              <Link
+              <SwipeableProjectRow
                 key={project.id}
-                href={`/projects/${project.id}`}
-                className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white">{project.name}</span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}
-                  >
-                    {project.status}
-                  </span>
-                </div>
-                {project.description && (
-                  <p className="mt-1 text-xs text-gray-400 line-clamp-1">{project.description}</p>
-                )}
-              </Link>
+                id={project.id}
+                name={project.name}
+                status={project.status}
+                description={project.description}
+              />
             ))}
           </div>
         )}
