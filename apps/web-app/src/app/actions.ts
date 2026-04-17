@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
   login, logout, updateTaskStatus,
-  createTask, createPhase, createDecision, createMilestone, createMemoryEntry, createProject,
+  createTask, createPhase, createDecision, createMilestone, createMemoryEntry, createProject, deleteProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
 
@@ -188,4 +188,23 @@ export async function createProjectAction(
 
   revalidatePath('/projects');
   return { id: project.id };
+}
+
+
+export async function deleteProjectAction(projectId: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    await deleteProject(token, projectId);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath('/projects');
+  redirect('/projects');
 }

@@ -22,6 +22,7 @@ import { CreateMilestoneForm } from './create-milestone-form';
 import { CreateDecisionForm } from './create-decision-form';
 import { CreateMemoryForm } from './create-memory-form';
 import { MemorySearch } from './memory-search';
+import { DeleteProjectButton } from './delete-project-button';
 import type { Task, Milestone } from '@/lib/api';
 
 
@@ -128,9 +129,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         <div className="max-w-5xl mx-auto">
           <div className="flex items-start gap-6">
             <div className="flex-1 min-w-0">
-              <Link href="/projects" className="text-xs text-gray-600 hover:text-gray-400 transition-colors mb-2 block">
-                ← Progetti
-              </Link>
+              <div className="flex items-center justify-between mb-2">
+                <Link href="/projects" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
+                  ← Progetti
+                </Link>
+                <DeleteProjectButton projectId={id} projectName={project.name} />
+              </div>
               <div className="flex items-center gap-3 mb-1">
                 <h1 className="text-lg font-semibold text-white">{project.name}</h1>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${STATUS_COLOR[project.status] ?? 'bg-gray-700 text-gray-300'}`}>
