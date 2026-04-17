@@ -467,7 +467,7 @@ export async function deleteProject(token: string, projectId: string): Promise<v
 
   const res = await fetch(`${CORE_API}/projects/${projectId}`, {
     method: 'DELETE',
-    headers: authHeaders(token),
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!res.ok) {
