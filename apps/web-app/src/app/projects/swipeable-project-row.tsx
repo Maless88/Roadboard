@@ -64,65 +64,63 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
     });
   }
 
-  return (
-    <div className="overflow-hidden rounded-lg">
-      {/* flex row: card + trash, translated together */}
-      <div
-        style={{
-          transform: `translateX(${offset}px)`,
-          transition: startX.current !== null ? 'none' : 'transform 0.2s ease',
-          display: 'flex',
-          width: `calc(100% + ${SNAP_OPEN}px)`,
-        }}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        className="touch-pan-y"
-      >
-        {/* Card */}
-        <div style={{ flex: `0 0 calc(100% - ${SNAP_OPEN}px)` }}>
-          <Link
-            href={`/projects/${id}`}
-            draggable={false}
-            onClick={(e) => { if (open) e.preventDefault(); }}
-            className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors select-none"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white">{name}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? 'bg-gray-700 text-gray-300'}`}>
-                {status}
-              </span>
-            </div>
-            {description && (
-              <p className="mt-1 text-xs text-gray-400 line-clamp-1">{description}</p>
-            )}
-          </Link>
-        </div>
+  const revealWidth = Math.abs(offset);
 
-        {/* Trash */}
-        <div style={{ flex: `0 0 ${SNAP_OPEN}px`, paddingLeft: 4 }}>
-          <button
-            onClick={handleDelete}
-            disabled={isPending}
-            aria-label="Elimina progetto"
-            className="flex flex-col items-center justify-center w-full h-full rounded-lg bg-red-950 text-red-400 hover:bg-red-900 hover:text-red-300 transition-colors disabled:opacity-50"
-          >
-            {isPending ? (
-              <span className="text-xs">…</span>
-            ) : (
-              <>
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4h6v2" />
-                </svg>
-                <span className="text-xs mt-1">elimina</span>
-              </>
-            )}
-          </button>
+  return (
+    <div
+      className="relative rounded-lg touch-pan-y select-none"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
+      {/* Card — non si muove mai */}
+      <Link
+        href={`/projects/${id}`}
+        draggable={false}
+        onClick={(e) => { if (open) e.preventDefault(); }}
+        className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors"
+      >
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-medium text-white">{name}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLOR[status] ?? 'bg-gray-700 text-gray-300'}`}>
+            {status}
+          </span>
         </div>
+        {description && (
+          <p className="mt-1 text-xs text-gray-400 line-clamp-1">{description}</p>
+        )}
+      </Link>
+
+      {/* Overlay cestino — cresce da destra */}
+      <div
+        className="absolute top-0 right-0 bottom-0 overflow-hidden rounded-r-lg bg-red-950 flex items-center justify-center"
+        style={{
+          width: revealWidth,
+          transition: startX.current !== null ? 'none' : 'width 0.2s ease',
+        }}
+      >
+        <button
+          onClick={handleDelete}
+          disabled={isPending}
+          aria-label="Elimina progetto"
+          className="flex flex-col items-center justify-center text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+          style={{ width: SNAP_OPEN }}
+        >
+          {isPending ? (
+            <span className="text-xs">…</span>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14H6L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4h6v2" />
+              </svg>
+              <span className="text-xs mt-1">elimina</span>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
