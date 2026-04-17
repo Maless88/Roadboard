@@ -463,6 +463,20 @@ export async function createProject(
 }
 
 
+export async function deleteProject(token: string, projectId: string): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to delete project');
+  }
+}
+
+
 export async function createTask(
   token: string,
   data: { projectId: string; phaseId?: string; title: string; description?: string; priority?: string; status?: string },
