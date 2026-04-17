@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { deleteProjectAction } from '@/app/actions';
 
 
@@ -27,25 +27,35 @@ interface Props {
 
 export function SwipeableProjectRow({ id, name, status, description }: Props) {
 
+  const router = useRouter();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
   const startOffset = useRef(0);
+  const didSwipe = useRef(false);
 
   function onPointerDown(e: React.PointerEvent) {
 
     startX.current = e.clientX;
+    startY.current = e.clientY;
     startOffset.current = offset;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    didSwipe.current = false;
   }
 
   function onPointerMove(e: React.PointerEvent) {
 
     if (startX.current === null) return;
 
-    const delta = e.clientX - startX.current;
-    const next = Math.min(0, Math.max(-SNAP_OPEN - 20, startOffset.current + delta));
+    const dx = e.clientX - startX.current;
+    const dy = Math.abs(e.clientY - (startY.current ?? e.clientY));
+
+    if (dy > 8) return;
+
+    if (Math.abs(dx) > 4) didSwipe.current = true;
+
+    const next = Math.min(0, Math.max(-SNAP_OPEN - 20, startOffset.current + dx));
     setOffset(next);
   }
 
@@ -55,6 +65,16 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
     const snap = offset < -(REVEAL_THRESHOLD / 2);
     setOffset(snap ? -SNAP_OPEN : 0);
     setOpen(snap);
+  }
+
+  function onCardClick() {
+
+    if (didSwipe.current || open) {
+      if (open) { setOpen(false); setOffset(0); }
+      return;
+    }
+
+    router.push(`/projects/${id}`);
   }
 
   function handleDelete() {
@@ -75,11 +95,9 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
       onPointerCancel={onPointerUp}
     >
       {/* Card — non si muove mai */}
-      <Link
-        href={`/projects/${id}`}
-        draggable={false}
-        onClick={(e) => { if (open) e.preventDefault(); }}
-        className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors"
+      <div
+        onClick={onCardClick}
+        className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors cursor-pointer"
       >
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-white">{name}</span>
@@ -90,7 +108,7 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
         {description && (
           <p className="mt-1 text-xs text-gray-400 line-clamp-1">{description}</p>
         )}
-      </Link>
+      </div>
 
       {/* Overlay cestino — cresce da destra */}
       <div
