@@ -103,6 +103,7 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
       >
         <button
           onClick={handleDelete}
+          onPointerDown={(e) => e.stopPropagation()}
           disabled={isPending}
           aria-label="Elimina progetto"
           style={{ width: SNAP_OPEN, opacity: revealWidth < 20 ? 0 : Math.min(1, (revealWidth - 20) / 30) }}
