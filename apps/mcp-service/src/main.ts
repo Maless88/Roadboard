@@ -261,6 +261,25 @@ const TOOLS = [
     },
   },
   {
+    name: "create_project",
+    description: "Create a new project in RoadBoard. Requires an ownerTeamId — retrieve one from list_projects if unknown.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Project display name" },
+        slug: { type: "string", description: "Unique URL-safe identifier (e.g. my-project)" },
+        ownerTeamId: { type: "string", description: "ID of the team that owns the project" },
+        description: { type: "string", description: "Optional project description" },
+        status: {
+          type: "string",
+          description: "Initial project status",
+          enum: ["draft", "active", "paused", "completed", "archived"],
+        },
+      },
+      required: ["name", "slug", "ownerTeamId"],
+    },
+  },
+  {
     name: "get_architecture_map",
     description: "Get the architecture graph for a project: all current nodes (apps, packages, modules) and edges (depends_on, imports, etc.).",
     inputSchema: {
@@ -305,6 +324,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_memory_entry: "memory.write",
   create_handoff: "memory.write",
   create_decision: "decision.write",
+  create_project: "project.admin",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
 };
@@ -376,6 +396,15 @@ async function handleToolCall(
           transport: "MCP (stdio or HTTP StreamableHTTP)",
         },
         tools: {
+          project_management: [
+            {
+              name: "create_project",
+              purpose: "Bootstrap a new project in RoadBoard. Requires ownerTeamId — get it from list_projects if unknown.",
+              when: "When onboarding a new codebase or work stream that has no RoadBoard project yet.",
+              required_args: ["name", "slug", "ownerTeamId"],
+              optional_args: ["description", "status"],
+            },
+          ],
           read: [
             {
               name: "list_projects",
@@ -549,6 +578,17 @@ async function handleToolCall(
           "Use search_memory before creating a new memory entry to avoid duplicates.",
         ],
       });
+    }
+
+    case "create_project": {
+      const result = await client.createProject({
+        name: args.name as string,
+        slug: args.slug as string,
+        ownerTeamId: args.ownerTeamId as string,
+        description: args.description as string | undefined,
+        status: args.status as string | undefined,
+      });
+      return jsonResponse(result);
     }
 
     case "list_projects": {
@@ -821,6 +861,20 @@ async function startHttp(): Promise<void> {
 
   const app = express();
   app.use(express.json());
+
+  app.use((req: Request, _res: Response, next: NextFunction) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} auth=${req.headers.authorization?.slice(0, 20) ?? 'none'}`);
+    next();
+  });
+
+  // Reject OAuth discovery — this server uses static Bearer tokens only
+  app.use("/.well-known", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "OAuth not supported. Use static Bearer token." });
+  });
+
+  app.post("/register", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "Dynamic client registration not supported." });
+  });
 
   app.get("/health", async (_req: Request, res: Response) => {
     const [coreApi, authAccess] = await Promise.all([

@@ -4,6 +4,27 @@ export interface McpToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
+export const CREATE_PROJECT_TOOL: McpToolDefinition = {
+  name: 'create_project',
+  description: 'Create a new project in RoadBoard. Requires an ownerTeamId — retrieve one from list_projects if unknown.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Project display name' },
+      slug: { type: 'string', description: 'Unique URL-safe identifier (e.g. my-project)' },
+      ownerTeamId: { type: 'string', description: 'ID of the team that owns the project' },
+      description: { type: 'string', description: 'Optional project description' },
+      status: {
+        type: 'string',
+        description: 'Initial project status',
+        enum: ['draft', 'active', 'paused', 'completed', 'archived'],
+      },
+    },
+    required: ['name', 'slug', 'ownerTeamId'],
+  },
+};
+
+
 export const LIST_PROJECTS_TOOL: McpToolDefinition = {
   name: 'list_projects',
   description: 'List all projects the current token has access to',
@@ -328,6 +349,7 @@ export const GET_NODE_CONTEXT_TOOL: McpToolDefinition = {
 
 
 export const MCP_TOOLS = [
+  CREATE_PROJECT_TOOL,
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
   LIST_ACTIVE_TASKS_TOOL,

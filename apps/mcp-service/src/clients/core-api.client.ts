@@ -17,6 +17,28 @@ export class CoreApiClient {
   }
 
 
+  async createProject(data: {
+    name: string;
+    slug: string;
+    ownerTeamId: string;
+    description?: string;
+    status?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api createProject failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
   async listProjects(status?: string): Promise<unknown[]> {
 
     const params = new URLSearchParams();

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 
 import {
   MCP_TOOLS,
+  CREATE_PROJECT_TOOL,
   LIST_PROJECTS_TOOL,
   GET_PROJECT_TOOL,
   LIST_ACTIVE_TASKS_TOOL,
@@ -21,8 +22,8 @@ import {
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 16 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(16);
+  it('exports exactly 17 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(17);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -122,6 +123,17 @@ describe('changelog and search tools', () => {
     expect(SEARCH_MEMORY_TOOL.name).toBe('search_memory');
     expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('projectId');
     expect(SEARCH_MEMORY_TOOL.inputSchema.required).toContain('q');
+  });
+});
+
+
+describe('project management tools', () => {
+
+  it('create_project requires name, slug and ownerTeamId', () => {
+    expect(CREATE_PROJECT_TOOL.name).toBe('create_project');
+    expect(CREATE_PROJECT_TOOL.inputSchema.required).toContain('name');
+    expect(CREATE_PROJECT_TOOL.inputSchema.required).toContain('slug');
+    expect(CREATE_PROJECT_TOOL.inputSchema.required).toContain('ownerTeamId');
   });
 });
 
