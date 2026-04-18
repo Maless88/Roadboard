@@ -93,6 +93,10 @@ export class UsersService {
 
     await this.findOne(id);
 
+    await this.prisma.session.deleteMany({ where: { userId: id } });
+    await this.prisma.teamMembership.deleteMany({ where: { userId: id } });
+    await this.prisma.mcpToken.deleteMany({ where: { userId: id } });
+
     return this.prisma.user.delete({ where: { id } });
   }
 
