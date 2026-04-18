@@ -7,7 +7,12 @@ import {
   Param,
   Body,
   Inject,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '../../common/auth.guard';
+import { AdminGuard } from '../../common/admin.guard';
+import { SelfOrAdminGuard } from '../../common/self-or-admin.guard';
+import { CurrentUser } from '../../common/user.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './create-user.dto';
 import { UpdateUserDto } from './update-user.dto';
@@ -15,12 +20,14 @@ import { ChangePasswordDto } from './change-password.dto';
 import { ResetPasswordDto } from './reset-password.dto';
 
 
+@UseGuards(AuthGuard)
 @Controller('users')
 export class UsersController {
 
   constructor(@Inject(UsersService) private readonly usersService: UsersService) {}
 
 
+  @UseGuards(AdminGuard)
   @Post()
   create(@Body() dto: CreateUserDto) {
 
@@ -42,13 +49,19 @@ export class UsersController {
   }
 
 
+  @UseGuards(SelfOrAdminGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() user: { userId: string; role: string },
+  ) {
 
-    return this.usersService.update(id, dto);
+    return this.usersService.update(id, dto, user.role);
   }
 
 
+  @UseGuards(SelfOrAdminGuard)
   @Patch(':id/password')
   changePassword(@Param('id') id: string, @Body() dto: ChangePasswordDto) {
 
@@ -56,6 +69,7 @@ export class UsersController {
   }
 
 
+  @UseGuards(AdminGuard)
   @Patch(':id/password/reset')
   resetPassword(@Param('id') id: string, @Body() dto: ResetPasswordDto) {
 
@@ -63,6 +77,7 @@ export class UsersController {
   }
 
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   delete(@Param('id') id: string) {
 

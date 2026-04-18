@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaClient, User } from '@roadboard/database';
 import { hashPassword, verifyPassword } from '@roadboard/auth';
 import { CreateUserDto } from './create-user.dto';
@@ -72,9 +72,13 @@ export class UsersService {
   }
 
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto, callerRole?: string) {
 
     await this.findOne(id);
+
+    if (dto.role && callerRole !== 'admin') {
+      throw new ForbiddenException('Only admins can change user roles');
+    }
 
     const user = await this.prisma.user.update({
       where: { id },

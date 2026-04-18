@@ -108,12 +108,13 @@ async function main() {
     }),
     prisma.user.upsert({
       where: { username: 'alessio' },
-      update: {},
+      update: { role: 'admin' },
       create: {
         username: 'alessio',
         displayName: 'Alessio',
         email: 'alessio@roadboard.dev',
         password: defaultPassword,
+        role: 'admin',
         status: 'active',
       },
     }),
