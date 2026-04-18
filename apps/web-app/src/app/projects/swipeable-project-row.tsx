@@ -6,11 +6,11 @@ import { deleteProjectAction } from '@/app/actions';
 
 
 const STATUS_COLOR: Record<string, string> = {
-  active: 'bg-green-900 text-green-300',
-  draft: 'bg-gray-700 text-gray-300',
-  paused: 'bg-yellow-900 text-yellow-300',
-  completed: 'bg-blue-900 text-blue-300',
-  archived: 'bg-gray-800 text-gray-500',
+  active: 'bg-green-500/10 text-green-400',
+  draft: 'bg-gray-500/10 text-gray-400',
+  paused: 'bg-yellow-500/10 text-yellow-400',
+  completed: 'bg-blue-500/10 text-blue-400',
+  archived: 'bg-gray-500/[0.07] text-gray-500',
 };
 
 const REVEAL_THRESHOLD = 60;
@@ -97,7 +97,8 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
       {/* Card — non si muove mai */}
       <div
         onClick={onCardClick}
-        className="block rounded-lg border border-gray-800 bg-gray-900 px-5 py-4 hover:border-gray-600 transition-colors cursor-pointer"
+        className="block rounded-xl px-5 py-4 cursor-pointer transition-all"
+        style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)' }}
       >
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-white">{name}</span>

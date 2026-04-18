@@ -19,26 +19,12 @@ export class ProjectScopedQueryDto {
 }
 
 
-export class FindMilestonesQueryDto extends ProjectScopedQueryDto {
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  phaseId?: string;
-}
-
-
 export class FindTasksQueryDto extends ProjectScopedQueryDto {
 
   @IsOptional()
   @IsString()
   @IsNotEmpty()
   phaseId?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  milestoneId?: string;
 
   @IsOptional()
   @IsEnum(TaskStatus)

@@ -15,21 +15,27 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
-  const [phaseId, setPhaseId] = useState('');
+  const [phaseId, setPhaseId] = useState(phases[0]?.id ?? '');
   const [priority, setPriority] = useState('medium');
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
+
+  if (phases.length === 0) {
+    return (
+      <span className="text-xs text-gray-600 italic">Crea prima una fase</span>
+    );
+  }
 
   function handleSubmit(e: React.FormEvent) {
 
     e.preventDefault();
 
-    if (!title.trim()) return;
+    if (!title.trim() || !phaseId) return;
 
     startTransition(async () => {
       const result = await createTaskAction(projectId, {
         title: title.trim(),
-        phaseId: phaseId || undefined,
+        phaseId,
         priority,
       });
 
@@ -39,7 +45,7 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
       }
 
       setTitle('');
-      setPhaseId('');
+      setPhaseId(phases[0]?.id ?? '');
       setPriority('medium');
       setError('');
       setOpen(false);
@@ -58,23 +64,23 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-gray-700 bg-gray-900 p-4 space-y-3">
+    <form onSubmit={handleSubmit} className="glass-card rounded-xl p-4 space-y-3">
       <input
         autoFocus
         type="text"
         placeholder="Titolo task"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
 
       <div className="flex gap-2">
         <select
           value={phaseId}
           onChange={(e) => setPhaseId(e.target.value)}
-          className="flex-1 text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          required
+          className="glass-input flex-1 text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
-          <option value="">— Nessuna fase —</option>
           {phases.map((p) => (
             <option key={p.id} value={p.id}>{p.title}</option>
           ))}
@@ -83,7 +89,7 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="glass-input text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
           <option value="low">low</option>
           <option value="medium">medium</option>
@@ -97,15 +103,15 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
       <div className="flex gap-2">
         <button
           type="submit"
-          disabled={isPending || !title.trim()}
-          className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+          disabled={isPending || !title.trim() || !phaseId}
+          className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
           {isPending ? 'Salvo…' : 'Crea'}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
-          className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+          className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
           Annulla
         </button>

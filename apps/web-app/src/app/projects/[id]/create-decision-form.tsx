@@ -65,42 +65,42 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-gray-700 bg-gray-900 p-4 space-y-3">
+    <form onSubmit={handleSubmit} className="glass-card rounded-xl p-4 space-y-3">
       <input
         autoFocus
         type="text"
         placeholder="Titolo decisione"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
       <textarea
         placeholder="Sommario *"
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
         rows={2}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
       <textarea
         placeholder="Motivazione (opzionale)"
         value={rationale}
         onChange={(e) => setRationale(e.target.value)}
         rows={2}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
       <textarea
         placeholder="Outcome (opzionale)"
         value={outcome}
         onChange={(e) => setOutcome(e.target.value)}
         rows={2}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
 
       <div className="flex gap-2">
         <select
           value={impactLevel}
           onChange={(e) => setImpactLevel(e.target.value)}
-          className="flex-1 text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="glass-input flex-1 text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
           <option value="low">Impatto: low</option>
           <option value="medium">Impatto: medium</option>
@@ -110,7 +110,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
-          className="flex-1 text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="glass-input flex-1 text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
           <option value="open">open</option>
           <option value="accepted">accepted</option>
@@ -125,14 +125,14 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         <button
           type="submit"
           disabled={isPending || !title.trim() || !summary.trim()}
-          className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+          className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
           {isPending ? 'Salvo…' : 'Crea'}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
-          className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+          className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
           Annulla
         </button>

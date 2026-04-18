@@ -3,11 +3,11 @@ import Link from 'next/link';
 import { getToken } from '@/lib/auth';
 import {
   getProject,
+  listProjects,
   listTasks,
   listMemory,
   listPhases,
   listDecisions,
-  listMilestones,
   getDashboardSnapshot,
   listAuditEvents,
   validateSession,
@@ -18,21 +18,20 @@ import { TabNav } from './tab-nav';
 import { TaskStatusSelect } from './task-status';
 import { CreateTaskForm } from './create-task-form';
 import { CreatePhaseForm } from './create-phase-form';
-import { CreateMilestoneForm } from './create-milestone-form';
 import { CreateDecisionForm } from './create-decision-form';
 import { CreateMemoryForm } from './create-memory-form';
 import { MemorySearch } from './memory-search';
 import { DeleteProjectButton } from './delete-project-button';
-import type { Task, Milestone } from '@/lib/api';
+import type { Task } from '@/lib/api';
 
 
 const STATUS_COLOR: Record<string, string> = {
-  active: 'bg-green-900 text-green-300',
-  draft: 'bg-gray-700 text-gray-300',
-  paused: 'bg-yellow-900 text-yellow-300',
-  completed: 'bg-blue-900 text-blue-300',
-  in_progress: 'bg-indigo-900 text-indigo-300',
-  archived: 'bg-gray-800 text-gray-500',
+  active: 'bg-green-500/10 text-green-400',
+  draft: 'bg-gray-500/10 text-gray-400',
+  paused: 'bg-yellow-500/10 text-yellow-400',
+  completed: 'bg-blue-500/10 text-blue-400',
+  in_progress: 'bg-indigo-500/10 text-indigo-400',
+  archived: 'bg-gray-500/[0.07] text-gray-500',
 };
 
 const TASK_PRIORITY_COLOR: Record<string, string> = {
@@ -43,22 +42,22 @@ const TASK_PRIORITY_COLOR: Record<string, string> = {
 };
 
 const TASK_STATUS_COLOR: Record<string, string> = {
-  todo: 'bg-gray-700 text-gray-300',
-  in_progress: 'bg-indigo-900 text-indigo-300',
-  done: 'bg-green-900 text-green-300',
-  blocked: 'bg-red-900 text-red-300',
+  todo: 'bg-gray-500/10 text-gray-400',
+  in_progress: 'bg-indigo-500/10 text-indigo-400',
+  done: 'bg-green-500/10 text-green-400',
+  blocked: 'bg-red-500/10 text-red-400',
 };
 
 const MEMORY_TYPE_COLOR: Record<string, string> = {
-  done: 'bg-green-900 text-green-300',
-  next: 'bg-indigo-900 text-indigo-300',
-  decision: 'bg-yellow-900 text-yellow-300',
-  handoff: 'bg-purple-900 text-purple-300',
-  architecture: 'bg-blue-900 text-blue-300',
-  issue: 'bg-red-900 text-red-300',
-  learning: 'bg-teal-900 text-teal-300',
-  operational_note: 'bg-gray-700 text-gray-300',
-  open_question: 'bg-orange-900 text-orange-300',
+  done: 'bg-green-500/10 text-green-400',
+  next: 'bg-indigo-500/10 text-indigo-400',
+  decision: 'bg-yellow-500/10 text-yellow-400',
+  handoff: 'bg-purple-500/10 text-purple-400',
+  architecture: 'bg-blue-500/10 text-blue-400',
+  issue: 'bg-red-500/10 text-red-400',
+  learning: 'bg-teal-500/10 text-teal-400',
+  operational_note: 'bg-gray-500/10 text-gray-400',
+  open_question: 'bg-orange-500/10 text-orange-400',
 };
 
 const DECISION_IMPACT_COLOR: Record<string, string> = {
@@ -66,14 +65,6 @@ const DECISION_IMPACT_COLOR: Record<string, string> = {
   medium: 'text-yellow-400',
   low: 'text-gray-400',
 };
-
-const MILESTONE_STATUS_COLOR: Record<string, string> = {
-  pending: 'bg-gray-700 text-gray-300',
-  in_progress: 'bg-indigo-900 text-indigo-300',
-  completed: 'bg-green-900 text-green-300',
-  missed: 'bg-red-900 text-red-300',
-};
-
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -84,7 +75,7 @@ interface Props {
 export default async function ProjectDetailPage({ params, searchParams }: Props) {
 
   const { id } = await params;
-  const { tab = 'overview', q } = await searchParams;
+  const { tab = 'tasks', q } = await searchParams;
   const token = await getToken();
 
   if (!token) {
@@ -99,9 +90,10 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     notFound();
   }
 
-  const [session, snap] = await Promise.all([
+  const [session, snap, userProjects] = await Promise.all([
     validateSession(token),
     getDashboardSnapshot(token, id).catch(() => null),
+    listProjects(token).catch(() => []),
   ]);
 
   if (!session) redirect('/login');
@@ -116,6 +108,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       username={session.username}
       displayName={session.displayName}
       activeProject={{ id, name: project.name, taskDone, taskTotal }}
+      userProjects={[...userProjects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((p) => ({ id: p.id, name: p.name, status: p.status }))}
     >
       {/* Project header with glass health bar */}
       <div
@@ -207,7 +200,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       <main className="mx-auto max-w-5xl px-8 py-6">
         <TabNav activeTab={tab} />
 
-        {tab === 'overview' && <OverviewTab token={token} projectId={id} />}
         {tab === 'tasks' && <TasksTab token={token} projectId={id} />}
         {tab === 'phases' && <PhasesTab token={token} projectId={id} />}
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
@@ -215,112 +207,6 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'audit' && <AuditTab token={token} projectId={id} />}
       </main>
     </AppShell>
-  );
-}
-
-
-async function OverviewTab({ token, projectId }: { token: string; projectId: string }) {
-
-  let snap;
-
-  try {
-    snap = await getDashboardSnapshot(token, projectId);
-  } catch {
-    return <p className="text-xs text-gray-500">Dashboard non disponibile.</p>;
-  }
-
-  const totalTasks = Object.values(snap.tasks).reduce((a, b) => a + b, 0);
-  const doneTasks = snap.tasks['done'] ?? 0;
-  const progressPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-  return (
-    <div className="space-y-6">
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {(['todo', 'in_progress', 'done', 'blocked'] as const).map((s) => (
-          <div key={s} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
-            <p className="text-xs text-gray-500 mb-1">{s.replace('_', ' ')}</p>
-            <p className="text-xl font-semibold text-white">{snap.tasks[s] ?? 0}</p>
-          </div>
-        ))}
-      </div>
-
-      {totalTasks > 0 && (
-        <div>
-          <div className="flex justify-between text-xs text-gray-500 mb-1">
-            <span>Task completati</span>
-            <span>{progressPct}%</span>
-          </div>
-          <div className="w-full h-1.5 bg-gray-800 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-indigo-500 rounded-full transition-all"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {snap.activePhases.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Fasi attive</h2>
-          <div className="grid gap-2">
-            {snap.activePhases.map((p) => (
-              <div key={p.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2.5 flex items-center justify-between">
-                <span className="text-sm text-white">{p.title}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[p.status] ?? 'bg-gray-700 text-gray-300'}`}>
-                  {p.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {snap.urgentTasks.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Task urgenti</h2>
-          <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
-            {snap.urgentTasks.map((t) => (
-              <div key={t.id} className="flex items-center justify-between px-4 py-2.5 bg-gray-900">
-                <span className="text-sm text-white truncate">{t.title}</span>
-                <div className="flex items-center gap-2 ml-4 shrink-0">
-                  <span className={`text-xs font-medium ${TASK_PRIORITY_COLOR[t.priority] ?? 'text-gray-400'}`}>
-                    {t.priority}
-                  </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${TASK_STATUS_COLOR[t.status] ?? 'bg-gray-700 text-gray-300'}`}>
-                    {t.status.replace('_', ' ')}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {snap.recentDecisions.length > 0 && (
-        <section>
-          <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Decisioni recenti</h2>
-          <div className="grid gap-2">
-            {snap.recentDecisions.map((d) => (
-              <div key={d.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-2.5 flex items-center justify-between">
-                <span className="text-sm text-white">{d.title}</span>
-                <div className="flex items-center gap-2 ml-4 shrink-0">
-                  {d.impactLevel && (
-                    <span className={`text-xs font-medium ${DECISION_IMPACT_COLOR[d.impactLevel] ?? 'text-gray-400'}`}>
-                      {d.impactLevel}
-                    </span>
-                  )}
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status] ?? 'bg-gray-700 text-gray-300'}`}>
-                    {d.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-    </div>
   );
 }
 
@@ -378,23 +264,12 @@ async function TasksTab({ token, projectId }: { token: string; projectId: string
 
 async function PhasesTab({ token, projectId }: { token: string; projectId: string }) {
 
-  const [phases, milestones] = await Promise.all([
-    listPhases(token, projectId),
-    listMilestones(token, projectId),
-  ]);
-
-  const milestonesByPhase = milestones.reduce<Record<string, Milestone[]>>((acc, m) => {
-    const key = m.phaseId ?? '__none__';
-    (acc[key] ??= []).push(m);
-    return acc;
-  }, {});
-
-  const unlinkedMilestones = milestonesByPhase['__none__'] ?? [];
+  const phases = await listPhases(token, projectId);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{phases.length} fasi · {milestones.length} milestone</p>
+        <p className="text-xs text-gray-500">{phases.length} fasi</p>
         <CreatePhaseForm projectId={projectId} />
       </div>
 
@@ -403,8 +278,8 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
       )}
 
       {phases.map((phase) => (
-        <div key={phase.id} className="rounded-lg border border-gray-800 bg-gray-900 p-4">
-          <div className="flex items-center justify-between mb-3">
+        <div key={phase.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+          <div className="flex items-center justify-between">
             <div>
               <span className="text-sm font-medium text-white">{phase.title}</span>
               {phase.description && (
@@ -415,53 +290,8 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
               {phase.status}
             </span>
           </div>
-
-          {(milestonesByPhase[phase.id] ?? []).length > 0 && (
-            <div className="space-y-1.5 mb-3">
-              {(milestonesByPhase[phase.id] ?? []).map((m) => (
-                <MilestoneRow key={m.id} milestone={m} />
-              ))}
-            </div>
-          )}
-
-          <CreateMilestoneForm projectId={projectId} phaseId={phase.id} />
         </div>
       ))}
-
-      {unlinkedMilestones.length > 0 && (
-        <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Milestone senza fase</p>
-          <div className="space-y-1.5">
-            {unlinkedMilestones.map((m) => (
-              <MilestoneRow key={m.id} milestone={m} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="pt-2">
-        <CreateMilestoneForm projectId={projectId} />
-      </div>
-    </div>
-  );
-}
-
-
-function MilestoneRow({ milestone }: { milestone: Milestone }) {
-
-  return (
-    <div className="flex items-center justify-between px-3 py-2 rounded bg-gray-800">
-      <span className="text-xs text-gray-200">{milestone.title}</span>
-      <div className="flex items-center gap-2 ml-4 shrink-0">
-        {milestone.dueDate && (
-          <span className="text-xs text-gray-500">
-            {new Date(milestone.dueDate).toLocaleDateString('it-IT')}
-          </span>
-        )}
-        <span className={`text-xs px-1.5 py-0.5 rounded ${MILESTONE_STATUS_COLOR[milestone.status] ?? 'bg-gray-700 text-gray-300'}`}>
-          {milestone.status}
-        </span>
-      </div>
     </div>
   );
 }
@@ -484,7 +314,7 @@ async function DecisionsTab({ token, projectId }: { token: string; projectId: st
 
       <div className="grid gap-3">
         {decisions.map((d) => (
-          <div key={d.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+          <div key={d.id} className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="flex items-start justify-between gap-3 mb-2">
               <span className="text-sm font-medium text-white">{d.title}</span>
               <div className="flex items-center gap-2 shrink-0">
@@ -536,7 +366,7 @@ async function MemoryTab({ token, projectId, q }: { token: string; projectId: st
 
       <div className="grid gap-2">
         {memory.map((entry) => (
-          <div key={entry.id} className="rounded-lg border border-gray-800 bg-gray-900 px-4 py-3">
+          <div key={entry.id} className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div className="flex items-center gap-2 mb-1">
               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${MEMORY_TYPE_COLOR[entry.type] ?? 'bg-gray-700 text-gray-300'}`}>
                 {entry.type}
@@ -574,12 +404,12 @@ async function AuditTab({ token, projectId }: { token: string; projectId: string
         <p className="text-xs text-gray-500">Nessun evento registrato.</p>
       )}
 
-      <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
         {events.map((event) => (
-          <div key={event.id} className="px-4 py-3 bg-gray-900">
+          <div key={event.id} className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="shrink-0 text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 font-mono">
+                <span className="shrink-0 text-xs px-2 py-0.5 rounded text-gray-400 font-mono" style={{ background: 'rgba(255,255,255,0.06)' }}>
                   {event.eventType}
                 </span>
                 <span className="text-xs text-gray-300 truncate">
@@ -612,9 +442,9 @@ async function AuditTab({ token, projectId }: { token: string; projectId: string
 function TaskList({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
 
   return (
-    <div className="divide-y divide-gray-800 rounded-lg border border-gray-800 overflow-hidden">
+    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
       {tasks.map((task) => (
-        <div key={task.id} className="flex items-center justify-between px-4 py-3 bg-gray-900">
+        <div key={task.id} className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
           <div className="flex items-center gap-3 min-w-0">
             <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLOR[task.status] ?? 'bg-gray-700 text-gray-300'}`}>
               {task.status.replace('_', ' ')}

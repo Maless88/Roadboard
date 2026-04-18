@@ -28,6 +28,7 @@ model User {
   projectGrants   ProjectGrant[]   @relation("GrantedByUser")
   sessions        Session[]
   mcpTokens       McpToken[]
+  ownedProjects   Project[]        @relation("ProjectOwner")
 
   @@map("users")
 }
@@ -85,12 +86,13 @@ model Project {
   description String?
   status      String   @default("active")
   ownerTeamId String   @map("owner_team_id")
+  ownerUserId String?  @map("owner_user_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   ownerTeam        Team               @relation(fields: [ownerTeamId], references: [id])
+  ownerUser        User?              @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   phases           Phase[]
-  milestones       Milestone[]
   tasks            Task[]
   memoryEntries    MemoryEntry[]
   decisions        Decision[]
@@ -113,37 +115,16 @@ model Phase {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  project    Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  milestones Milestone[]
-  tasks      Task[]
-
-  @@map("phases")
-}
-
-model Milestone {
-  id          String    @id @default(cuid())
-  projectId   String    @map("project_id")
-  phaseId     String?   @map("phase_id")
-  title       String
-  description String?
-  dueDate     DateTime? @map("due_date")
-  status      String    @default("planned")
-  orderIndex  Int       @default(0) @map("order_index")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phase   Phase?  @relation(fields: [phaseId], references: [id])
   tasks   Task[]
 
-  @@map("milestones")
+  @@map("phases")
 }
 
 model Task {
   id          String    @id @default(cuid())
   projectId   String    @map("project_id")
-  phaseId     String?   @map("phase_id")
-  milestoneId String?   @map("milestone_id")
+  phaseId     String    @map("phase_id")
   title       String
   description String?
   status      String    @default("todo")
@@ -153,9 +134,8 @@ model Task {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phase     Phase?     @relation(fields: [phaseId], references: [id])
-  milestone Milestone? @relation(fields: [milestoneId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase   Phase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
 
   @@map("tasks")
 }

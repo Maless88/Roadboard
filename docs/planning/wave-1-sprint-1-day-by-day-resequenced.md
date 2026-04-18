@@ -1,5 +1,8 @@
 # Roadboard 2.0 Wave 1 - Sprint 1 Day-by-Day (Resequenced)
 
+> **Status: COMPLETED** — Sprint 1 fully executed. All success criteria met.
+> Checklist updated retroactively. This document is now a historical reference.
+
 ## Sprint 1 Goal
 Create the first live LLM-usable vertical slice of Roadboard 2.0:
 - mono-repo bootstrap
@@ -46,45 +49,45 @@ Create the repo skeleton and make the local environment runnable.
 ### Tasks
 
 #### Root workspace
-- [ ] Create root `package.json`
-- [ ] Create `pnpm-workspace.yaml`
-- [ ] Create `turbo.json`
-- [ ] Create `tsconfig.base.json`
-- [ ] Create root `.gitignore`
-- [ ] Create root `.env.example`
-- [ ] Create root `README.md`
+- [x] Create root `package.json`
+- [x] Create `pnpm-workspace.yaml`
+- [x] Create `turbo.json`
+- [x] Create `tsconfig.base.json`
+- [x] Create root `.gitignore`
+- [x] Create root `.env.example`
+- [x] Create root `README.md`
 
 #### Folders
-- [ ] Create `apps/`
-- [ ] Create `packages/`
-- [ ] Create `infra/docker/`
-- [ ] Create `infra/scripts/`
-- [ ] Create `.github/workflows/`
+- [x] Create `apps/`
+- [x] Create `packages/`
+- [x] Create `infra/docker/`
+- [x] Create `infra/scripts/`
+- [x] Create `.github/workflows/`
 
 #### App folders for Sprint 1
-- [ ] Create `apps/core-api/`
-- [ ] Create `apps/auth-access/`
-- [ ] Create `apps/mcp-service/`
+- [x] Create `apps/core-api/`
+- [x] Create `apps/auth-access/`
+- [x] Create `apps/mcp-service/`
 
 #### Package folders for Sprint 1
-- [ ] Create `packages/domain/`
-- [ ] Create `packages/database/`
-- [ ] Create `packages/auth/`
-- [ ] Create `packages/grants/`
-- [ ] Create `packages/config/`
-- [ ] Create `packages/mcp-contracts/`
+- [x] Create `packages/domain/`
+- [x] Create `packages/database/`
+- [x] Create `packages/auth/`
+- [x] Create `packages/grants/`
+- [x] Create `packages/config/`
+- [x] Create `packages/mcp-contracts/`
 
 #### Docker local environment
-- [ ] Create `infra/docker/docker-compose.yml`
-- [ ] Add PostgreSQL service
-- [ ] Add Redis service
-- [ ] Add health checks
-- [ ] Add persistent volumes
+- [x] Create `infra/docker/docker-compose.yml`
+- [x] Add PostgreSQL service
+- [x] Add Redis service
+- [x] Add health checks
+- [x] Add persistent volumes
 
 #### Basic scripts
-- [ ] Add bootstrap script
-- [ ] Add dev script placeholders
-- [ ] Add migrate script placeholder
+- [x] Add bootstrap script
+- [x] Add dev script placeholders
+- [x] Add migrate script placeholder
 
 ### End-of-day checkpoint
 By the end of Day 1, you should be able to:
@@ -109,36 +112,36 @@ Create the minimum shared packages and get PostgreSQL schema management working.
 ### Tasks
 
 #### `packages/domain`
-- [ ] Add `ProjectStatus` enum
-- [ ] Add `PhaseStatus` enum
-- [ ] Add `MilestoneStatus` enum
-- [ ] Add `TaskStatus` enum
-- [ ] Add `TaskPriority` enum
-- [ ] Add `MemoryEntryType` enum with `done` and `next`
-- [ ] Add shared domain export index
+- [x] Add `ProjectStatus` enum
+- [x] Add `PhaseStatus` enum
+- [x] Add `MilestoneStatus` enum
+- [x] Add `TaskStatus` enum
+- [x] Add `TaskPriority` enum
+- [x] Add `MemoryEntryType` enum with `done` and `next`
+- [x] Add shared domain export index
 
 #### `packages/auth`
-- [ ] Add password hash helper
-- [ ] Add password verify helper
-- [ ] Add token hash helper
-- [ ] Add shared auth type exports
+- [x] Add password hash helper
+- [x] Add password verify helper
+- [x] Add token hash helper
+- [x] Add shared auth type exports
 
 #### `packages/grants`
-- [ ] Add grant enum/constants
-- [ ] Add base permission helper signatures
+- [x] Add grant enum/constants
+- [x] Add base permission helper signatures
 
 #### `packages/config`
-- [ ] Add env loading helper
-- [ ] Add shared lint/format config placeholders
+- [x] Add env loading helper
+- [x] Add shared lint/format config placeholders
 
 #### `packages/mcp-contracts`
-- [ ] Add initial tool schema for `list_projects`
-- [ ] Add shared MCP tool metadata export
+- [x] Add initial tool schema for `list_projects`
+- [x] Add shared MCP tool metadata export
 
 #### `packages/database`
-- [ ] Initialize Prisma
-- [ ] Add PostgreSQL datasource
-- [ ] Add initial schema for:
+- [x] Initialize Prisma
+- [x] Add PostgreSQL datasource
+- [x] Add initial schema for:
   - `users`
   - `teams`
   - `team_memberships`
@@ -146,17 +149,17 @@ Create the minimum shared packages and get PostgreSQL schema management working.
   - `projects`
   - `project_grants`
   - `mcp_tokens`
-- [ ] Generate initial migration
-- [ ] Apply migration locally
-- [ ] Generate Prisma client
+- [x] Generate initial migration
+- [x] Apply migration locally
+- [x] Generate Prisma client
 
 #### Seed basics
-- [ ] Add first seed script placeholder
-- [ ] Seed 4 initial users
-- [ ] Seed 1 initial team
-- [ ] Add all 4 users as team members
-- [ ] Seed 1 initial project (Roadboard)
-- [ ] Seed base project grant for all 4 users, directly or through the team according to the first chosen grant path
+- [x] Add first seed script placeholder
+- [x] Seed 4 initial users
+- [x] Seed 1 initial team
+- [x] Add all 4 users as team members
+- [x] Seed 1 initial project (Roadboard)
+- [x] Seed base project grant for all 4 users, directly or through the team according to the first chosen grant path
 
 ### End-of-day checkpoint
 By the end of Day 2, you should be able to:
@@ -182,72 +185,72 @@ Make authentication, team collaboration basics, and token issuance work end-to-e
 ### Tasks
 
 #### App bootstrap
-- [ ] Initialize NestJS app in `apps/auth-access`
-- [ ] Enable Fastify adapter
-- [ ] Add app module
-- [ ] Add config wiring
-- [ ] Add Prisma integration
-- [ ] Add health endpoint
+- [x] Initialize NestJS app in `apps/auth-access`
+- [x] Enable Fastify adapter
+- [x] Add app module
+- [x] Add config wiring
+- [x] Add Prisma integration
+- [x] Add health endpoint
 
 #### Modules
-- [ ] Create `auth` module
-- [ ] Create `users` module
-- [ ] Create `teams` module
-- [ ] Create `memberships` module
-- [ ] Create `sessions` module
-- [ ] Create `grants` module
-- [ ] Create `tokens` module
+- [x] Create `auth` module
+- [x] Create `users` module
+- [x] Create `teams` module
+- [x] Create `memberships` module
+- [x] Create `sessions` module
+- [x] Create `grants` module
+- [x] Create `tokens` module
 
 #### `auth` module
-- [ ] Add login DTO
-- [ ] Add login controller
-- [ ] Add login service
-- [ ] Validate seeded user credentials
-- [ ] Create session record on login
+- [x] Add login DTO
+- [x] Add login controller
+- [x] Add login service
+- [x] Validate seeded user credentials
+- [x] Create session record on login
 
 #### `users` module
-- [ ] Add `me` endpoint support
-- [ ] Resolve current session user
+- [x] Add `me` endpoint support
+- [x] Resolve current session user
 
 #### `teams` module
-- [ ] Add create/list team endpoints or service paths
-- [ ] Add team detail read path
+- [x] Add create/list team endpoints or service paths
+- [x] Add team detail read path
 
 #### `memberships` module
-- [ ] Add add/list membership endpoints or service paths
-- [ ] Add team membership lookup path
+- [x] Add add/list membership endpoints or service paths
+- [x] Add team membership lookup path
 
 #### `sessions` module
-- [ ] Add logout flow
-- [ ] Add session invalidation logic
+- [x] Add logout flow
+- [x] Add session invalidation logic
 
 #### `grants` module
-- [ ] Add project grant lookup path
-- [ ] Add effective permission helper
-- [ ] Add team-aware grant resolution path
+- [x] Add project grant lookup path
+- [x] Add effective permission helper
+- [x] Add team-aware grant resolution path
 
 #### `tokens` module
-- [ ] Add issue token endpoint/service
-- [ ] Add validate token service path
-- [ ] Add revoke token placeholder if low effort
+- [x] Add issue token endpoint/service
+- [x] Add validate token service path
+- [x] Add revoke token placeholder if low effort
 
 #### Minimum endpoints
-- [ ] `GET /health`
-- [ ] `POST /auth/login`
-- [ ] `POST /auth/logout`
-- [ ] `GET /auth/me`
-- [ ] `GET /teams`
-- [ ] `GET /teams/:id`
-- [ ] `GET /teams/:id/memberships`
-- [ ] `POST /tokens`
-- [ ] internal/service token validation path
+- [x] `GET /health`
+- [x] `POST /auth/login`
+- [x] `POST /auth/logout`
+- [x] `GET /auth/me`
+- [x] `GET /teams`
+- [x] `GET /teams/:id`
+- [x] `GET /teams/:id/memberships`
+- [x] `POST /tokens`
+- [x] internal/service token validation path
 
 #### Basic tests
-- [ ] login success test
-- [ ] login failure test
-- [ ] team list or membership lookup test
-- [ ] token issue test
-- [ ] token validation test
+- [x] login success test
+- [x] login failure test
+- [x] team list or membership lookup test
+- [x] token issue test
+- [x] token validation test
 
 ### End-of-day checkpoint
 By the end of Day 3, you should be able to:
@@ -273,40 +276,40 @@ Make project listing work behind authenticated and grant-aware access.
 ### Tasks
 
 #### App bootstrap
-- [ ] Initialize NestJS app in `apps/core-api`
-- [ ] Enable Fastify adapter
-- [ ] Add app module
-- [ ] Add config wiring
-- [ ] Add Prisma integration
-- [ ] Add health endpoint
+- [x] Initialize NestJS app in `apps/core-api`
+- [x] Enable Fastify adapter
+- [x] Add app module
+- [x] Add config wiring
+- [x] Add Prisma integration
+- [x] Add health endpoint
 
 #### Modules
-- [ ] Create `projects` module
-- [ ] Create `health` module
+- [x] Create `projects` module
+- [x] Create `health` module
 
 #### `projects` module
-- [ ] Add list projects endpoint
-- [ ] Add project detail endpoint
-- [ ] Add project create endpoint if low effort
-- [ ] Add DTOs
-- [ ] Add service and controller
+- [x] Add list projects endpoint
+- [x] Add project detail endpoint
+- [x] Add project create endpoint if low effort
+- [x] Add DTOs
+- [x] Add service and controller
 
 #### Auth integration path
-- [ ] Add minimal request identity propagation model
-- [ ] Add grant-check call path to `auth-access`
-- [ ] Add team-aware grant resolution support
-- [ ] Protect project listing/detail if feasible in this sprint
+- [x] Add minimal request identity propagation model
+- [x] Add grant-check call path to `auth-access`
+- [x] Add team-aware grant resolution support
+- [x] Protect project listing/detail if feasible in this sprint
 
 #### Minimum endpoints
-- [ ] `GET /health`
-- [ ] `GET /projects`
-- [ ] `GET /projects/:id`
-- [ ] optional `POST /projects`
+- [x] `GET /health`
+- [x] `GET /projects`
+- [x] `GET /projects/:id`
+- [x] optional `POST /projects`
 
 #### Basic tests
-- [ ] project list integration test
-- [ ] project detail integration test
-- [ ] unauthorized or ungranted access test if feasible
+- [x] project list integration test
+- [x] project detail integration test
+- [x] unauthorized or ungranted access test if feasible
 
 ### End-of-day checkpoint
 By the end of Day 4, you should be able to:
@@ -330,36 +333,36 @@ Create the first visible Roadboard product slice for LLM workflows.
 ### Tasks
 
 #### MCP bootstrap
-- [ ] Create MCP service bootstrap
-- [ ] Create MCP server bootstrap
-- [ ] Create tool registry
-- [ ] Wire `packages/mcp-contracts`
+- [x] Create MCP service bootstrap
+- [x] Create MCP server bootstrap
+- [x] Create tool registry
+- [x] Wire `packages/mcp-contracts`
 
 #### Clients
-- [ ] Add `auth-access` client
-- [ ] Add `core-api` client
+- [x] Add `auth-access` client
+- [x] Add `core-api` client
 
 #### Policies
-- [ ] Add token scope guard
-- [ ] Add basic tool usage guard
+- [x] Add token scope guard
+- [x] Add basic tool usage guard
 
 #### Tool implementation
-- [ ] Implement `list_projects`
-- [ ] Implement `get_project` if time permits
-- [ ] Implement first narrow write tool placeholder or `create_task` if low effort
+- [x] Implement `list_projects`
+- [x] Implement `get_project` if time permits
+- [x] Implement first narrow write tool placeholder or `create_task` if low effort
 
 #### Audit basics
-- [ ] Add MCP request logging
-- [ ] Add denied action logging
+- [x] Add MCP request logging
+- [x] Add denied action logging
 
 #### Tests
-- [ ] Add MCP contract test for `list_projects`
-- [ ] Add integration test:
+- [x] Add MCP contract test for `list_projects`
+- [x] Add integration test:
   - valid token -> `list_projects` works
   - invalid token -> denied
 
 #### CI minimum
-- [ ] Add one GitHub workflow for lint/typecheck/test skeleton
+- [x] Add one GitHub workflow for lint/typecheck/test skeleton
 
 ### End-of-day checkpoint
 By the end of Day 5, you should be able to:

@@ -411,24 +411,9 @@ export interface Decision {
 }
 
 
-export interface Milestone {
-  id: string;
-  projectId: string;
-  phaseId: string | null;
-  title: string;
-  description: string | null;
-  status: string;
-  dueDate: string | null;
-  orderIndex: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-
 export interface DashboardSnapshot {
   projectId: string;
   tasks: Record<string, number>;
-  milestones: Record<string, number>;
   activePhases: Array<{ id: string; title: string; status: string; orderIndex: number }>;
   recentMemory: Array<{ id: string; type: string; title: string; createdAt: string }>;
   recentDecisions: Array<{ id: string; title: string; status: string; impactLevel: string | null; createdAt: string }>;
@@ -479,7 +464,7 @@ export async function deleteProject(token: string, projectId: string): Promise<v
 
 export async function createTask(
   token: string,
-  data: { projectId: string; phaseId?: string; title: string; description?: string; priority?: string; status?: string },
+  data: { projectId: string; phaseId: string; title: string; description?: string; priority?: string; status?: string },
 ): Promise<Task> {
 
   const res = await fetch(`${CORE_API}/tasks`, {
@@ -544,42 +529,6 @@ export async function createDecision(
   }
 
   return res.json() as Promise<Decision>;
-}
-
-
-export async function listMilestones(token: string, projectId: string, phaseId?: string): Promise<Milestone[]> {
-
-  const params = new URLSearchParams({ projectId });
-
-  if (phaseId) {
-    params.set('phaseId', phaseId);
-  }
-
-  const res = await fetch(`${CORE_API}/milestones?${params}`, { headers: authHeaders(token) });
-
-  if (!res.ok) throw new Error('Failed to fetch milestones');
-
-  return res.json() as Promise<Milestone[]>;
-}
-
-
-export async function createMilestone(
-  token: string,
-  data: { projectId: string; phaseId?: string; title: string; description?: string; dueDate?: string; status?: string },
-): Promise<Milestone> {
-
-  const res = await fetch(`${CORE_API}/milestones`, {
-    method: 'POST',
-    headers: authHeaders(token),
-    body: JSON.stringify(data),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(err.message ?? 'Failed to create milestone');
-  }
-
-  return res.json() as Promise<Milestone>;
 }
 
 

@@ -75,14 +75,32 @@ const TOOLS = [
     },
   },
   {
-    name: "create_task",
-    description: "Create a new task in a project",
+    name: "list_phases",
+    description: "List phases for a project",
     inputSchema: {
       type: "object" as const,
       properties: {
         projectId: {
           type: "string",
           description: "The project ID",
+        },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
+    name: "create_task",
+    description: "Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: {
+          type: "string",
+          description: "The project ID",
+        },
+        phaseId: {
+          type: "string",
+          description: "The phase ID to assign the task to (use list_phases to discover IDs)",
         },
         title: {
           type: "string",
@@ -313,6 +331,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   list_projects: "project.read",
   get_project: "project.read",
   list_active_tasks: "project.read",
+  list_phases: "project.read",
   get_project_memory: "project.read",
   prepare_task_context: "project.read",
   prepare_project_summary: "project.read",
@@ -415,7 +434,7 @@ async function handleToolCall(
             },
             {
               name: "get_project",
-              purpose: "Get full project details including phases and milestones.",
+              purpose: "Get full project details including phases.",
               when: "When you need structured project metadata.",
               required_args: ["projectId"],
               optional_args: [],
@@ -588,6 +607,13 @@ async function handleToolCall(
         description: args.description as string | undefined,
         status: args.status as string | undefined,
       });
+      const proj = result as Record<string, unknown>;
+      await client.createMemoryEntry({
+        projectId: proj.id as string,
+        type: "done",
+        title: `Progetto creato: ${proj.name as string}`,
+        body: args.description ? `${args.description as string}` : undefined,
+      }).catch(() => null);
       return jsonResponse(result);
     }
 
@@ -601,6 +627,11 @@ async function handleToolCall(
       return jsonResponse(result);
     }
 
+    case "list_phases": {
+      const result = await client.listPhases(args.projectId as string);
+      return jsonResponse(result);
+    }
+
     case "list_active_tasks": {
       const result = await client.listTasks(
         args.projectId as string,
@@ -610,11 +641,35 @@ async function handleToolCall(
     }
 
     case "create_task": {
+      const projectId = args.projectId as string;
+      let phaseId = args.phaseId as string | undefined;
+
+      if (!phaseId) {
+        const phases = await client.listPhases(projectId) as Array<Record<string, unknown>>;
+        const first = phases.find((p) => p.status !== "completed" && p.status !== "archived") ?? phases[0];
+
+        if (!first) {
+          return errorResponse("No phases found in project. Create a phase first.");
+        }
+
+        phaseId = first.id as string;
+      }
+
       const result = await client.createTask({
-        projectId: args.projectId as string,
+        projectId,
+        phaseId,
         title: args.title as string,
         priority: args.priority as string | undefined,
       });
+
+      const task = result as Record<string, unknown>;
+      await client.createMemoryEntry({
+        projectId,
+        type: "done",
+        title: `Task creato: ${task.title as string}`,
+        body: `Fase: ${phaseId} · Priorità: ${(task.priority as string) ?? "medium"}`,
+      }).catch(() => null);
+
       return jsonResponse(result);
     }
 
@@ -735,6 +790,19 @@ async function handleToolCall(
         rationale: args.rationale as string | undefined,
         impactLevel: args.impactLevel as string | undefined,
       });
+      const dec = result as Record<string, unknown>;
+      const bodyParts = [`Decisione: ${args.summary as string}`];
+
+      if (args.rationale) bodyParts.push(`Rationale: ${args.rationale as string}`);
+      if (args.impactLevel) bodyParts.push(`Impatto: ${args.impactLevel as string}`);
+
+      await client.createMemoryEntry({
+        projectId: args.projectId as string,
+        type: "decision",
+        title: `Decisione: ${dec.title as string}`,
+        body: bodyParts.join("\n"),
+      }).catch(() => null);
+
       return jsonResponse(result);
     }
 
@@ -761,7 +829,6 @@ async function handleToolCall(
         generated_at: new Date().toISOString(),
         project,
         task_summary: snap.tasks,
-        milestone_summary: snap.milestones,
         active_phases: snap.activePhases,
         urgent_tasks: snap.urgentTasks,
         open_decisions: decisionList.filter((d) => d.status === "open"),

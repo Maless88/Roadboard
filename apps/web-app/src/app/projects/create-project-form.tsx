@@ -66,7 +66,7 @@ export function CreateProjectForm({ teams }: CreateProjectFormProps) {
   }
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-900 p-5 mb-6">
+    <div className="glass-card rounded-xl p-5 mb-6">
       <h2 className="text-sm font-semibold text-white mb-4">Nuovo progetto</h2>
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
@@ -75,28 +75,28 @@ export function CreateProjectForm({ teams }: CreateProjectFormProps) {
           placeholder="Nome"
           value={name}
           onChange={handleNameChange}
-          className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-full text-sm glass-input rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <input
           type="text"
           placeholder="Slug"
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
-          className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="w-full text-sm glass-input rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <textarea
           placeholder="Descrizione (opzionale)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
-          className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+          className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
         />
 
         {teams.length > 0 && (
           <select
             value={ownerTeamId}
             onChange={(e) => setOwnerTeamId(e.target.value)}
-            className="w-full text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="glass-input w-full text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
           >
             {teams.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
@@ -117,7 +117,7 @@ export function CreateProjectForm({ teams }: CreateProjectFormProps) {
           <button
             type="button"
             onClick={() => { setOpen(false); setError(''); }}
-            className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
           >
             Annulla
           </button>

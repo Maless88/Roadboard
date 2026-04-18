@@ -11,7 +11,6 @@ import {
   McpTokenStatus,
   UserStatus,
   PhaseStatus,
-  MilestoneStatus,
   MemoryEntryType,
 } from './enums';
 
@@ -120,16 +119,6 @@ describe('PhaseStatus', () => {
     expect(PhaseStatus.IN_PROGRESS).toBe('in_progress');
     expect(PhaseStatus.COMPLETED).toBe('completed');
     expect(PhaseStatus.BLOCKED).toBe('blocked');
-  });
-});
-
-
-describe('MilestoneStatus', () => {
-
-  it('has the expected values', () => {
-    expect(MilestoneStatus.PLANNED).toBe('planned');
-    expect(MilestoneStatus.COMPLETED).toBe('completed');
-    expect(MilestoneStatus.MISSED).toBe('missed');
   });
 });
 

@@ -23,7 +23,7 @@ export default async function ProjectsPage() {
   if (!session) redirect('/login');
 
   return (
-    <AppShell username={session.username} displayName={session.displayName}>
+    <AppShell username={session.username} displayName={session.displayName} userProjects={[...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((p) => ({ id: p.id, name: p.name, status: p.status }))}>
       <main className="mx-auto max-w-5xl px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-lg font-semibold text-white">Projects</h1>

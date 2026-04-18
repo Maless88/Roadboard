@@ -9,15 +9,9 @@ export class CreateTaskDto {
   @IsNotEmpty()
   projectId!: string;
 
-  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  phaseId?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  milestoneId?: string;
+  phaseId!: string;
 
   @IsString()
   @IsNotEmpty()

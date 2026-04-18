@@ -9,8 +9,8 @@ import {
   createUserAction,
   deleteUserAction,
   resetUserPasswordAction,
-  createGrantAction,
-  deleteGrantAction,
+  addDeveloperAction,
+  removeDeveloperAction,
 } from './actions';
 
 
@@ -25,30 +25,21 @@ interface Props {
 }
 
 
-const TABS = ['Sicurezza', 'Token MCP', 'Utenti', 'Grant'] as const;
+const TABS = ['Sicurezza', 'Token MCP', 'Utenti', 'Membri'] as const;
 type Tab = typeof TABS[number];
-
-
-const GRANT_TYPES = [
-  'project.read',
-  'project.write',
-  'project.admin',
-  'task.write',
-  'memory.write',
-  'decision.write',
-  'dashboard.read',
-  'token.manage',
-];
 
 
 function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
 
-  const base = 'rounded-md px-4 py-3 text-sm border';
+  const base = 'rounded-lg px-4 py-3 text-sm';
   const cls = type === 'error'
-    ? `${base} bg-red-950 border-red-800 text-red-300`
-    : `${base} bg-green-950 border-green-800 text-green-300`;
+    ? `${base} text-red-400`
+    : `${base} text-green-400`;
+  const style = type === 'error'
+    ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
+    : { background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' };
 
-  return <div className={cls}>{msg}</div>;
+  return <div className={cls} style={style}>{msg}</div>;
 }
 
 
@@ -64,7 +55,8 @@ function Field({ label, name, type = 'text', placeholder, required = true }: {
         type={type}
         required={required}
         placeholder={placeholder}
-        className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
       />
     </div>
   );
@@ -90,7 +82,7 @@ function SubmitBtn({ pending, label, pendingLabel = 'Salvataggio…' }: {
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
+    <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
       {title && <h3 className="text-sm font-semibold text-white mb-4">{title}</h3>}
       {children}
     </div>
@@ -175,12 +167,12 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
 
       {newToken && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-gray-900 border border-green-700 rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl">
+          <div className="rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(34,197,94,0.25)', backdropFilter: 'blur(20px)' }}>
             <h3 className="text-sm font-semibold text-green-400 mb-1">Token creato</h3>
             <p className="text-xs text-gray-400 mb-4">
               Copialo adesso — non sarà più visibile dopo aver chiuso questa finestra.
             </p>
-            <code className="block bg-gray-950 border border-green-800 rounded-lg px-4 py-3 text-green-400 font-mono text-xs break-all leading-relaxed">
+            <code className="block rounded-lg px-4 py-3 text-green-400 font-mono text-xs break-all leading-relaxed" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(34,197,94,0.15)' }}>
               {newToken}
             </code>
             <div className="flex items-center gap-4 mt-4">
@@ -205,7 +197,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
         {active.length === 0 ? (
           <p className="text-sm text-gray-500">Nessun token attivo.</p>
         ) : (
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-white/[0.06]">
             {active.map((t) => (
               <div key={t.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
                 <div>
@@ -259,10 +251,10 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: 'text-yellow-400 bg-yellow-950 border-yellow-800',
-  team_leader: 'text-blue-400 bg-blue-950 border-blue-800',
-  developer: 'text-green-400 bg-green-950 border-green-800',
-  guest: 'text-gray-400 bg-gray-800 border-gray-700',
+  admin: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
+  team_leader: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+  developer: 'text-green-400 bg-green-500/10 border-green-500/20',
+  guest: 'text-gray-400 bg-gray-500/10 border-gray-500/20',
 };
 
 
@@ -293,7 +285,7 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl">
+      <div className="rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}>
         <h3 className="text-sm font-semibold text-white mb-1">Reset password</h3>
         <p className="text-xs text-gray-400 mb-4">
           Imposta una nuova password per <strong className="text-white">{user.displayName}</strong>
@@ -354,7 +346,7 @@ function UsersTab({
       )}
 
       <Card title="Utenti registrati">
-        <div className="divide-y divide-gray-800">
+        <div className="divide-y divide-white/[0.06]">
           {users.map((u) => (
             <div key={u.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
               <div className="flex items-center gap-3">
@@ -400,7 +392,8 @@ function UsersTab({
             <select
               name="role"
               defaultValue="developer"
-              className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
               {isAdmin && <option value="admin">Admin</option>}
               {isAdmin && <option value="team_leader">Team Leader</option>}
@@ -416,138 +409,166 @@ function UsersTab({
 }
 
 
-/* ── Tab: Grant ── */
-function GrantsTab({
-  session,
+/* ── Tab: Membri ── */
+function MembriTab({
   users,
-  projects,
   grantsPerProject,
 }: {
-  session: SessionInfo;
   users: User[];
-  projects: Project[];
   grantsPerProject: { project: Project; grants: Grant[] }[];
 }) {
 
-  const [grantState, grantAction, grantPending] = useActionState(createGrantAction, {});
-  const formRef = useRef<HTMLFormElement>(null);
-  const [localGrants, setLocalGrants] = useState(grantsPerProject);
+  const [selectedId, setSelectedId] = useState(grantsPerProject[0]?.project.id ?? '');
+  const [localGrantsPerProject, setLocalGrantsPerProject] = useState(grantsPerProject);
+  const [addUserId, setAddUserId] = useState('');
+  const [addPending, setAddPending] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
+  const { project, grants } = localGrantsPerProject.find((pg) => pg.project.id === selectedId)
+    ?? { project: grantsPerProject[0]?.project, grants: [] };
 
-    if (grantState.success) formRef.current?.reset();
-  }, [grantState.success]);
+  const ownerGrant = grants.find((g) => g.subjectType === 'user' && g.grantType === 'project.admin');
+  const ownerUser = ownerGrant ? users.find((u) => u.id === ownerGrant.subjectId) : null;
 
-  async function handleDelete(grantId: string, projectId: string) {
+  const developerGrants = grants.filter((g) => g.subjectType === 'user' && g.grantType === 'project.write');
+  const developerIds = new Set(developerGrants.map((g) => g.subjectId));
 
-    await deleteGrantAction(grantId);
-    setLocalGrants((prev) =>
+  const addableUsers = users.filter(
+    (u) => u.id !== ownerGrant?.subjectId && !developerIds.has(u.id),
+  );
+
+  function updateLocalGrants(projectId: string, updater: (g: Grant[]) => Grant[]) {
+
+    setLocalGrantsPerProject((prev) =>
       prev.map((pg) =>
-        pg.project.id === projectId
-          ? { ...pg, grants: pg.grants.filter((g) => g.id !== grantId) }
-          : pg,
+        pg.project.id === projectId ? { ...pg, grants: updater(pg.grants) } : pg,
       ),
     );
   }
 
-  function subjectLabel(grant: Grant): string {
+  async function handleAdd() {
 
-    if (grant.subjectType === 'user') {
-      return users.find((u) => u.id === grant.subjectId)?.username ?? grant.subjectId.slice(0, 8);
+    if (!addUserId || !project) return;
+    setAddPending(true);
+    setError('');
+
+    const res = await addDeveloperAction(project.id, addUserId);
+
+    if (res.error) {
+      setError(res.error);
+    } else {
+      updateLocalGrants(project.id, (prev) => [
+        ...prev,
+        { id: `tmp-pw-${addUserId}`, projectId: project.id, subjectType: 'user', subjectId: addUserId, grantType: 'project.write', grantedByUserId: null, createdAt: new Date().toISOString() },
+        { id: `tmp-tw-${addUserId}`, projectId: project.id, subjectType: 'user', subjectId: addUserId, grantType: 'task.write', grantedByUserId: null, createdAt: new Date().toISOString() },
+      ]);
+      setAddUserId('');
     }
 
-    return `team:${grant.subjectId.slice(0, 8)}`;
+    setAddPending(false);
+  }
+
+  async function handleRemove(userId: string) {
+
+    if (!project) return;
+    const res = await removeDeveloperAction(project.id, userId);
+
+    if (res.error) {
+      setError(res.error);
+    } else {
+      updateLocalGrants(project.id, (prev) =>
+        prev.filter((g) => !(g.subjectType === 'user' && g.subjectId === userId && g.grantType !== 'project.admin')),
+      );
+    }
+  }
+
+  if (grantsPerProject.length === 0) {
+    return <Card><p className="text-sm text-gray-500">Nessun progetto disponibile.</p></Card>;
   }
 
   return (
     <div className="space-y-5">
 
-      {localGrants.map(({ project, grants }) => (
-        <Card key={project.id} title={`${project.name} — grant attivi`}>
-          {grants.length === 0 ? (
-            <p className="text-sm text-gray-500">Nessun grant.</p>
-          ) : (
-            <div className="divide-y divide-gray-800">
-              {grants.map((g) => (
-                <div key={g.id} className="flex items-center justify-between py-2.5 first:pt-0 last:pb-0">
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400 bg-gray-800 px-2 py-0.5 rounded">
-                      {g.subjectType}
-                    </span>
-                    <span className="text-sm text-white font-mono text-xs">{subjectLabel(g)}</span>
-                    <span className="text-xs text-indigo-400 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
-                      {g.grantType}
-                    </span>
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-1">Progetto</label>
+        <select
+          value={selectedId}
+          onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
+          className="rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+        >
+          {grantsPerProject.map(({ project: p }) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
+        </select>
+      </div>
+
+      {error && <Alert type="error" msg={error} />}
+
+      <Card title="Proprietario">
+        {ownerUser ? (
+          <div className="flex items-center gap-3">
+            <div>
+              <p className="text-sm text-white font-medium">{ownerUser.displayName}</p>
+              <p className="text-xs text-gray-500 mt-0.5">@{ownerUser.username}</p>
+            </div>
+            <span className="text-xs px-2 py-0.5 rounded border text-yellow-400 bg-yellow-500/10 border-yellow-500/20">
+              Proprietario
+            </span>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-500">Nessun proprietario assegnato.</p>
+        )}
+      </Card>
+
+      <Card title="Sviluppatori">
+        {developerGrants.length === 0 ? (
+          <p className="text-sm text-gray-500 mb-4">Nessuno sviluppatore assegnato.</p>
+        ) : (
+          <div className="divide-y divide-white/[0.06] mb-4">
+            {developerGrants.map((g) => {
+              const dev = users.find((u) => u.id === g.subjectId);
+              if (!dev) return null;
+              return (
+                <div key={g.id} className="flex items-center justify-between py-3 first:pt-0">
+                  <div>
+                    <p className="text-sm text-white font-medium">{dev.displayName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">@{dev.username}</p>
                   </div>
                   <button
-                    onClick={() => void handleDelete(g.id, project.id)}
+                    onClick={() => void handleRemove(dev.id)}
                     className="text-xs text-red-400 hover:text-red-300 transition-colors"
                   >
                     Rimuovi
                   </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </Card>
-      ))}
+              );
+            })}
+          </div>
+        )}
 
-      <Card title="Aggiungi grant">
-        <form ref={formRef} action={grantAction} className="space-y-4 max-w-sm">
-          {grantState.error && <Alert type="error" msg={grantState.error} />}
-          {grantState.success && <Alert type="success" msg="Grant aggiunto." />}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Progetto</label>
+        {addableUsers.length > 0 && (
+          <div className="flex gap-2 items-center">
             <select
-              name="projectId"
-              className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+              className="flex-1 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+              <option value="">Seleziona utente…</option>
+              {addableUsers.map((u) => (
+                <option key={u.id} value={u.id}>{u.displayName} (@{u.username})</option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Tipo soggetto</label>
-            <select
-              name="subjectType"
-              className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            <button
+              onClick={() => void handleAdd()}
+              disabled={addPending || !addUserId}
+              className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
             >
-              <option value="user">user</option>
-              <option value="team">team</option>
-            </select>
+              {addPending ? '…' : 'Aggiungi'}
+            </button>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Utente</label>
-            <select
-              name="subjectId"
-              className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.displayName} (@{u.username})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Tipo grant</label>
-            <select
-              name="grantType"
-              className="w-full rounded-md bg-gray-800 border border-gray-700 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              {GRANT_TYPES.map((g) => (
-                <option key={g} value={g}>{g}</option>
-              ))}
-            </select>
-          </div>
-
-          <SubmitBtn pending={grantPending} label="Aggiungi grant" />
-        </form>
+        )}
       </Card>
     </div>
   );
@@ -571,14 +592,14 @@ export function SettingsTabs({
     'Sicurezza',
     'Token MCP',
     ...(canManageUsers ? (['Utenti'] as Tab[]) : []),
-    ...(isAdmin ? (['Grant'] as Tab[]) : []),
+    ...(isAdmin ? (['Membri'] as Tab[]) : []),
   ];
 
   const [active, setActive] = useState<Tab>(visibleTabs[0]);
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 bg-gray-900 border border-gray-800 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-6 rounded-xl p-1 w-fit" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
         {visibleTabs.map((tab) => (
           <button
             key={tab}
@@ -599,11 +620,9 @@ export function SettingsTabs({
       {active === 'Utenti' && canManageUsers && (
         <UsersTab currentUserId={session.userId} initialUsers={users} isAdmin={isAdmin} />
       )}
-      {active === 'Grant' && isAdmin && (
-        <GrantsTab
-          session={session}
+      {active === 'Membri' && isAdmin && (
+        <MembriTab
           users={users}
-          projects={projects}
           grantsPerProject={grantsPerProject}
         />
       )}

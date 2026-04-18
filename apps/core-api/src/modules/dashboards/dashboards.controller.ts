@@ -29,10 +29,5 @@ export class DashboardsController {
   }
 
 
-  @RequireGrant(GrantType.DASHBOARD_READ)
-  @Get('milestone-progress')
-  getMilestoneProgress(@Param('projectId') projectId: string) {
-
-    return this.dashboardsService.getMilestoneProgress(projectId);
-  }
 }
+

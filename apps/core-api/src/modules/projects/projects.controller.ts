@@ -60,10 +60,10 @@ export class ProjectsController {
   }
 
 
-  @RequireGrant(GrantType.PROJECT_WRITE)
+  @RequireGrant(GrantType.PROJECT_ADMIN)
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  delete(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
 
-    return this.projectsService.delete(id);
+    return this.projectsService.delete(id, user?.userId);
   }
 }
