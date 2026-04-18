@@ -24,7 +24,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
 - **Operational memory** — persistent memory entries, decision records, and session handoffs
 - **Team collaboration** — users, teams, project grants, role-based access control
-- **MCP agent access** — 19 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
+- **MCP agent access** — 23 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
 - **Web dashboard** — project status, task management, and memory entries via browser
 - **Async job layer** — background refresh, summary generation, and cleanup via BullMQ
 - **Local sync bridge** — offline-first SQLite journal with sync engine to the central database
@@ -37,7 +37,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 apps/
   core-api          NestJS — projects, phases, tasks, memory (port 3001)
   auth-access       NestJS — users, teams, sessions, MCP tokens (port 3002)
-  mcp-service       MCP stdio server — 19 tools for agent integration
+  mcp-service       MCP stdio server — 23 tools for agent integration
   web-app           Next.js 15 — dashboard, project detail, task management (port 3000)
   worker-jobs       NestJS + BullMQ — async jobs: refresh, summary, cleanup (port 3003)
   local-sync-bridge NestJS + SQLite — offline-first journal with sync engine (port 3004)
@@ -198,11 +198,15 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 | `get_project_changelog` | `project.read` | Structured changelog: tasks, phases, decisions, memory, audit |
 | `search_memory` | `project.read` | Full-text search over memory entries |
 | `list_recent_decisions` | `project.read` | List decisions, optionally filtered by status |
-| `create_task` | `task.write` | Create a task in a phase (auto-selects first phase if omitted); auto-logs to vault |
-| `update_task_status` | `task.write` | Update task status |
+| `create_task` | `task.write` | Create a task in a phase (auto-selects first phase if omitted); accepts description, assigneeId, dueDate |
+| `update_task` | `task.write` | Update title, description, phaseId, priority, assigneeId, or dueDate of an existing task |
+| `update_task_status` | `task.write` | Update task status; accepts completionReport when marking done |
+| `create_phase` | `project.write` | Create a roadmap phase; can be linked to a decision via decisionId |
+| `update_phase` | `project.write` | Update phase fields: title, status, dates, linked decision |
 | `create_memory_entry` | `memory.write` | Create a memory entry |
 | `create_handoff` | `memory.write` | Structured handoff entry for session continuity |
 | `create_decision` | `decision.write` | Record an architectural decision; auto-logs to vault |
+| `update_decision` | `decision.write` | Record outcome, change status, set resolvedAt |
 | `create_project` | `project.admin` | Create a new project; auto-logs to vault |
 | `get_architecture_map` | `codeflow.read` | Get the architecture graph (nodes + edges) |
 | `get_node_context` | `codeflow.read` | Full context for an architecture node |
@@ -236,7 +240,9 @@ Waves 1–3 are complete. The platform is functional end-to-end: REST APIs, MCP 
 
 Wave 3 delivered: semantic memory search, agent-readable project changelog, richer decision model, and memory summarization background jobs.
 
-Active work: **Wave 4 — Team and access hardening** (fine-grained MCP token scopes ✓, project ownership model ✓, per-project member management ✓, MCP auto-vault ✓).
+Wave 4 delivered: fine-grained MCP token scopes ✓, project ownership model ✓, per-project member management ✓, MCP auto-vault ✓, Phase–Decision linking ✓, interactive Roadmap and Decisions accordions ✓, expandable task detail rows ✓, 4 new MCP write tools (update_task, create_phase, update_phase, update_decision) ✓.
+
+Active work: **Wave 5 — Agent autonomy and UX polish**.
 
 > The project is pre-beta. No stable release has been published yet. Breaking changes may occur on `main`.
 

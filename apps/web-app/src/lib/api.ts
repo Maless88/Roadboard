@@ -55,6 +55,7 @@ export interface Project {
 export interface Phase {
   id: string;
   projectId: string;
+  decisionId: string | null;
   title: string;
   description: string | null;
   status: string;
@@ -74,6 +75,8 @@ export interface Task {
   priority: string;
   assigneeId: string | null;
   dueDate: string | null;
+  completionNotes: string | null;
+  completedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

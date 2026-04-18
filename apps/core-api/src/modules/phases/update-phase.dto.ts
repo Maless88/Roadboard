@@ -20,6 +20,10 @@ export class UpdatePhaseDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  decisionId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)

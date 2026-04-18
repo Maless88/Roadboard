@@ -109,7 +109,7 @@ export async function createTaskAction(
 
 export async function createPhaseAction(
   projectId: string,
-  data: { title: string; description?: string },
+  data: { title: string; description?: string; decisionId?: string },
 ): Promise<{ error?: string }> {
 
   const token = await getToken();

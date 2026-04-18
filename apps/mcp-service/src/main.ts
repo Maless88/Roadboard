@@ -106,10 +106,22 @@ const TOOLS = [
           type: "string",
           description: "The task title",
         },
+        description: {
+          type: "string",
+          description: "Detailed description of the task",
+        },
         priority: {
           type: "string",
           description: "Task priority",
           enum: ["low", "medium", "high", "critical"],
+        },
+        assigneeId: {
+          type: "string",
+          description: "User ID to assign the task to",
+        },
+        dueDate: {
+          type: "string",
+          description: "Due date in ISO 8601 format (e.g. 2026-05-01T00:00:00Z)",
         },
       },
       required: ["projectId", "title"],
@@ -117,7 +129,7 @@ const TOOLS = [
   },
   {
     name: "update_task_status",
-    description: "Update the status of a task",
+    description: "Update the status of a task. When closing a task (status=done), provide a detailed completionReport describing what was done: files modified with line numbers, tools called, memories written, and any other relevant detail.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -127,10 +139,85 @@ const TOOLS = [
         },
         status: {
           type: "string",
-          description: "The new status",
+          description: "The new status (todo, in_progress, done, blocked, cancelled)",
+        },
+        completionReport: {
+          type: "string",
+          description: "Detailed markdown report of what was done to complete the task. Required when status=done. Include: files modified (path + line numbers), tools called, memories written, decisions made, timestamp.",
         },
       },
       required: ["taskId", "status"],
+    },
+  },
+  {
+    name: "update_task",
+    description: "Update fields of an existing task (title, description, priority, phase, assignee, due date). Use update_task_status to change status.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        taskId: { type: "string", description: "The task ID" },
+        title: { type: "string", description: "New title" },
+        description: { type: "string", description: "New description" },
+        phaseId: { type: "string", description: "Move task to a different phase" },
+        priority: { type: "string", description: "New priority", enum: ["low", "medium", "high", "critical"] },
+        assigneeId: { type: "string", description: "User ID to assign the task to" },
+        dueDate: { type: "string", description: "Due date in ISO 8601 format" },
+      },
+      required: ["taskId"],
+    },
+  },
+  {
+    name: "create_phase",
+    description: "Create a new phase (roadmap milestone) in a project.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        title: { type: "string", description: "Phase title" },
+        description: { type: "string", description: "Phase description" },
+        decisionId: { type: "string", description: "Link this phase to a decision that it resolves" },
+        orderIndex: { type: "number", description: "Position in the roadmap (0-based)" },
+        status: { type: "string", description: "Phase status", enum: ["planned", "in_progress", "completed", "blocked"] },
+        startDate: { type: "string", description: "Start date in ISO 8601 format" },
+        endDate: { type: "string", description: "End date in ISO 8601 format" },
+      },
+      required: ["projectId", "title"],
+    },
+  },
+  {
+    name: "update_phase",
+    description: "Update fields of an existing phase (title, status, dates, linked decision).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        phaseId: { type: "string", description: "The phase ID" },
+        title: { type: "string", description: "New title" },
+        description: { type: "string", description: "New description" },
+        decisionId: { type: "string", description: "Link to a decision ID (or empty string to unlink)" },
+        orderIndex: { type: "number", description: "New position in the roadmap" },
+        status: { type: "string", description: "New status", enum: ["planned", "in_progress", "completed", "blocked"] },
+        startDate: { type: "string", description: "Start date in ISO 8601 format" },
+        endDate: { type: "string", description: "End date in ISO 8601 format" },
+      },
+      required: ["phaseId"],
+    },
+  },
+  {
+    name: "update_decision",
+    description: "Update an existing decision: change status, record outcome, add rationale, or mark as resolved.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        decisionId: { type: "string", description: "The decision ID" },
+        title: { type: "string", description: "New title" },
+        summary: { type: "string", description: "Updated summary" },
+        rationale: { type: "string", description: "Rationale for the decision" },
+        outcome: { type: "string", description: "Outcome or result of the decision" },
+        status: { type: "string", description: "New status", enum: ["open", "accepted", "rejected", "superseded"] },
+        impactLevel: { type: "string", description: "Impact level", enum: ["low", "medium", "high"] },
+        resolvedAt: { type: "string", description: "Resolution timestamp in ISO 8601 format" },
+      },
+      required: ["decisionId"],
     },
   },
   {
@@ -339,10 +426,14 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   search_memory: "project.read",
   list_recent_decisions: "project.read",
   create_task: "task.write",
+  update_task: "task.write",
   update_task_status: "task.write",
+  create_phase: "project.write",
+  update_phase: "project.write",
   create_memory_entry: "memory.write",
   create_handoff: "memory.write",
   create_decision: "decision.write",
+  update_decision: "decision.write",
   create_project: "project.admin",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
@@ -478,14 +569,35 @@ async function handleToolCall(
               purpose: "Create a new task in a project.",
               when: "Before starting any unit of work — always open a task first.",
               required_args: ["projectId", "title"],
-              optional_args: ["priority"],
+              optional_args: ["phaseId", "description", "priority", "assigneeId", "dueDate"],
+            },
+            {
+              name: "update_task",
+              purpose: "Update task fields: title, description, priority, phase, assignee, due date.",
+              when: "When task details change during execution (scope change, reassignment, deadline update).",
+              required_args: ["taskId"],
+              optional_args: ["title", "description", "phaseId", "priority", "assigneeId", "dueDate"],
             },
             {
               name: "update_task_status",
-              purpose: "Update the status of a task.",
+              purpose: "Update the status of a task. Provide completionReport when marking as done.",
               when: "As work progresses and on completion.",
               required_args: ["taskId", "status"],
-              optional_args: [],
+              optional_args: ["completionReport"],
+            },
+            {
+              name: "create_phase",
+              purpose: "Create a new roadmap phase in a project.",
+              when: "When planning a new milestone or sprint that groups related tasks.",
+              required_args: ["projectId", "title"],
+              optional_args: ["description", "decisionId", "orderIndex", "status", "startDate", "endDate"],
+            },
+            {
+              name: "update_phase",
+              purpose: "Update phase fields: title, status, dates, linked decision.",
+              when: "When a phase progresses, is blocked, or its timeline changes.",
+              required_args: ["phaseId"],
+              optional_args: ["title", "description", "decisionId", "orderIndex", "status", "startDate", "endDate"],
             },
             {
               name: "create_memory_entry",
@@ -496,8 +608,7 @@ async function handleToolCall(
             },
             {
               name: "create_handoff",
-              purpose:
-                "Create a structured handoff memory entry summarizing the session and next steps.",
+              purpose: "Create a structured handoff memory entry summarizing the session and next steps.",
               when: "At the END of every session, before disconnecting.",
               required_args: ["projectId", "summary"],
               optional_args: ["next_steps"],
@@ -508,6 +619,13 @@ async function handleToolCall(
               when: "After any architectural choice, technology selection, or significant design decision.",
               required_args: ["projectId", "title", "summary"],
               optional_args: ["rationale", "impactLevel"],
+            },
+            {
+              name: "update_decision",
+              purpose: "Update a decision: record outcome, change status, mark as resolved.",
+              when: "When a decision is accepted/rejected, its outcome is known, or it is superseded.",
+              required_args: ["decisionId"],
+              optional_args: ["title", "summary", "rationale", "outcome", "status", "impactLevel", "resolvedAt"],
             },
           ],
           decisions: [
@@ -659,7 +777,10 @@ async function handleToolCall(
         projectId,
         phaseId,
         title: args.title as string,
+        description: args.description as string | undefined,
         priority: args.priority as string | undefined,
+        assigneeId: args.assigneeId as string | undefined,
+        dueDate: args.dueDate as string | undefined,
       });
 
       const task = result as Record<string, unknown>;
@@ -677,7 +798,60 @@ async function handleToolCall(
       const result = await client.updateTaskStatus(
         args.taskId as string,
         args.status as string,
+        args.completionReport as string | undefined,
       );
+      return jsonResponse(result);
+    }
+
+    case "update_task": {
+      const result = await client.updateTask(args.taskId as string, {
+        title: args.title as string | undefined,
+        description: args.description as string | undefined,
+        phaseId: args.phaseId as string | undefined,
+        priority: args.priority as string | undefined,
+        assigneeId: args.assigneeId as string | undefined,
+        dueDate: args.dueDate as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
+    case "create_phase": {
+      const result = await client.createPhase({
+        projectId: args.projectId as string,
+        title: args.title as string,
+        description: args.description as string | undefined,
+        decisionId: args.decisionId as string | undefined,
+        orderIndex: args.orderIndex as number | undefined,
+        status: args.status as string | undefined,
+        startDate: args.startDate as string | undefined,
+        endDate: args.endDate as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
+    case "update_phase": {
+      const result = await client.updatePhase(args.phaseId as string, {
+        title: args.title as string | undefined,
+        description: args.description as string | undefined,
+        decisionId: args.decisionId as string | undefined,
+        orderIndex: args.orderIndex as number | undefined,
+        status: args.status as string | undefined,
+        startDate: args.startDate as string | undefined,
+        endDate: args.endDate as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
+    case "update_decision": {
+      const result = await client.updateDecision(args.decisionId as string, {
+        title: args.title as string | undefined,
+        summary: args.summary as string | undefined,
+        rationale: args.rationale as string | undefined,
+        outcome: args.outcome as string | undefined,
+        status: args.status as string | undefined,
+        impactLevel: args.impactLevel as string | undefined,
+        resolvedAt: args.resolvedAt as string | undefined,
+      });
       return jsonResponse(result);
     }
 

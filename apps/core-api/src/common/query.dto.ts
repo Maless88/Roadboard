@@ -19,6 +19,15 @@ export class ProjectScopedQueryDto {
 }
 
 
+export class FindPhasesQueryDto extends ProjectScopedQueryDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  decisionId?: string;
+}
+
+
 export class FindTasksQueryDto extends ProjectScopedQueryDto {
 
   @IsOptional()
