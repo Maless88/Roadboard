@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-19
+
+### Added
+- Phase–Decision link: `phases.decision_id` FK allows a phase to be marked as resolving a specific decision
+- Migration `20260418180000_phase_decision_link`: adds nullable `decision_id` column to `phases` table
+- `FindPhasesQueryDto` with optional `decisionId` filter on `GET /phases`
+- Phase accordion in Roadmap tab: clicking a phase expands the list of tasks belonging to it
+- Decision accordion in Decisions tab: clicking a decision expands the phases linked to it
+- Expandable task rows in Tasks and Roadmap tabs: clicking a task with description/dueDate/completionNotes shows details inline
+- Create-phase form now includes an optional "Decision" select to link the new phase at creation time
+- `create_task` MCP tool now accepts `description`, `assigneeId`, and `dueDate`
+- New MCP tool `update_task`: update title, description, phaseId, priority, assigneeId, dueDate of an existing task
+- New MCP tool `create_phase`: create a roadmap phase with all fields including `decisionId` link
+- New MCP tool `update_phase`: update any field of an existing phase (status, dates, linked decision)
+- New MCP tool `update_decision`: record outcome, change status to accepted/rejected/superseded, set `resolvedAt`
+- `initial_instructions` MCP bootstrap updated to document all 23 tools with required/optional args
+- `Task` interface in web-app extended with `completionNotes` and `completedAt` fields
+
+### Changed
+- Roadmap tab now appears before Tasks in the project detail navigation
+- "Decisioni" tab label renamed to "Decisions"
+- `DecisionsTab` fetches phases and groups them by `decisionId` to feed the accordion
+- `PhasesTab` fetches tasks and groups them by `phaseId` to feed the accordion
+
 ## [0.13.0] - 2026-04-14
 
 ### Added

@@ -15,6 +15,7 @@ export class PhasesService {
     return this.prisma.phase.create({
       data: {
         projectId: dto.projectId,
+        decisionId: dto.decisionId,
         title: dto.title,
         description: dto.description,
         orderIndex: dto.orderIndex,
@@ -26,10 +27,10 @@ export class PhasesService {
   }
 
 
-  async findAll(projectId: string) {
+  async findAll(projectId: string, decisionId?: string) {
 
     return this.prisma.phase.findMany({
-      where: { projectId },
+      where: { projectId, ...(decisionId ? { decisionId } : {}) },
       orderBy: { orderIndex: 'asc' },
     });
   }
@@ -55,6 +56,7 @@ export class PhasesService {
       where: { id },
       data: {
         projectId: dto.projectId,
+        decisionId: dto.decisionId,
         title: dto.title,
         description: dto.description,
         orderIndex: dto.orderIndex,

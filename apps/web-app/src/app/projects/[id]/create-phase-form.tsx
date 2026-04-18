@@ -2,18 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { createPhaseAction } from '@/app/actions';
+import type { Decision } from '@/lib/api';
 
 
 interface CreatePhaseFormProps {
   projectId: string;
+  decisions?: Decision[];
 }
 
 
-export function CreatePhaseForm({ projectId }: CreatePhaseFormProps) {
+export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormProps) {
 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [decisionId, setDecisionId] = useState('');
   const [error, setError] = useState('');
   const [isPending, startTransition] = useTransition();
 
@@ -27,6 +30,7 @@ export function CreatePhaseForm({ projectId }: CreatePhaseFormProps) {
       const result = await createPhaseAction(projectId, {
         title: title.trim(),
         description: description.trim() || undefined,
+        decisionId: decisionId || undefined,
       });
 
       if (result.error) {
@@ -36,6 +40,7 @@ export function CreatePhaseForm({ projectId }: CreatePhaseFormProps) {
 
       setTitle('');
       setDescription('');
+      setDecisionId('');
       setError('');
       setOpen(false);
     });
@@ -69,6 +74,19 @@ export function CreatePhaseForm({ projectId }: CreatePhaseFormProps) {
         rows={2}
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
+
+      {decisions.length > 0 && (
+        <select
+          value={decisionId}
+          onChange={(e) => setDecisionId(e.target.value)}
+          className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        >
+          <option value="">Nessuna decision collegata</option>
+          {decisions.map((d) => (
+            <option key={d.id} value={d.id}>{d.title}</option>
+          ))}
+        </select>
+      )}
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 

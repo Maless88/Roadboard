@@ -42,7 +42,6 @@ model Team {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   memberships   TeamMembership[]
-  projectGrants ProjectGrant[]   @relation("TeamGrants")
   projects      Project[]
 
   @@map("teams")
@@ -106,6 +105,7 @@ model Project {
 model Phase {
   id          String    @id @default(cuid())
   projectId   String    @map("project_id")
+  decisionId  String?   @map("decision_id")
   title       String
   description String?
   orderIndex  Int       @default(0) @map("order_index")
@@ -115,8 +115,9 @@ model Phase {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks   Task[]
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decision Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  tasks    Task[]
 
   @@map("phases")
 }
@@ -129,10 +130,12 @@ model Task {
   description String?
   status      String    @default("todo")
   priority    String    @default("medium")
-  assigneeId  String?   @map("assignee_id")
-  dueDate     DateTime? @map("due_date")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  assigneeId       String?   @map("assignee_id")
+  dueDate          DateTime? @map("due_date")
+  completionNotes  String?   @map("completion_notes")
+  completedAt      DateTime? @map("completed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase   Phase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
@@ -157,6 +160,7 @@ model Decision {
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phases  Phase[]
 
   @@map("decisions")
 }
@@ -209,7 +213,6 @@ model ProjectGrant {
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   grantedBy User?   @relation("GrantedByUser", fields: [grantedByUserId], references: [id])
-  team      Team?   @relation("TeamGrants", fields: [subjectId], references: [id], map: "project_grants_team_fk")
 
   @@map("project_grants")
 }

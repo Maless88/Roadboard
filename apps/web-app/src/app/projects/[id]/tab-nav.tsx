@@ -5,9 +5,9 @@ import { usePathname } from 'next/navigation';
 
 
 const TABS = [
-  { key: 'tasks', label: 'Tasks' },
   { key: 'phases', label: 'Roadmap' },
-  { key: 'decisions', label: 'Decisioni' },
+  { key: 'tasks', label: 'Tasks' },
+  { key: 'decisions', label: 'Decisions' },
   { key: 'memory', label: 'Memory' },
   { key: 'audit', label: 'Audit' },
 ] as const;

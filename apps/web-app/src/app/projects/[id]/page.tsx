@@ -22,7 +22,10 @@ import { CreateDecisionForm } from './create-decision-form';
 import { CreateMemoryForm } from './create-memory-form';
 import { MemorySearch } from './memory-search';
 import { DeleteProjectButton } from './delete-project-button';
-import type { Task } from '@/lib/api';
+import { PhaseAccordion } from './phase-accordion';
+import { DecisionAccordion } from './decision-accordion';
+import { TaskRow } from './task-row';
+import type { Task, Phase } from '@/lib/api';
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -264,13 +267,25 @@ async function TasksTab({ token, projectId }: { token: string; projectId: string
 
 async function PhasesTab({ token, projectId }: { token: string; projectId: string }) {
 
-  const phases = await listPhases(token, projectId);
+  const [phases, tasks, decisions] = await Promise.all([
+    listPhases(token, projectId),
+    listTasks(token, projectId),
+    listDecisions(token, projectId),
+  ]);
+
+  const tasksByPhase = tasks.reduce<Record<string, Task[]>>((acc, task) => {
+    if (task.phaseId) {
+      (acc[task.phaseId] ??= []).push(task);
+    }
+
+    return acc;
+  }, {});
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between mb-3">
         <p className="text-xs text-gray-500">{phases.length} fasi</p>
-        <CreatePhaseForm projectId={projectId} />
+        <CreatePhaseForm projectId={projectId} decisions={decisions} />
       </div>
 
       {phases.length === 0 && (
@@ -278,19 +293,12 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
       )}
 
       {phases.map((phase) => (
-        <div key={phase.id} className="rounded-xl p-4" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-sm font-medium text-white">{phase.title}</span>
-              {phase.description && (
-                <p className="text-xs text-gray-400 mt-0.5">{phase.description}</p>
-              )}
-            </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ml-4 ${STATUS_COLOR[phase.status] ?? 'bg-gray-700 text-gray-300'}`}>
-              {phase.status}
-            </span>
-          </div>
-        </div>
+        <PhaseAccordion
+          key={phase.id}
+          phase={phase}
+          tasks={tasksByPhase[phase.id] ?? []}
+          projectId={projectId}
+        />
       ))}
     </div>
   );
@@ -299,48 +307,37 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
 
 async function DecisionsTab({ token, projectId }: { token: string; projectId: string }) {
 
-  const decisions = await listDecisions(token, projectId);
+  const [decisions, phases] = await Promise.all([
+    listDecisions(token, projectId),
+    listPhases(token, projectId),
+  ]);
+
+  const phasesByDecision = phases.reduce<Record<string, Phase[]>>((acc, phase) => {
+    if (phase.decisionId) {
+      (acc[phase.decisionId] ??= []).push(phase);
+    }
+
+    return acc;
+  }, {});
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{decisions.length} decisioni</p>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs text-gray-500">{decisions.length} decisions</p>
         <CreateDecisionForm projectId={projectId} />
       </div>
 
       {decisions.length === 0 && (
-        <p className="text-xs text-gray-500">Nessuna decisione ancora.</p>
+        <p className="text-xs text-gray-500">Nessuna decision ancora.</p>
       )}
 
-      <div className="grid gap-3">
-        {decisions.map((d) => (
-          <div key={d.id} className="rounded-xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <span className="text-sm font-medium text-white">{d.title}</span>
-              <div className="flex items-center gap-2 shrink-0">
-                {d.impactLevel && (
-                  <span className={`text-xs font-medium ${DECISION_IMPACT_COLOR[d.impactLevel] ?? 'text-gray-400'}`}>
-                    {d.impactLevel}
-                  </span>
-                )}
-                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[d.status] ?? 'bg-gray-700 text-gray-300'}`}>
-                  {d.status}
-                </span>
-              </div>
-            </div>
-            <p className="text-xs text-gray-400">{d.summary}</p>
-            {d.rationale && (
-              <p className="text-xs text-gray-500 mt-1 italic">{d.rationale}</p>
-            )}
-            {d.outcome && (
-              <p className="text-xs text-green-400 mt-1">Outcome: {d.outcome}</p>
-            )}
-            {d.resolvedAt && (
-              <p className="text-xs text-gray-600 mt-1">Risolto: {new Date(d.resolvedAt).toLocaleDateString('it-IT')}</p>
-            )}
-          </div>
-        ))}
-      </div>
+      {decisions.map((d) => (
+        <DecisionAccordion
+          key={d.id}
+          decision={d}
+          phases={phasesByDecision[d.id] ?? []}
+        />
+      ))}
     </div>
   );
 }
@@ -443,23 +440,8 @@ function TaskList({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-      {tasks.map((task) => (
-        <div key={task.id} className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
-          <div className="flex items-center gap-3 min-w-0">
-            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLOR[task.status] ?? 'bg-gray-700 text-gray-300'}`}>
-              {task.status.replace('_', ' ')}
-            </span>
-            <span className="text-sm text-white truncate">{task.title}</span>
-          </div>
-          <div className="flex items-center gap-3 shrink-0 ml-4">
-            {task.priority && (
-              <span className={`text-xs font-medium ${TASK_PRIORITY_COLOR[task.priority] ?? 'text-gray-400'}`}>
-                {task.priority}
-              </span>
-            )}
-            <TaskStatusSelect taskId={task.id} projectId={projectId} currentStatus={task.status} />
-          </div>
-        </div>
+      {tasks.map((task, i) => (
+        <TaskRow key={task.id} task={task} projectId={projectId} isLast={i === tasks.length - 1} />
       ))}
     </div>
   );

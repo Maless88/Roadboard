@@ -13,7 +13,7 @@ import {
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
-import { ProjectScopedQueryDto } from '../../common/query.dto';
+import { FindPhasesQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { PhasesService } from './phases.service';
 import { CreatePhaseDto } from './create-phase.dto';
@@ -37,9 +37,9 @@ export class PhasesController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(@Query() query: ProjectScopedQueryDto) {
+  findAll(@Query() query: FindPhasesQueryDto) {
 
-    return this.phasesService.findAll(query.projectId);
+    return this.phasesService.findAll(query.projectId, query.decisionId);
   }
 
 

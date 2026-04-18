@@ -108,11 +108,63 @@ export class CoreApiClient {
   }
 
 
+  async createPhase(data: {
+    projectId: string;
+    title: string;
+    description?: string;
+    decisionId?: string;
+    orderIndex?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/phases`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api createPhase failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async updatePhase(phaseId: string, data: {
+    title?: string;
+    description?: string;
+    decisionId?: string;
+    orderIndex?: number;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/phases/${phaseId}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api updatePhase failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
   async createTask(data: {
     projectId: string;
     phaseId: string;
     title: string;
+    description?: string;
     priority?: string;
+    assigneeId?: string;
+    dueDate?: string;
   }): Promise<unknown> {
 
     const res = await fetch(`${BASE_URL}/tasks`, {
@@ -129,16 +181,49 @@ export class CoreApiClient {
   }
 
 
-  async updateTaskStatus(taskId: string, status: string): Promise<unknown> {
+  async updateTaskStatus(
+    taskId: string,
+    status: string,
+    completionNotes?: string,
+  ): Promise<unknown> {
+
+    const body: Record<string, unknown> = { status };
+
+    if (completionNotes !== undefined) {
+      body.completionNotes = completionNotes;
+    }
 
     const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
       method: "PATCH",
       headers: this.headers(),
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
       throw new Error(`core-api updateTaskStatus failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async updateTask(taskId: string, data: {
+    title?: string;
+    description?: string;
+    phaseId?: string;
+    priority?: string;
+    assigneeId?: string;
+    dueDate?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api updateTask failed: ${res.status}`);
     }
 
     return res.json() as Promise<unknown>;
@@ -222,6 +307,30 @@ export class CoreApiClient {
 
     if (!res.ok) {
       throw new Error(`core-api createDecision failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async updateDecision(decisionId: string, data: {
+    title?: string;
+    summary?: string;
+    rationale?: string;
+    outcome?: string;
+    status?: string;
+    impactLevel?: string;
+    resolvedAt?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/decisions/${decisionId}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api updateDecision failed: ${res.status}`);
     }
 
     return res.json() as Promise<unknown>;

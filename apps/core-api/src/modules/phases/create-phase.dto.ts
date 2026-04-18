@@ -18,6 +18,10 @@ export class CreatePhaseDto {
   description?: string;
 
   @IsOptional()
+  @IsString()
+  decisionId?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
