@@ -3,7 +3,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
-  login, logout, updateTaskStatus,
+  login, logout, register, updateTaskStatus,
   createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
@@ -22,6 +22,33 @@ export async function loginAction(
     await setToken(token);
   } catch {
     return { error: 'Username o password non corretti.' };
+  }
+
+  redirect('/dashboard');
+}
+
+
+export async function registerAction(
+  _prev: { error?: string },
+  formData: FormData,
+): Promise<{ error?: string }> {
+
+  const username = formData.get('username') as string;
+  const displayName = formData.get('displayName') as string;
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const confirmPassword = formData.get('confirmPassword') as string;
+
+  if (password !== confirmPassword) {
+    return { error: 'Le password non coincidono.' };
+  }
+
+  try {
+    const { token } = await register({ username, displayName, email, password });
+    await setToken(token);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Registrazione fallita.';
+    return { error: msg };
   }
 
   redirect('/dashboard');
