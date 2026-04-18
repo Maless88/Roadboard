@@ -6,6 +6,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { PrismaClient } from '@roadboard/database';
 import { GrantType } from '@roadboard/domain';
 import { optionalEnv } from '@roadboard/config';
 import { REQUIRED_GRANT_KEY } from './require-grant.decorator';
@@ -31,7 +32,10 @@ export class GrantCheckGuard implements CanActivate {
   private readonly authAccessHost: string;
   private readonly authAccessPort: string;
 
-  constructor(@Inject(Reflector) private readonly reflector: Reflector) {
+  constructor(
+    @Inject(Reflector) private readonly reflector: Reflector,
+    @Inject('PRISMA') private readonly prisma: PrismaClient,
+  ) {
 
     this.authAccessHost = optionalEnv('AUTH_ACCESS_HOST', 'localhost');
     this.authAccessPort = optionalEnv('AUTH_ACCESS_PORT', '4002');
@@ -56,7 +60,7 @@ export class GrantCheckGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
-    const projectId = this.extractProjectId(request);
+    const projectId = await this.resolveProjectId(request);
 
     if (!projectId) {
       return true;
@@ -94,7 +98,7 @@ export class GrantCheckGuard implements CanActivate {
   }
 
 
-  private extractProjectId(request: Record<string, unknown>): string | undefined {
+  private async resolveProjectId(request: Record<string, unknown>): Promise<string | undefined> {
 
     const body = request.body as Record<string, unknown> | undefined;
 
@@ -112,6 +116,28 @@ export class GrantCheckGuard implements CanActivate {
 
     if (params && typeof params.projectId === 'string') {
       return params.projectId;
+    }
+
+    // Resolve via DB when only a resource ID is in params (e.g. PATCH /tasks/:id)
+    if (params && typeof params.id === 'string') {
+
+      const task = await this.prisma.task.findUnique({
+        where: { id: params.id },
+        select: { projectId: true },
+      }).catch(() => null);
+
+      if (task) {
+        return task.projectId;
+      }
+
+      const phase = await this.prisma.phase.findUnique({
+        where: { id: params.id },
+        select: { projectId: true },
+      }).catch(() => null);
+
+      if (phase) {
+        return phase.projectId;
+      }
     }
 
     return undefined;
