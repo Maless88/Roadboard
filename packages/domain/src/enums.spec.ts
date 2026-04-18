@@ -60,8 +60,8 @@ describe('GrantType', () => {
     expect(GrantType.PROJECT_ADMIN).toBe('project.admin');
   });
 
-  it('covers 8 grant types', () => {
-    expect(Object.values(GrantType)).toHaveLength(8);
+  it('covers 11 grant types', () => {
+    expect(Object.values(GrantType)).toHaveLength(11);
   });
 });
 
