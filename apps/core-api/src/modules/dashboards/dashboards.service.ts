@@ -12,18 +12,12 @@ export class DashboardsService {
 
     const [
       tasksByStatus,
-      milestonesByStatus,
       activePhases,
       recentMemory,
       recentDecisions,
       urgentTasks,
     ] = await Promise.all([
       this.prisma.task.groupBy({
-        by: ['status'],
-        where: { projectId },
-        _count: { id: true },
-      }),
-      this.prisma.milestone.groupBy({
         by: ['status'],
         where: { projectId },
         _count: { id: true },
@@ -63,16 +57,9 @@ export class DashboardsService {
       taskSummary[row.status] = row._count.id;
     }
 
-    const milestoneSummary: Record<string, number> = {};
-
-    for (const row of milestonesByStatus) {
-      milestoneSummary[row.status] = row._count.id;
-    }
-
     return {
       projectId,
       tasks: taskSummary,
-      milestones: milestoneSummary,
       activePhases,
       recentMemory,
       recentDecisions,
@@ -99,24 +86,5 @@ export class DashboardsService {
   }
 
 
-  async getMilestoneProgress(projectId: string) {
-
-    const milestones = await this.prisma.milestone.findMany({
-      where: { projectId },
-      select: { id: true, title: true, status: true, dueDate: true, orderIndex: true },
-      orderBy: { orderIndex: 'asc' },
-    });
-
-    const total = milestones.length;
-    const completed = milestones.filter(m => m.status === 'completed').length;
-    const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    return {
-      projectId,
-      total,
-      completed,
-      percent,
-      milestones,
-    };
-  }
 }
+

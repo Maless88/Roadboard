@@ -56,7 +56,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-gray-700 bg-gray-900 p-4 space-y-3">
+    <form onSubmit={handleSubmit} className="glass-card rounded-xl p-4 space-y-3">
       <div className="flex gap-2">
         <input
           autoFocus
@@ -64,12 +64,12 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
           placeholder="Titolo"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="flex-1 text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="glass-input flex-1 text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <select
           value={type}
           onChange={(e) => setType(e.target.value)}
-          className="text-xs bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="glass-input text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
           <option value="done">done</option>
           <option value="next">next</option>
@@ -87,7 +87,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={3}
-        className="w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+        className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
 
       {error && <p className="text-xs text-red-400">{error}</p>}
@@ -96,14 +96,14 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
         <button
           type="submit"
           disabled={isPending || !title.trim()}
-          className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+          className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
           {isPending ? 'Salvo…' : 'Crea'}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
-          className="text-xs px-3 py-1.5 rounded bg-gray-700 text-gray-300 hover:bg-gray-600 transition-colors"
+          className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
           Annulla
         </button>

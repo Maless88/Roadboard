@@ -42,7 +42,6 @@ export class TasksController {
     return this.tasksService.findAll({
       projectId: query.projectId,
       phaseId: query.phaseId,
-      milestoneId: query.milestoneId,
       status: query.status,
     });
   }

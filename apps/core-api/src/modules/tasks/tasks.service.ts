@@ -8,7 +8,6 @@ import { UpdateTaskDto } from './update-task.dto';
 interface FindAllFilters {
   projectId: string;
   phaseId?: string;
-  milestoneId?: string;
   status?: TaskStatus;
 }
 
@@ -21,11 +20,10 @@ export class TasksService {
 
   async create(dto: CreateTaskDto) {
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         projectId: dto.projectId,
         phaseId: dto.phaseId,
-        milestoneId: dto.milestoneId,
         title: dto.title,
         description: dto.description,
         status: dto.status,
@@ -34,6 +32,11 @@ export class TasksService {
         dueDate: dto.dueDate,
       },
     });
+
+    await this.recomputePhaseStatus(task.phaseId);
+    await this.recomputeProjectStatus(task.projectId);
+
+    return task;
   }
 
 
@@ -43,10 +46,6 @@ export class TasksService {
 
     if (filters.phaseId) {
       where.phaseId = filters.phaseId;
-    }
-
-    if (filters.milestoneId) {
-      where.milestoneId = filters.milestoneId;
     }
 
     if (filters.status) {
@@ -71,14 +70,12 @@ export class TasksService {
 
   async update(id: string, dto: UpdateTaskDto) {
 
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
-    return this.prisma.task.update({
+    const task = await this.prisma.task.update({
       where: { id },
       data: {
-        projectId: dto.projectId,
         phaseId: dto.phaseId,
-        milestoneId: dto.milestoneId,
         title: dto.title,
         description: dto.description,
         status: dto.status,
@@ -87,13 +84,82 @@ export class TasksService {
         dueDate: dto.dueDate,
       },
     });
+
+    const phasesToRecompute = new Set<string>([task.phaseId]);
+
+    if (dto.phaseId && dto.phaseId !== existing.phaseId) {
+      phasesToRecompute.add(existing.phaseId);
+    }
+
+    for (const phaseId of phasesToRecompute) {
+      await this.recomputePhaseStatus(phaseId);
+    }
+
+    await this.recomputeProjectStatus(task.projectId);
+
+    return task;
   }
 
 
   async delete(id: string) {
 
-    await this.findOne(id);
+    const task = await this.findOne(id);
 
-    return this.prisma.task.delete({ where: { id } });
+    await this.prisma.task.delete({ where: { id } });
+
+    await this.recomputePhaseStatus(task.phaseId);
+    await this.recomputeProjectStatus(task.projectId);
+  }
+
+
+  private async recomputePhaseStatus(phaseId: string): Promise<void> {
+
+    const tasks = await this.prisma.task.findMany({
+      where: { phaseId },
+      select: { status: true },
+    });
+
+    if (tasks.length === 0) return;
+
+    let status: string;
+    const statuses = tasks.map((t) => t.status);
+
+    if (statuses.every((s) => s === 'done' || s === 'cancelled')) {
+      status = 'completed';
+    } else if (statuses.some((s) => s === 'blocked')) {
+      status = 'blocked';
+    } else if (statuses.some((s) => s === 'in_progress')) {
+      status = 'in_progress';
+    } else {
+      status = 'planned';
+    }
+
+    await this.prisma.phase.update({ where: { id: phaseId }, data: { status } });
+  }
+
+
+  private async recomputeProjectStatus(projectId: string): Promise<void> {
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { status: true },
+    });
+
+    if (!project || project.status === 'archived' || project.status === 'paused') return;
+
+    const phases = await this.prisma.phase.findMany({
+      where: { projectId },
+      select: { status: true },
+    });
+
+    if (phases.length === 0) return;
+
+    const allCompleted = phases.every((p) => p.status === 'completed');
+
+    if (allCompleted) {
+      await this.prisma.project.update({ where: { id: projectId }, data: { status: 'completed' } });
+    } else if (project.status === 'completed') {
+      await this.prisma.project.update({ where: { id: projectId }, data: { status: 'active' } });
+    }
   }
 }

@@ -33,7 +33,7 @@ async function ensurePhase(data: {
 
 async function ensureTask(data: {
   projectId: string;
-  phaseId?: string;
+  phaseId: string;
   title: string;
   description?: string;
   status?: string;

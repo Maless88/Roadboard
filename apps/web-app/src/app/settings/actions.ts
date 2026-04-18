@@ -11,6 +11,7 @@ import {
   resetUserPassword,
   createGrant,
   deleteGrant,
+  listGrants,
   validateSession,
 } from '@/lib/api';
 
@@ -177,6 +178,53 @@ export async function deleteGrantAction(grantId: string): Promise<void> {
 
   await deleteGrant(token, grantId);
   revalidatePath('/settings');
+}
+
+
+export async function addDeveloperAction(
+  projectId: string,
+  userId: string,
+): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  const session = await validateSession(token);
+
+  if (!session) return { error: 'Sessione non valida' };
+
+  try {
+    await Promise.all([
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.write', grantedByUserId: session.userId }),
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'task.write', grantedByUserId: session.userId }),
+    ]);
+    revalidatePath('/settings');
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+
+export async function removeDeveloperAction(
+  projectId: string,
+  userId: string,
+): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  try {
+    const grants = await listGrants(token, projectId);
+    const userGrants = grants.filter((g) => g.subjectType === 'user' && g.subjectId === userId);
+    await Promise.all(userGrants.map((g) => deleteGrant(token, g.id)));
+    revalidatePath('/settings');
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 

@@ -18,11 +18,6 @@ export class UpdateTaskDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
-  milestoneId?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
   title?: string;
 
   @IsOptional()

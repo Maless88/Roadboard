@@ -13,13 +13,6 @@ export enum PhaseStatus {
   BLOCKED = 'blocked',
 }
 
-export enum MilestoneStatus {
-  PLANNED = 'planned',
-  IN_PROGRESS = 'in_progress',
-  COMPLETED = 'completed',
-  MISSED = 'missed',
-}
-
 export enum TaskStatus {
   TODO = 'todo',
   IN_PROGRESS = 'in_progress',
@@ -118,7 +111,6 @@ export enum ArchitectureNodeLinkType {
 export enum ArchitectureEntityType {
   TASK = 'task',
   DECISION = 'decision',
-  MILESTONE = 'milestone',
   MEMORY_ENTRY = 'memory_entry',
 }
 

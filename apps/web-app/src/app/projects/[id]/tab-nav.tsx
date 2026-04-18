@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 
 
 const TABS = [
-  { key: 'overview', label: 'Overview' },
   { key: 'tasks', label: 'Tasks' },
   { key: 'phases', label: 'Roadmap' },
   { key: 'decisions', label: 'Decisioni' },
@@ -24,7 +23,7 @@ export function TabNav({ activeTab }: TabNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex gap-1 border-b border-gray-800 mb-6">
+    <nav className="flex gap-1 border-b mb-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab.key;
 

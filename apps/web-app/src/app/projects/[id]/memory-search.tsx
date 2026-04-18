@@ -34,7 +34,7 @@ export function MemorySearch({ defaultValue = '' }: { defaultValue?: string }) {
       defaultValue={defaultValue}
       onChange={handleChange}
       className={[
-        'w-full text-sm bg-gray-800 border border-gray-700 rounded px-3 py-1.5',
+        'glass-input w-full text-sm rounded-lg px-3 py-1.5',
         'text-white placeholder-gray-500',
         'focus:outline-none focus:ring-1 focus:ring-indigo-500',
         isPending ? 'opacity-60' : '',

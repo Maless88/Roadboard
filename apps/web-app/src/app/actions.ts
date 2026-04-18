@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import {
   login, logout, updateTaskStatus,
-  createTask, createPhase, createDecision, createMilestone, createMemoryEntry, createProject, deleteProject,
+  createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
 
@@ -60,7 +60,7 @@ export async function updateTaskStatusAction(
 
 export async function createTaskAction(
   projectId: string,
-  data: { title: string; phaseId?: string; priority?: string; description?: string },
+  data: { title: string; phaseId: string; priority?: string; description?: string },
 ): Promise<{ error?: string }> {
 
   const token = await getToken();
@@ -115,28 +115,6 @@ export async function createDecisionAction(
 
   try {
     await createDecision(token, { projectId, ...data });
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-
-  revalidatePath(`/projects/${projectId}`);
-  return {};
-}
-
-
-export async function createMilestoneAction(
-  projectId: string,
-  data: { title: string; phaseId?: string; description?: string; dueDate?: string },
-): Promise<{ error?: string }> {
-
-  const token = await getToken();
-
-  if (!token) {
-    return { error: 'Not authenticated' };
-  }
-
-  try {
-    await createMilestone(token, { projectId, ...data });
   } catch (e) {
     return { error: (e as Error).message };
   }

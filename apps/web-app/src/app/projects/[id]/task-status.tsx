@@ -32,7 +32,7 @@ export function TaskStatusSelect({ taskId, projectId, currentStatus }: TaskStatu
       value={currentStatus}
       onChange={handleChange}
       disabled={isPending}
-      className="text-xs rounded bg-gray-800 border border-gray-700 text-gray-300 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+      className="glass-input text-xs rounded-lg text-gray-300 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
     >
       {TASK_STATUSES.map((s) => (
         <option key={s} value={s}>

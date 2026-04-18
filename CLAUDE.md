@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # MASTER PROTOCOL
 
 ## 1. CODING RULES & COMMUNICATION
@@ -47,52 +51,88 @@
 Roadboard 2.0 is a multi-project execution, memory, and collaboration platform for humans and AI agents.
 Monorepo TypeScript-first: NestJS backend services, Next.js frontend, PostgreSQL central DB, SQLite local.
 
+## Commands
+
+```bash
+# Full bootstrap (install, start infra, migrate, seed)
+pnpm bootstrap
+
+# Infra
+pnpm docker:up        # start PostgreSQL + Redis via docker compose
+pnpm docker:down
+
+# Development (all apps in watch mode)
+pnpm dev
+
+# Build / lint / typecheck (all workspaces via Turborepo)
+pnpm build
+pnpm lint
+pnpm typecheck
+
+# Test (all workspaces)
+pnpm test
+
+# Test a single package/app
+pnpm --filter @roadboard/core-api test
+pnpm --filter @roadboard/domain test
+
+# Test a single file (run from inside the package dir, or use vitest directly)
+pnpm --filter @roadboard/core-api exec vitest run src/modules/tasks/tasks.service.spec.ts
+
+# Database
+pnpm db:migrate       # run pending Prisma migrations (ALWAYS use this, never db push)
+pnpm db:generate      # regenerate Prisma client after schema changes
+pnpm db:seed          # seed the database
+pnpm --filter @roadboard/database db:studio   # open Prisma Studio
+```
+
+Environment: copy `.env.example` to `.env` at repo root. Key vars:
+- `DATABASE_URL` — PostgreSQL on port 5433 (Docker)
+- `CORE_API_PORT=3001`, `AUTH_ACCESS_PORT=3002`, `WORKER_JOBS_PORT=3003`, `LOCAL_SYNC_PORT=3004`
+- `JOURNAL_DB_PATH=.agent/journal.db` — SQLite for local-sync-bridge
+
 ## Architecture
-- `apps/core-api` — NestJS, domain CRUD (projects, phases, milestones, tasks, memory)
-- `apps/auth-access` — NestJS, users, teams, memberships, grants, sessions, MCP tokens
-- `apps/mcp-service` — MCP server, read/write tools for agents
-- `apps/web-app` — Next.js frontend (post-MVP)
-- `packages/domain` — shared enums and domain types
-- `packages/database` — Prisma schema, migrations, seed
-- `packages/auth` — password hashing, token utilities
-- `packages/grants` — permission logic
-- `packages/mcp-contracts` — MCP tool schemas
-- `packages/config` — env helpers
 
-## Stack & Tooling
-- pnpm workspaces + Turborepo
-- NestJS with Fastify adapter
-- Prisma ORM with PostgreSQL
-- Vitest for testing
-- TypeScript strict mode everywhere
+```
+apps/
+  core-api          NestJS + Fastify, port 3001 — project/phase/task/memory CRUD
+  auth-access       NestJS + Fastify, port 3002 — users, teams, sessions, MCP tokens, RBAC
+  mcp-service       MCP stdio server — 17 tools for AI agents (reads from core-api + auth-access)
+  web-app           Next.js 15, port 3000 — frontend dashboard
+  worker-jobs       NestJS + BullMQ + Redis, port 3003 — async background jobs
+  local-sync-bridge NestJS + SQLite, port 3004 — offline-first journal with sync engine
 
-## Code Conventions
-- Language: TypeScript strict, no `any`
-- Modules: NestJS module pattern (controller + service + DTOs)
-- Naming: camelCase for variables/functions, PascalCase for classes/types/enums
-- DB columns: snake_case (Prisma `@map`)
-- API style: REST, JSON
-- Imports: use workspace aliases (`@roadboard/domain`, `@roadboard/database`, etc.)
-- No barrel exports in app code — only in shared packages `index.ts`
+packages/
+  domain            shared enums and domain types
+  database          Prisma schema + migrations + seed (PostgreSQL)
+  auth              password hashing, JWT/session token utilities
+  grants            RBAC permission logic
+  mcp-contracts     MCP tool input/output schemas
+  api-contracts     shared REST API types
+  local-storage     SQLite local-storage abstraction
+  config            env parsing helpers
+  observability     logging/tracing setup
+```
+
+All services expose `/health`. Turborepo task graph: `build` depends on `^build` (packages build before apps).
 
 ## Patterns
-- Each NestJS module has its own folder under `src/modules/<name>/`
-- DTOs are colocated with their module
-- Guards/interceptors go in `src/common/`
-- Integration tests go in `test/` at app root
-- Unit tests colocated with source files (`*.spec.ts`)
+- Each NestJS module lives under `src/modules/<name>/` with controller, service, and colocated DTOs.
+- Guards/interceptors go in `src/common/`.
+- Integration tests go in `test/` at the app root; unit tests are colocated (`*.spec.ts`).
+- Vitest `globals: true` — no need to import `describe`/`it`/`expect`.
+- Imports use workspace aliases: `@roadboard/domain`, `@roadboard/database`, etc.
+- No barrel exports in app code — only in shared packages via `index.ts`.
 
-## Commit Messages
-- Conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
-- Scope by package/app: `feat(core-api): add project CRUD`
-
-## Current Phase
-Wave 1, Sprint 1 — API/MCP-first approach (no web UI yet).
-Priority: monorepo bootstrap → shared packages → core-api → auth-access → mcp-service.
+## Code Conventions
+- TypeScript strict, no `any`
+- camelCase variables/functions, PascalCase classes/types/enums
+- DB columns: snake_case with Prisma `@map`
+- REST + JSON API style
+- Business logic in services, never in controllers
 
 ## Do NOT
-- Add web UI code until explicitly asked
 - Use `any` types
-- Skip Prisma migrations (always migrate, never push)
-- Put business logic in controllers — keep it in services
+- Skip Prisma migrations (always `db:migrate`, never `db push`)
+- Put business logic in controllers
 - Create unnecessary abstractions or premature optimizations

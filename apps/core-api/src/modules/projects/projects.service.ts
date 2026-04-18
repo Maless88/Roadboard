@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
 import { CreateProjectDto } from './create-project.dto';
@@ -20,6 +20,7 @@ export class ProjectsService {
         description: dto.description,
         ownerTeamId: dto.ownerTeamId,
         status: dto.status,
+        ownerUserId: createdByUserId ?? null,
       },
     });
 
@@ -32,6 +33,18 @@ export class ProjectsService {
         grantedByUserId: createdByUserId ?? null,
       },
     });
+
+    if (createdByUserId) {
+      await this.prisma.projectGrant.create({
+        data: {
+          projectId: project.id,
+          subjectType: GrantSubjectType.USER,
+          subjectId: createdByUserId,
+          grantType: GrantType.PROJECT_ADMIN,
+          grantedByUserId: createdByUserId,
+        },
+      });
+    }
 
     return project;
   }
@@ -74,9 +87,13 @@ export class ProjectsService {
   }
 
 
-  async delete(id: string) {
+  async delete(id: string, requestingUserId?: string) {
 
-    await this.findOne(id);
+    const project = await this.findOne(id);
+
+    if (project.ownerUserId && requestingUserId && project.ownerUserId !== requestingUserId) {
+      throw new ForbiddenException('Only the project owner can delete this project');
+    }
 
     return this.prisma.project.delete({ where: { id } });
   }

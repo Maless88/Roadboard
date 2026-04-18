@@ -93,8 +93,24 @@ export class CoreApiClient {
   }
 
 
+  async listPhases(projectId: string): Promise<unknown[]> {
+
+    const params = new URLSearchParams({ projectId });
+    const res = await fetch(`${BASE_URL}/phases?${params.toString()}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api listPhases failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown[]>;
+  }
+
+
   async createTask(data: {
     projectId: string;
+    phaseId: string;
     title: string;
     priority?: string;
   }): Promise<unknown> {
