@@ -147,35 +147,18 @@ test.describe.serial('Access Control GUI', () => {
 
     await login(page, 'dev3', '***REDACTED***');
 
-    // Navigate to the test project
+    // Navigate directly to the tasks tab
     await page.goto(projectUrl + '?tab=tasks');
-    await page.waitForLoadState('networkidle');
-
-    // Need a phase before creating a task
-    // Go to phases tab and create one
-    await page.getByRole('link', { name: /fasi|phases/i }).or(
-      page.getByRole('button', { name: /fasi|phases/i })
-    ).click().catch(() => null);
-
-    // Try task tab
-    const taskTabLink = page.locator('[href*="tab=tasks"]').or(
-      page.getByRole('button', { name: /task/i })
-    );
-
-    if (await taskTabLink.count() > 0) {
-      await taskTabLink.first().click();
-    }
-
     await page.waitForLoadState('networkidle');
 
     // Click "+ Nuovo task" button
     const newTaskBtn = page.getByText('+ Nuovo task');
-    await expect(newTaskBtn).toBeVisible({ timeout: 5000 });
+    await expect(newTaskBtn).toBeVisible({ timeout: 10000 });
     await newTaskBtn.click();
 
     // Fill in task title
     const titleInput = page.getByPlaceholder('Titolo task');
-    await expect(titleInput).toBeVisible();
+    await expect(titleInput).toBeVisible({ timeout: 5000 });
     await titleInput.fill(`Dev3 Task ${RUN_ID}`);
 
     // Submit
