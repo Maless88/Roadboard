@@ -23,7 +23,7 @@ async function login(page: Page, username: string, password: string) {
   await page.goto('/login');
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Accedi' }).click();
+  await page.locator('button[type="submit"]').click();
   await page.waitForLoadState('networkidle');
 }
 
