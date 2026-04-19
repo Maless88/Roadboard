@@ -136,8 +136,8 @@ test.describe.serial('Access Control GUI', () => {
     await addBtn.click();
     await page.waitForTimeout(500);
 
-    // dev3 should now appear in the developer list
-    await expect(page.getByText(/Developer 3|dev3/i)).toBeVisible();
+    // dev3 should now appear in the developer list (as @username paragraph, not option element)
+    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible();
   });
 
 
