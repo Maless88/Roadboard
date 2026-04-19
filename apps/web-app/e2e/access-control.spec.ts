@@ -117,16 +117,20 @@ test.describe.serial('Access Control GUI', () => {
 
     await page.getByRole('button', { name: 'Membri' }).click();
 
+    // Wait for the project select to be rendered (MembriTab has conditional rendering)
+    await page.waitForSelector('select', { state: 'visible', timeout: 10000 });
+
     const projectSelect = page.locator('select').first();
     await projectSelect.selectOption({ label: PROJECT_NAME });
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(500);
 
     // Sviluppatori section
-    await expect(page.getByText('Sviluppatori')).toBeVisible();
+    await expect(page.getByText('Sviluppatori')).toBeVisible({ timeout: 5000 });
 
-    // Add dev3 via the dropdown
-    const addSelect = page.locator('select').last();
-    await addSelect.selectOption({ label: 'dev3' });
+    // Add dev3 via the dropdown — option label is "Developer 3 (@dev3)"
+    const addSelect = page.locator('select').nth(1);
+    await addSelect.waitFor({ state: 'visible', timeout: 10000 });
+    await addSelect.selectOption({ label: /dev3/i });
 
     const addBtn = page.getByRole('button', { name: 'Aggiungi' });
     await addBtn.click();
