@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createPhaseAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 import type { Decision } from '@/lib/api';
 
 
@@ -13,6 +14,7 @@ interface CreatePhaseFormProps {
 
 export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormProps) {
 
+  const dict = useDict();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -52,7 +54,7 @@ export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormPr
         onClick={() => setOpen(true)}
         className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
       >
-        + Nuova fase
+        {dict.forms.createPhase}
       </button>
     );
   }
@@ -62,13 +64,13 @@ export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormPr
       <input
         autoFocus
         type="text"
-        placeholder="Titolo fase"
+        placeholder={dict.forms.phaseTitlePlaceholder}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
       <textarea
-        placeholder="Descrizione (opzionale)"
+        placeholder={dict.forms.descriptionOptional}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
@@ -96,14 +98,14 @@ export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormPr
           disabled={isPending || !title.trim()}
           className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {isPending ? 'Salvo…' : 'Crea'}
+          {isPending ? dict.forms.saving : dict.forms.create}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
           className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
-          Annulla
+          {dict.forms.cancel}
         </button>
       </div>
     </form>

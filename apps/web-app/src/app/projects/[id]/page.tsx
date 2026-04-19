@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getToken } from '@/lib/auth';
+import { getDict } from '@/lib/i18n';
 import {
   getProject,
   listProjects,
@@ -12,6 +13,7 @@ import {
   listAuditEvents,
   validateSession,
 } from '@/lib/api';
+import type { Dictionary } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { ProgressRing } from '@/components/progress-ring';
 import { TabNav } from './tab-nav';
@@ -93,10 +95,11 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
     notFound();
   }
 
-  const [session, snap, userProjects] = await Promise.all([
+  const [session, snap, userProjects, dict] = await Promise.all([
     validateSession(token),
     getDashboardSnapshot(token, id).catch(() => null),
     listProjects(token).catch(() => []),
+    getDict(),
   ]);
 
   if (!session) redirect('/login');
@@ -127,7 +130,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-2">
                 <Link href="/projects" className="text-xs text-gray-600 hover:text-gray-400 transition-colors">
-                  ← Progetti
+                  {dict.project.backLink}
                 </Link>
                 <DeleteProjectButton projectId={id} projectName={project.name} />
               </div>
@@ -144,7 +147,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
               {taskTotal > 0 && (
                 <div>
                   <div className="flex justify-between text-xs mb-1.5">
-                    <span className="text-gray-600">Avanzamento</span>
+                    <span className="text-gray-600">{dict.project.progress}</span>
                     <span className="text-gray-500 font-mono">{taskDone} / {taskTotal}</span>
                   </div>
                   <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.05)' }}>
@@ -192,7 +195,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{ background: '#6366f1', animation: 'pulse 2s infinite' }}
               />
-              <span className="text-xs text-gray-400">In progress:</span>
+              <span className="text-xs text-gray-400">{dict.project.inProgress}</span>
               <span className="text-xs text-indigo-300 flex-1 truncate font-medium">{activeTask.title}</span>
             </div>
           )}
@@ -203,18 +206,18 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       <main className="mx-auto max-w-5xl px-8 py-6">
         <TabNav activeTab={tab} />
 
-        {tab === 'tasks' && <TasksTab token={token} projectId={id} />}
-        {tab === 'phases' && <PhasesTab token={token} projectId={id} />}
-        {tab === 'decisions' && <DecisionsTab token={token} projectId={id} />}
-        {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} />}
-        {tab === 'audit' && <AuditTab token={token} projectId={id} />}
+        {tab === 'tasks' && <TasksTab token={token} projectId={id} dict={dict} />}
+        {tab === 'phases' && <PhasesTab token={token} projectId={id} dict={dict} />}
+        {tab === 'decisions' && <DecisionsTab token={token} projectId={id} dict={dict} />}
+        {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} dict={dict} />}
+        {tab === 'audit' && <AuditTab token={token} projectId={id} dict={dict} />}
       </main>
     </AppShell>
   );
 }
 
 
-async function TasksTab({ token, projectId }: { token: string; projectId: string }) {
+async function TasksTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
 
   const [tasks, phases] = await Promise.all([
     listTasks(token, projectId),
@@ -237,12 +240,12 @@ async function TasksTab({ token, projectId }: { token: string; projectId: string
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{tasks.length} task totali</p>
+        <p className="text-xs text-gray-500">{dict.project.totalTasks(tasks.length)}</p>
         <CreateTaskForm projectId={projectId} phases={phases} />
       </div>
 
       {tasks.length === 0 && (
-        <p className="text-xs text-gray-500">Nessun task ancora.</p>
+        <p className="text-xs text-gray-500">{dict.project.noTasks}</p>
       )}
 
       {byPhase.map(({ phase, tasks: phaseTasks }) => (
@@ -255,7 +258,7 @@ async function TasksTab({ token, projectId }: { token: string; projectId: string
       {unassigned.length > 0 && (
         <div>
           {byPhase.length > 0 && (
-            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Senza fase</p>
+            <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{dict.project.unassigned}</p>
           )}
           <TaskList tasks={unassigned} projectId={projectId} />
         </div>
@@ -265,7 +268,7 @@ async function TasksTab({ token, projectId }: { token: string; projectId: string
 }
 
 
-async function PhasesTab({ token, projectId }: { token: string; projectId: string }) {
+async function PhasesTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
 
   const [phases, tasks, decisions] = await Promise.all([
     listPhases(token, projectId),
@@ -284,12 +287,12 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-gray-500">{phases.length} fasi</p>
+        <p className="text-xs text-gray-500">{dict.project.totalPhases(phases.length)}</p>
         <CreatePhaseForm projectId={projectId} decisions={decisions} />
       </div>
 
       {phases.length === 0 && (
-        <p className="text-xs text-gray-500">Nessuna fase ancora.</p>
+        <p className="text-xs text-gray-500">{dict.project.noPhases}</p>
       )}
 
       {phases.map((phase) => (
@@ -305,7 +308,7 @@ async function PhasesTab({ token, projectId }: { token: string; projectId: strin
 }
 
 
-async function DecisionsTab({ token, projectId }: { token: string; projectId: string }) {
+async function DecisionsTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
 
   const [decisions, phases] = await Promise.all([
     listDecisions(token, projectId),
@@ -323,12 +326,12 @@ async function DecisionsTab({ token, projectId }: { token: string; projectId: st
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-gray-500">{decisions.length} decisions</p>
+        <p className="text-xs text-gray-500">{dict.project.totalDecisions(decisions.length)}</p>
         <CreateDecisionForm projectId={projectId} />
       </div>
 
       {decisions.length === 0 && (
-        <p className="text-xs text-gray-500">Nessuna decision ancora.</p>
+        <p className="text-xs text-gray-500">{dict.project.noDecisions}</p>
       )}
 
       {decisions.map((d) => (
@@ -343,7 +346,7 @@ async function DecisionsTab({ token, projectId }: { token: string; projectId: st
 }
 
 
-async function MemoryTab({ token, projectId, q }: { token: string; projectId: string; q?: string }) {
+async function MemoryTab({ token, projectId, q, dict }: { token: string; projectId: string; q?: string; dict: Dictionary }) {
 
   const memory = await listMemory(token, projectId, q);
 
@@ -352,13 +355,13 @@ async function MemoryTab({ token, projectId, q }: { token: string; projectId: st
       <MemorySearch defaultValue={q ?? ''} />
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-500">
-          {memory.length} {q ? `risultati per "${q}"` : 'entries'}
+          {q ? dict.project.totalResults(memory.length, q) : dict.project.totalEntries(memory.length)}
         </p>
         <CreateMemoryForm projectId={projectId} />
       </div>
 
       {memory.length === 0 && (
-        <p className="text-xs text-gray-500">Nessuna entry ancora.</p>
+        <p className="text-xs text-gray-500">{dict.project.noMemory}</p>
       )}
 
       <div className="grid gap-2">
@@ -381,24 +384,24 @@ async function MemoryTab({ token, projectId, q }: { token: string; projectId: st
 }
 
 
-async function AuditTab({ token, projectId }: { token: string; projectId: string }) {
+async function AuditTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
 
   let page;
 
   try {
     page = await listAuditEvents(token, projectId);
   } catch {
-    return <p className="text-xs text-gray-500">Audit log non disponibile.</p>;
+    return <p className="text-xs text-gray-500">{dict.project.auditUnavailable}</p>;
   }
 
   const { events, total } = page;
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-gray-500">{total} eventi totali</p>
+      <p className="text-xs text-gray-500">{dict.project.totalEvents(total)}</p>
 
       {events.length === 0 && (
-        <p className="text-xs text-gray-500">Nessun evento registrato.</p>
+        <p className="text-xs text-gray-500">{dict.project.noEvents}</p>
       )}
 
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>

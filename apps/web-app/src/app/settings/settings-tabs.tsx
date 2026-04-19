@@ -2,6 +2,7 @@
 
 import { useState, useActionState, useEffect, useRef } from 'react';
 import type { SessionInfo, McpTokenInfo, User, Grant, Project } from '@/lib/api';
+import { useDict } from '@/lib/i18n/locale-context';
 import {
   changePasswordAction,
   createTokenAction,
@@ -25,16 +26,13 @@ interface Props {
 }
 
 
-const TABS = ['Sicurezza', 'Token MCP', 'Utenti', 'Membri'] as const;
-type Tab = typeof TABS[number];
+type TabKey = 'security' | 'tokens' | 'users' | 'members';
 
 
 function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
 
   const base = 'rounded-lg px-4 py-3 text-sm';
-  const cls = type === 'error'
-    ? `${base} text-red-400`
-    : `${base} text-green-400`;
+  const cls = type === 'error' ? `${base} text-red-400` : `${base} text-green-400`;
   const style = type === 'error'
     ? { background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }
     : { background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' };
@@ -63,8 +61,8 @@ function Field({ label, name, type = 'text', placeholder, required = true }: {
 }
 
 
-function SubmitBtn({ pending, label, pendingLabel = 'Salvataggio…' }: {
-  pending: boolean; label: string; pendingLabel?: string;
+function SubmitBtn({ pending, label, pendingLabel }: {
+  pending: boolean; label: string; pendingLabel: string;
 }) {
 
   return (
@@ -90,9 +88,9 @@ function Card({ title, children }: { title?: string; children: React.ReactNode }
 }
 
 
-/* ── Tab: Sicurezza ── */
 function SecurityTab() {
 
+  const dict = useDict();
   const [state, action, pending] = useActionState(changePasswordAction, {});
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -102,23 +100,23 @@ function SecurityTab() {
   }, [state.success]);
 
   return (
-    <Card title="Cambia password">
+    <Card title={dict.settings.security.title}>
       <form ref={formRef} action={action} className="space-y-4 max-w-sm">
         {state.error && <Alert type="error" msg={state.error} />}
-        {state.success && <Alert type="success" msg="Password aggiornata con successo." />}
-        <Field label="Password attuale" name="currentPassword" type="password" />
-        <Field label="Nuova password" name="newPassword" type="password" placeholder="min. 8 caratteri" />
-        <Field label="Conferma nuova password" name="confirmPassword" type="password" />
-        <SubmitBtn pending={pending} label="Aggiorna password" />
+        {state.success && <Alert type="success" msg={dict.settings.security.success} />}
+        <Field label={dict.settings.security.currentPassword} name="currentPassword" type="password" />
+        <Field label={dict.settings.security.newPassword} name="newPassword" type="password" placeholder="min. 8 caratteri" />
+        <Field label={dict.settings.security.confirmPassword} name="confirmPassword" type="password" />
+        <SubmitBtn pending={pending} label={dict.settings.security.updateButton} pendingLabel={dict.settings.security.updating} />
       </form>
     </Card>
   );
 }
 
 
-/* ── Tab: Token MCP ── */
 function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTokens: McpTokenInfo[] }) {
 
+  const dict = useDict();
   const [tokens, setTokens] = useState(initialTokens);
   const [createState, createAction, createPending] = useActionState(createTokenAction, {});
   const [newToken, setNewToken] = useState<string | null>(null);
@@ -168,10 +166,8 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
       {newToken && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div className="rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(34,197,94,0.25)', backdropFilter: 'blur(20px)' }}>
-            <h3 className="text-sm font-semibold text-green-400 mb-1">Token creato</h3>
-            <p className="text-xs text-gray-400 mb-4">
-              Copialo adesso — non sarà più visibile dopo aver chiuso questa finestra.
-            </p>
+            <h3 className="text-sm font-semibold text-green-400 mb-1">{dict.settings.tokens.createdTitle}</h3>
+            <p className="text-xs text-gray-400 mb-4">{dict.settings.tokens.createdWarning}</p>
             <code className="block rounded-lg px-4 py-3 text-green-400 font-mono text-xs break-all leading-relaxed" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(34,197,94,0.15)' }}>
               {newToken}
             </code>
@@ -180,22 +176,22 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
                 onClick={handleCopy}
                 className="rounded-md bg-green-700 hover:bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors"
               >
-                {copied ? 'Copiato!' : 'Copia negli appunti'}
+                {copied ? dict.settings.tokens.copied : dict.settings.tokens.copy}
               </button>
               <button
                 onClick={() => setNewToken(null)}
                 className="text-sm text-gray-400 hover:text-white transition-colors"
               >
-                Chiudi
+                {dict.settings.tokens.close}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <Card title="Token attivi">
+      <Card title={dict.settings.tokens.title}>
         {active.length === 0 ? (
-          <p className="text-sm text-gray-500">Nessun token attivo.</p>
+          <p className="text-sm text-gray-500">{dict.settings.tokens.noTokens}</p>
         ) : (
           <div className="divide-y divide-white/[0.06]">
             {active.map((t) => (
@@ -212,7 +208,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
                   onClick={() => void handleRevoke(t.id)}
                   className="text-xs text-red-400 hover:text-red-300 transition-colors"
                 >
-                  Revoca
+                  {dict.settings.tokens.revoke}
                 </button>
               </div>
             ))}
@@ -220,13 +216,13 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
         )}
       </Card>
 
-      <Card title="Crea nuovo token">
+      <Card title={dict.settings.tokens.createTitle}>
         <form ref={formRef} action={createAction} className="space-y-4 max-w-sm">
           {createState.error && <Alert type="error" msg={createState.error} />}
           <input type="hidden" name="userId" value={session.userId} />
           <Field label="Nome" name="name" placeholder="es. claude-local" />
           <input type="hidden" name="scope" value="read write" />
-          <SubmitBtn pending={createPending} label="Crea token" />
+          <SubmitBtn pending={createPending} label={dict.settings.tokens.createButton} pendingLabel={dict.settings.tokens.creating} />
         </form>
       </Card>
 
@@ -272,6 +268,7 @@ function RoleBadge({ role }: { role: string }) {
 
 function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void }) {
 
+  const dict = useDict();
   const [state, action, pending] = useActionState(resetUserPasswordAction, {});
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -286,23 +283,23 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
       <div className="rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}>
-        <h3 className="text-sm font-semibold text-white mb-1">Reset password</h3>
+        <h3 className="text-sm font-semibold text-white mb-1">{dict.settings.users.resetTitle}</h3>
         <p className="text-xs text-gray-400 mb-4">
           Imposta una nuova password per <strong className="text-white">{user.displayName}</strong>
         </p>
         <form ref={formRef} action={action} className="space-y-4">
           {state.error && <Alert type="error" msg={state.error} />}
-          {state.success && <Alert type="success" msg="Password resettata." />}
+          {state.success && <Alert type="success" msg={dict.settings.users.resetSuccess} />}
           <input type="hidden" name="userId" value={user.id} />
-          <Field label="Nuova password" name="newPassword" type="password" placeholder="min. 8 caratteri" />
+          <Field label={dict.settings.users.newPasswordPlaceholder} name="newPassword" type="password" placeholder="min. 8 caratteri" />
           <div className="flex gap-3">
-            <SubmitBtn pending={pending} label="Salva" />
+            <SubmitBtn pending={pending} label={dict.settings.users.resetButton} pendingLabel={dict.settings.users.resetting} />
             <button
               type="button"
               onClick={onClose}
               className="text-sm text-gray-400 hover:text-white transition-colors"
             >
-              Annulla
+              {dict.forms.cancel}
             </button>
           </div>
         </form>
@@ -312,7 +309,6 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
 }
 
 
-/* ── Tab: Utenti ── */
 function UsersTab({
   currentUserId,
   initialUsers,
@@ -323,6 +319,7 @@ function UsersTab({
   isAdmin: boolean;
 }) {
 
+  const dict = useDict();
   const [users, setUsers] = useState(initialUsers);
   const [createState, createAction, createPending] = useActionState(createUserAction, {});
   const [resetTarget, setResetTarget] = useState<User | null>(null);
@@ -345,7 +342,7 @@ function UsersTab({
         <ResetPasswordModal user={resetTarget} onClose={() => setResetTarget(null)} />
       )}
 
-      <Card title="Utenti registrati">
+      <Card title={dict.settings.users.title}>
         <div className="divide-y divide-white/[0.06]">
           {users.map((u) => (
             <div key={u.id} className="flex items-center justify-between py-3 first:pt-0 last:pb-0">
@@ -363,14 +360,14 @@ function UsersTab({
                       onClick={() => setResetTarget(u)}
                       className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
                     >
-                      Reset pwd
+                      {dict.settings.users.resetPwd}
                     </button>
                   )}
                   <button
                     onClick={() => void handleDelete(u.id)}
                     className="text-xs text-red-400 hover:text-red-300 transition-colors"
                   >
-                    Elimina
+                    {dict.settings.users.delete}
                   </button>
                 </div>
               )}
@@ -379,12 +376,12 @@ function UsersTab({
         </div>
       </Card>
 
-      <Card title="Crea nuovo utente">
+      <Card title={dict.settings.users.createTitle}>
         <form ref={formRef} action={createAction} className="space-y-4 max-w-sm">
           {createState.error && <Alert type="error" msg={createState.error} />}
-          {createState.success && <Alert type="success" msg="Utente creato." />}
+          {createState.success && <Alert type="success" msg={dict.settings.users.success} />}
           <Field label="Username" name="username" placeholder="es. mario" />
-          <Field label="Nome visualizzato" name="displayName" placeholder="es. Mario Rossi" />
+          <Field label={dict.settings.users.displayNamePlaceholder} name="displayName" placeholder="es. Mario Rossi" />
           <Field label="Email" name="email" type="email" placeholder="mario@esempio.it" />
           <Field label="Password iniziale" name="password" type="password" placeholder="min. 8 caratteri" />
           <div>
@@ -401,7 +398,7 @@ function UsersTab({
               <option value="guest">Guest</option>
             </select>
           </div>
-          <SubmitBtn pending={createPending} label="Crea utente" />
+          <SubmitBtn pending={createPending} label={dict.settings.users.createButton} pendingLabel={dict.settings.users.creating} />
         </form>
       </Card>
     </div>
@@ -409,7 +406,6 @@ function UsersTab({
 }
 
 
-/* ── Tab: Membri ── */
 function MembriTab({
   users,
   grantsPerProject,
@@ -418,6 +414,7 @@ function MembriTab({
   grantsPerProject: { project: Project; grants: Grant[] }[];
 }) {
 
+  const dict = useDict();
   const [selectedId, setSelectedId] = useState(grantsPerProject[0]?.project.id ?? '');
   const [localGrantsPerProject, setLocalGrantsPerProject] = useState(grantsPerProject);
   const [addUserId, setAddUserId] = useState('');
@@ -483,14 +480,14 @@ function MembriTab({
   }
 
   if (grantsPerProject.length === 0) {
-    return <Card><p className="text-sm text-gray-500">Nessun progetto disponibile.</p></Card>;
+    return <Card><p className="text-sm text-gray-500">{dict.settings.members.noProjects}</p></Card>;
   }
 
   return (
     <div className="space-y-5">
 
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">Progetto</label>
+        <label className="block text-sm font-medium text-gray-300 mb-1">{dict.settings.members.title}</label>
         <select
           value={selectedId}
           onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
@@ -505,7 +502,7 @@ function MembriTab({
 
       {error && <Alert type="error" msg={error} />}
 
-      <Card title="Proprietario">
+      <Card title={dict.settings.members.owner}>
         {ownerUser ? (
           <div className="flex items-center gap-3">
             <div>
@@ -513,17 +510,17 @@ function MembriTab({
               <p className="text-xs text-gray-500 mt-0.5">@{ownerUser.username}</p>
             </div>
             <span className="text-xs px-2 py-0.5 rounded border text-yellow-400 bg-yellow-500/10 border-yellow-500/20">
-              Proprietario
+              {dict.settings.members.owner}
             </span>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">Nessun proprietario assegnato.</p>
+          <p className="text-sm text-gray-500">{dict.settings.members.noOwner}</p>
         )}
       </Card>
 
-      <Card title="Sviluppatori">
+      <Card title={dict.settings.members.developers}>
         {developerGrants.length === 0 ? (
-          <p className="text-sm text-gray-500 mb-4">Nessuno sviluppatore assegnato.</p>
+          <p className="text-sm text-gray-500 mb-4">{dict.settings.members.noDevelopers}</p>
         ) : (
           <div className="divide-y divide-white/[0.06] mb-4">
             {developerGrants.map((g) => {
@@ -539,7 +536,7 @@ function MembriTab({
                     onClick={() => void handleRemove(dev.id)}
                     className="text-xs text-red-400 hover:text-red-300 transition-colors"
                   >
-                    Rimuovi
+                    {dict.settings.members.remove}
                   </button>
                 </div>
               );
@@ -555,7 +552,7 @@ function MembriTab({
               className="flex-1 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
               style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              <option value="">Seleziona utente…</option>
+              <option value="">{dict.settings.members.selectUser}</option>
               {addableUsers.map((u) => (
                 <option key={u.id} value={u.id}>{u.displayName} (@{u.username})</option>
               ))}
@@ -565,7 +562,7 @@ function MembriTab({
               disabled={addPending || !addUserId}
               className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
             >
-              {addPending ? '…' : 'Aggiungi'}
+              {addPending ? '…' : dict.settings.members.addButton}
             </button>
           </div>
         )}
@@ -575,7 +572,6 @@ function MembriTab({
 }
 
 
-/* ── Root ── */
 export function SettingsTabs({
   session,
   tokens,
@@ -586,45 +582,43 @@ export function SettingsTabs({
   isTeamLeader,
 }: Props) {
 
+  const dict = useDict();
   const canManageUsers = isAdmin || isTeamLeader;
 
-  const visibleTabs: Tab[] = [
-    'Sicurezza',
-    'Token MCP',
-    ...(canManageUsers ? (['Utenti'] as Tab[]) : []),
-    ...(isAdmin ? (['Membri'] as Tab[]) : []),
+  const visibleTabs: { key: TabKey; label: string }[] = [
+    { key: 'security', label: dict.settings.tabs.security },
+    { key: 'tokens', label: dict.settings.tabs.tokens },
+    ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
+    ...(isAdmin ? [{ key: 'members' as TabKey, label: dict.settings.tabs.members }] : []),
   ];
 
-  const [active, setActive] = useState<Tab>(visibleTabs[0]);
+  const [active, setActive] = useState<TabKey>('security');
 
   return (
     <div>
       <div className="flex gap-1 mb-6 rounded-xl p-1 w-fit" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
         {visibleTabs.map((tab) => (
           <button
-            key={tab}
-            onClick={() => setActive(tab)}
+            key={tab.key}
+            onClick={() => setActive(tab.key)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              active === tab
+              active === tab.key
                 ? 'bg-indigo-600 text-white'
                 : 'text-gray-400 hover:text-white'
             }`}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
       </div>
 
-      {active === 'Sicurezza' && <SecurityTab />}
-      {active === 'Token MCP' && <TokensTab session={session} initialTokens={tokens} />}
-      {active === 'Utenti' && canManageUsers && (
+      {active === 'security' && <SecurityTab />}
+      {active === 'tokens' && <TokensTab session={session} initialTokens={tokens} />}
+      {active === 'users' && canManageUsers && (
         <UsersTab currentUserId={session.userId} initialUsers={users} isAdmin={isAdmin} />
       )}
-      {active === 'Membri' && isAdmin && (
-        <MembriTab
-          users={users}
-          grantsPerProject={grantsPerProject}
-        />
+      {active === 'members' && isAdmin && (
+        <MembriTab users={users} grantsPerProject={grantsPerProject} />
       )}
     </div>
   );

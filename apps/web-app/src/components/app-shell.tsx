@@ -1,3 +1,5 @@
+import { getLocale } from '@/lib/i18n';
+import { LocaleProvider } from '@/lib/i18n/locale-context';
 import { Sidebar } from './sidebar';
 
 
@@ -24,19 +26,24 @@ interface AppShellProps {
 }
 
 
-export function AppShell({ children, username, displayName, activeProject, userProjects }: AppShellProps) {
+export async function AppShell({ children, username, displayName, activeProject, userProjects }: AppShellProps) {
+
+  const locale = await getLocale();
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar
-        username={username}
-        displayName={displayName}
-        activeProject={activeProject}
-        userProjects={userProjects}
-      />
-      <div className="flex-1 min-w-0">
-        {children}
+    <LocaleProvider locale={locale}>
+      <div className="flex min-h-screen">
+        <Sidebar
+          username={username}
+          displayName={displayName}
+          activeProject={activeProject}
+          userProjects={userProjects}
+          locale={locale}
+        />
+        <div className="flex-1 min-w-0">
+          {children}
+        </div>
       </div>
-    </div>
+    </LocaleProvider>
   );
 }

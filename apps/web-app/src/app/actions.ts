@@ -1,12 +1,14 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { revalidatePath } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
+import { cookies } from 'next/headers';
 import {
   login, logout, register, updateTaskStatus,
   createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
+import { LOCALE_COOKIE, SUPPORTED_LOCALES, type Locale } from '@/lib/i18n';
 
 
 export async function loginAction(
@@ -193,6 +195,16 @@ export async function createProjectAction(
 
   revalidatePath('/projects');
   return { id: project.id };
+}
+
+
+export async function setLocaleAction(locale: Locale): Promise<void> {
+
+  if (!SUPPORTED_LOCALES.includes(locale)) return;
+
+  const cookieStore = await cookies();
+  cookieStore.set(LOCALE_COOKIE, locale, { path: '/', maxAge: 60 * 60 * 24 * 365 });
+  revalidateTag('locale');
 }
 
 

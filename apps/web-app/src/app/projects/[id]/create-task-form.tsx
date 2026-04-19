@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createTaskAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 import type { Phase } from '@/lib/api';
 
 
@@ -13,6 +14,7 @@ interface CreateTaskFormProps {
 
 export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
 
+  const dict = useDict();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [phaseId, setPhaseId] = useState(phases[0]?.id ?? '');
@@ -22,7 +24,7 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
 
   if (phases.length === 0) {
     return (
-      <span className="text-xs text-gray-600 italic">Crea prima una fase</span>
+      <span className="text-xs text-gray-600 italic">{dict.forms.createFirstPhase}</span>
     );
   }
 
@@ -58,7 +60,7 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
         onClick={() => setOpen(true)}
         className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
       >
-        + Nuovo task
+        {dict.forms.createTask}
       </button>
     );
   }
@@ -68,7 +70,7 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
       <input
         autoFocus
         type="text"
-        placeholder="Titolo task"
+        placeholder={dict.forms.taskTitlePlaceholder}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -106,14 +108,14 @@ export function CreateTaskForm({ projectId, phases }: CreateTaskFormProps) {
           disabled={isPending || !title.trim() || !phaseId}
           className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {isPending ? 'Salvo…' : 'Crea'}
+          {isPending ? dict.forms.saving : dict.forms.create}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
           className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
-          Annulla
+          {dict.forms.cancel}
         </button>
       </div>
     </form>

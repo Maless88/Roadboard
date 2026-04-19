@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
 import { validateSession, listProjects, getDashboardSnapshot } from '@/lib/api';
+import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import type { Project, DashboardSnapshot } from '@/lib/api';
+import type { Dictionary } from '@/lib/i18n';
 
 
 const STATUS_DOT: Record<string, string> = {
@@ -36,7 +38,10 @@ export default async function DashboardPage() {
 
   if (!token) redirect('/login');
 
-  const session = await validateSession(token);
+  const [session, dict] = await Promise.all([
+    validateSession(token),
+    getDict(),
+  ]);
 
   if (!session) redirect('/login');
 
@@ -65,7 +70,7 @@ export default async function DashboardPage() {
 
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-xl font-bold text-white">Progetti</h1>
+            <h1 className="text-xl font-bold text-white">{dict.projects.title}</h1>
             <p className="text-sm text-gray-500 mt-0.5 capitalize">{dateLabel}</p>
           </div>
 
@@ -74,18 +79,18 @@ export default async function DashboardPage() {
               className="rounded-2xl p-12 text-center"
               style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
             >
-              <p className="text-sm text-gray-500 mb-4">Nessun progetto ancora.</p>
+              <p className="text-sm text-gray-500 mb-4">{dict.projects.noProjects}</p>
               <Link
                 href="/projects"
                 className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
               >
-                Crea il primo progetto →
+                {dict.projects.createProject} →
               </Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {sorted.map((project, i) => (
-                <ProjectCard key={project.id} project={project} snap={snapshots[i]} />
+                <ProjectCard key={project.id} project={project} snap={snapshots[i]} dict={dict} />
               ))}
             </div>
           )}
@@ -97,7 +102,7 @@ export default async function DashboardPage() {
 }
 
 
-function ProjectCard({ project, snap }: { project: Project; snap: DashboardSnapshot | null }) {
+function ProjectCard({ project, snap, dict }: { project: Project; snap: DashboardSnapshot | null; dict: Dictionary }) {
 
   const taskDone = snap?.tasks['done'] ?? 0;
   const taskTotal = snap ? Object.values(snap.tasks).reduce((a, b) => a + b, 0) : 0;
@@ -132,7 +137,7 @@ function ProjectCard({ project, snap }: { project: Project; snap: DashboardSnaps
       {taskTotal > 0 ? (
         <div className="mb-3">
           <div className="flex justify-between text-[10px] text-gray-600 mb-1.5">
-            <span>{pct}% completato</span>
+            <span>{pct}% {dict.nav.completed}</span>
             <span className="font-mono">{taskDone}/{taskTotal}</span>
           </div>
           <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
@@ -159,7 +164,7 @@ function ProjectCard({ project, snap }: { project: Project; snap: DashboardSnaps
           ))}
         </div>
       ) : (
-        <p className="text-[10px] text-gray-700">Nessun task</p>
+        <p className="text-[10px] text-gray-700">{dict.project.noTasks}</p>
       )}
 
       {/* Active phases hint */}

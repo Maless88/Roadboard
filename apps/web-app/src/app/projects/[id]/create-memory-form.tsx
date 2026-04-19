@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createMemoryEntryAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 
 
 interface CreateMemoryFormProps {
@@ -11,6 +12,7 @@ interface CreateMemoryFormProps {
 
 export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
 
+  const dict = useDict();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
@@ -50,7 +52,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
         onClick={() => setOpen(true)}
         className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
       >
-        + Nuova entry
+        {dict.forms.createMemory}
       </button>
     );
   }
@@ -61,7 +63,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
         <input
           autoFocus
           type="text"
-          placeholder="Titolo"
+          placeholder={dict.forms.memoryTitlePlaceholder}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           className="glass-input flex-1 text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -83,7 +85,7 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
         </select>
       </div>
       <textarea
-        placeholder="Corpo (opzionale)"
+        placeholder={dict.forms.memoryBodyPlaceholder}
         value={body}
         onChange={(e) => setBody(e.target.value)}
         rows={3}
@@ -98,14 +100,14 @@ export function CreateMemoryForm({ projectId }: CreateMemoryFormProps) {
           disabled={isPending || !title.trim()}
           className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {isPending ? 'Salvo…' : 'Crea'}
+          {isPending ? dict.forms.saving : dict.forms.create}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
           className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
-          Annulla
+          {dict.forms.cancel}
         </button>
       </div>
     </form>

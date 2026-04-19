@@ -2,15 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-
-const TABS = [
-  { key: 'phases', label: 'Roadmap' },
-  { key: 'tasks', label: 'Tasks' },
-  { key: 'decisions', label: 'Decisions' },
-  { key: 'memory', label: 'Memory' },
-  { key: 'audit', label: 'Audit' },
-] as const;
+import { useDict } from '@/lib/i18n/locale-context';
 
 
 interface TabNavProps {
@@ -20,7 +12,16 @@ interface TabNavProps {
 
 export function TabNav({ activeTab }: TabNavProps) {
 
+  const dict = useDict();
   const pathname = usePathname();
+
+  const TABS = [
+    { key: 'tasks', label: dict.tabs.tasks },
+    { key: 'phases', label: dict.tabs.phases },
+    { key: 'decisions', label: dict.tabs.decisions },
+    { key: 'memory', label: dict.tabs.memory },
+    { key: 'audit', label: dict.tabs.audit },
+  ] as const;
 
   return (
     <nav className="flex gap-1 border-b mb-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>

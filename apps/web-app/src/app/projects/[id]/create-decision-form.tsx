@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { createDecisionAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 
 
 interface CreateDecisionFormProps {
@@ -11,6 +12,7 @@ interface CreateDecisionFormProps {
 
 export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
 
+  const dict = useDict();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [summary, setSummary] = useState('');
@@ -59,7 +61,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         onClick={() => setOpen(true)}
         className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
       >
-        + Nuova decisione
+        {dict.forms.createDecision}
       </button>
     );
   }
@@ -69,20 +71,20 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
       <input
         autoFocus
         type="text"
-        placeholder="Titolo decisione"
+        placeholder={dict.forms.decisionTitlePlaceholder}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
       />
       <textarea
-        placeholder="Sommario *"
+        placeholder={dict.forms.decisionSummaryPlaceholder}
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
         rows={2}
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
       <textarea
-        placeholder="Motivazione (opzionale)"
+        placeholder={dict.forms.decisionRationalePlaceholder}
         value={rationale}
         onChange={(e) => setRationale(e.target.value)}
         rows={2}
@@ -127,14 +129,14 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
           disabled={isPending || !title.trim() || !summary.trim()}
           className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
         >
-          {isPending ? 'Salvo…' : 'Crea'}
+          {isPending ? dict.forms.saving : dict.forms.create}
         </button>
         <button
           type="button"
           onClick={() => { setOpen(false); setError(''); }}
           className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
         >
-          Annulla
+          {dict.forms.cancel}
         </button>
       </div>
     </form>

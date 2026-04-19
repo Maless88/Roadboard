@@ -37,24 +37,24 @@ test.describe('Project Detail', () => {
 
   test('tab navigation renders all 5 tabs', async ({ page }) => {
 
-    await expect(page.getByRole('link', { name: 'Overview' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Tasks' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Task' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Fasi' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Decisioni' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Memory' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Memoria' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Audit' })).toBeVisible();
   });
 
 
-  test('overview tab is active by default and shows stats', async ({ page }) => {
+  test('task tab is active by default and shows task list', async ({ page }) => {
 
-    const overviewLink = page.getByRole('link', { name: 'Overview' });
-    await expect(overviewLink).toHaveClass(/border-indigo-500/);
+    const taskLink = page.getByRole('link', { name: 'Task' });
+    await expect(taskLink).toHaveClass(/border-indigo-500/);
   });
 
 
   test('tasks tab shows task list and create button', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Tasks' }).click();
+    await page.getByRole('link', { name: 'Task' }).click();
     await expect(page).toHaveURL(/\?tab=tasks/);
     await expect(page.getByText('+ Nuovo task')).toBeVisible();
   });
@@ -62,7 +62,7 @@ test.describe('Project Detail', () => {
 
   test('tasks tab: create task form works', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Tasks' }).click();
+    await page.getByRole('link', { name: 'Task' }).click();
     await expect(page).toHaveURL(/\?tab=tasks/);
 
     await page.getByText('+ Nuovo task').click();
@@ -116,7 +116,7 @@ test.describe('Project Detail', () => {
 
   test('memory tab shows create button', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Memory' }).click();
+    await page.getByRole('link', { name: 'Memoria' }).click();
     await expect(page).toHaveURL(/\?tab=memory/);
     await expect(page.getByText('+ Nuova entry')).toBeVisible();
   });
@@ -124,7 +124,7 @@ test.describe('Project Detail', () => {
 
   test('memory tab: create memory entry works', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Memory' }).click();
+    await page.getByRole('link', { name: 'Memoria' }).click();
 
     await page.getByText('+ Nuova entry').click();
     await page.getByPlaceholder('Titolo').fill('E2E memory entry');

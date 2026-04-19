@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createProjectAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 import type { Team } from '@/lib/api';
 
 
@@ -13,6 +14,7 @@ interface CreateProjectFormProps {
 
 export function CreateProjectForm({ teams }: CreateProjectFormProps) {
 
+  const dict = useDict();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -60,32 +62,32 @@ export function CreateProjectForm({ teams }: CreateProjectFormProps) {
         onClick={() => setOpen(true)}
         className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-500 transition-colors"
       >
-        + Nuovo progetto
+        + {dict.projects.createProject}
       </button>
     );
   }
 
   return (
     <div className="glass-card rounded-xl p-5 mb-6">
-      <h2 className="text-sm font-semibold text-white mb-4">Nuovo progetto</h2>
+      <h2 className="text-sm font-semibold text-white mb-4">{dict.projects.createProject}</h2>
       <form onSubmit={handleSubmit} className="space-y-3">
         <input
           autoFocus
           type="text"
-          placeholder="Nome"
+          placeholder={dict.projects.namePlaceholder}
           value={name}
           onChange={handleNameChange}
           className="w-full text-sm glass-input rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <input
           type="text"
-          placeholder="Slug"
+          placeholder={dict.projects.slugPlaceholder}
           value={slug}
           onChange={(e) => setSlug(e.target.value)}
           className="w-full text-sm glass-input rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
         <textarea
-          placeholder="Descrizione (opzionale)"
+          placeholder={dict.projects.descriptionPlaceholder}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
@@ -112,14 +114,14 @@ export function CreateProjectForm({ teams }: CreateProjectFormProps) {
             disabled={isPending || !name.trim() || !slug.trim() || !ownerTeamId}
             className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
           >
-            {isPending ? 'Creo…' : 'Crea progetto'}
+            {isPending ? dict.projects.creating : dict.projects.createProject}
           </button>
           <button
             type="button"
             onClick={() => { setOpen(false); setError(''); }}
             className="text-xs px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition-colors"
           >
-            Annulla
+            {dict.forms.cancel}
           </button>
         </div>
       </form>
