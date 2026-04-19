@@ -21,6 +21,7 @@ const PROJECT_SLUG = `e2e-ac-${RUN_ID}`;
 async function login(page: Page, username: string, password: string) {
 
   await page.goto('/login');
+  await page.getByLabel('Username').waitFor({ state: 'visible', timeout: 15000 });
   await page.getByLabel('Username').fill(username);
   await page.getByLabel('Password').fill(password);
   await page.locator('button[type="submit"]').click();

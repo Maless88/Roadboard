@@ -20,15 +20,15 @@ test.describe('Authentication', () => {
   });
 
 
-  test('login with valid credentials navigates to projects', async ({ page }) => {
+  test('login with valid credentials navigates to dashboard', async ({ page }) => {
 
     await page.goto('/login');
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('***REDACTED***');
     await page.locator('button[type="submit"]').click();
 
-    await expect(page).toHaveURL('/projects');
-    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+    await expect(page).toHaveURL('/dashboard');
+    await expect(page.getByRole('heading', { name: 'Progetti' })).toBeVisible();
   });
 
 
@@ -49,7 +49,7 @@ test.describe('Authentication', () => {
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('***REDACTED***');
     await page.locator('button[type="submit"]').click();
-    await expect(page).toHaveURL('/projects');
+    await expect(page).toHaveURL('/dashboard');
 
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL('/login');

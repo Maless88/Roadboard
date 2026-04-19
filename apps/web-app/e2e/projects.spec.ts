@@ -9,7 +9,8 @@ test.describe('Projects', () => {
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('***REDACTED***');
     await page.locator('button[type="submit"]').click();
-    await expect(page).toHaveURL('/projects');
+    await page.waitForURL('/dashboard');
+    await page.goto('/projects');
   });
 
 
