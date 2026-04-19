@@ -60,8 +60,8 @@ test.describe.serial('Access Control GUI', () => {
     await expect(createBtn).toBeVisible({ timeout: 5000 });
     await createBtn.click();
 
-    await page.getByLabel(/nome/i).fill(PROJECT_NAME);
-    await page.getByLabel(/slug/i).fill(PROJECT_SLUG);
+    await page.getByPlaceholder('Nome').fill(PROJECT_NAME);
+    await page.getByPlaceholder('Slug').fill(PROJECT_SLUG);
 
     const submitBtn = page.getByRole('button', { name: /crea progetto/i }).last();
     await submitBtn.click();

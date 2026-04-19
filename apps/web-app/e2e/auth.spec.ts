@@ -51,7 +51,8 @@ test.describe('Authentication', () => {
     await page.locator('button[type="submit"]').click();
     await expect(page).toHaveURL('/dashboard');
 
-    await page.getByRole('button', { name: 'Sign out' }).click();
+    await page.locator('aside button').filter({ hasText: 'alessio' }).click();
+    await page.getByRole('button', { name: 'Esci' }).click();
     await expect(page).toHaveURL('/login');
   });
 });
