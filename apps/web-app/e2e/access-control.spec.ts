@@ -130,7 +130,7 @@ test.describe.serial('Access Control GUI', () => {
     // Add dev3 via the dropdown — option label is "Developer 3 (@dev3)"
     const addSelect = page.locator('select').nth(1);
     await addSelect.waitFor({ state: 'visible', timeout: 10000 });
-    await addSelect.selectOption({ index: 1 }); // first real user (index 0 is empty placeholder)
+    await addSelect.selectOption({ label: 'Developer 3 (@dev3)' });
 
     // Wait for React to process onChange and enable the Aggiungi button
     const addBtn = page.getByRole('button', { name: 'Aggiungi' });
