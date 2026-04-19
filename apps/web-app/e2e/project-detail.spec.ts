@@ -30,7 +30,7 @@ test.describe('Project Detail', () => {
 
   test('shows project header with back link and status badge', async ({ page }) => {
 
-    await expect(page.getByText('← Projects')).toBeVisible();
+    await expect(page.getByText('← Progetti')).toBeVisible();
     await expect(page.locator('main h1')).toBeVisible();
   });
 

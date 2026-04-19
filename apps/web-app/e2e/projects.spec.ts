@@ -42,6 +42,6 @@ test.describe('Projects', () => {
 
     await projectLink.click();
     await expect(page).toHaveURL(/\/projects\/.+/);
-    await expect(page.getByText('← Projects')).toBeVisible();
+    await expect(page.getByText('← Progetti')).toBeVisible();
   });
 });

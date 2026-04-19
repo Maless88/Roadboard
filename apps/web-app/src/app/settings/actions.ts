@@ -196,6 +196,7 @@ export async function addDeveloperAction(
 
   try {
     await Promise.all([
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.read', grantedByUserId: session.userId }),
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.write', grantedByUserId: session.userId }),
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'task.write', grantedByUserId: session.userId }),
     ]);
