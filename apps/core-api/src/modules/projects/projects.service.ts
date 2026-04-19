@@ -50,9 +50,43 @@ export class ProjectsService {
   }
 
 
-  async findAll(status?: ProjectStatus) {
+  async findAll(status?: ProjectStatus, userId?: string) {
 
-    const where = status ? { status } : {};
+    if (!userId) {
+      const where = status ? { status } : {};
+      return this.prisma.project.findMany({ where });
+    }
+
+    // Collect team IDs the user belongs to
+    const memberships = await this.prisma.teamMembership.findMany({
+      where: { userId, status: 'active' },
+      select: { teamId: true },
+    });
+
+    const teamIds = memberships.map((m) => m.teamId);
+
+    // Find projects where the user has a direct grant OR a team grant
+    const grants = await this.prisma.projectGrant.findMany({
+      where: {
+        OR: [
+          { subjectType: 'user', subjectId: userId },
+          ...(teamIds.length ? [{ subjectType: 'team', subjectId: { in: teamIds } }] : []),
+        ],
+      },
+      select: { projectId: true },
+      distinct: ['projectId'],
+    });
+
+    const projectIds = grants.map((g) => g.projectId);
+
+    if (projectIds.length === 0) {
+      return [];
+    }
+
+    const where = {
+      id: { in: projectIds },
+      ...(status ? { status } : {}),
+    };
 
     return this.prisma.project.findMany({ where });
   }
