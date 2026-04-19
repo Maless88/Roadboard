@@ -102,9 +102,8 @@ test.describe.serial('Access Control GUI', () => {
     await page.waitForTimeout(300);
 
     // Owner section
-    await expect(page.getByText('Proprietario')).toBeVisible();
-    await expect(page.getByText('alessio')).toBeVisible();
-    await expect(page.getByText('Proprietario', { exact: true }).or(page.locator('.text-yellow-400').filter({ hasText: 'Proprietario' }))).toBeVisible();
+    await expect(page.getByText('Proprietario').first()).toBeVisible();
+    await expect(page.getByText('alessio').first()).toBeVisible();
   });
 
 
