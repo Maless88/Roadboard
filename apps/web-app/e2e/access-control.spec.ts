@@ -82,6 +82,14 @@ test.describe.serial('Access Control GUI', () => {
     }
 
     expect(projectId).not.toBe('');
+
+    // Create an initial phase so dev3 can create tasks later
+    await page.goto(projectUrl + '?tab=phases');
+    await page.waitForLoadState('networkidle');
+    await page.getByText('+ Nuova fase').click();
+    await page.getByPlaceholder('Titolo fase').fill('Sprint 1');
+    await page.getByRole('button', { name: 'Crea' }).click();
+    await page.waitForLoadState('networkidle');
   });
 
 
