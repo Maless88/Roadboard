@@ -38,9 +38,9 @@ export class ProjectsController {
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(@Query() query: FindProjectsQueryDto) {
+  findAll(@Query() query: FindProjectsQueryDto, @CurrentUser() user: { userId: string }) {
 
-    return this.projectsService.findAll(query.status);
+    return this.projectsService.findAll(query.status, user?.userId);
   }
 
 

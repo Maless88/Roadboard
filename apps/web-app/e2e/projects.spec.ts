@@ -8,7 +8,7 @@ test.describe('Projects', () => {
     await page.goto('/login');
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('roadboard2025');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Accedi' }).click();
     await expect(page).toHaveURL('/projects');
   });
 

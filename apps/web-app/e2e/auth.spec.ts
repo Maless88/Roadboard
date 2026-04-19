@@ -16,7 +16,7 @@ test.describe('Authentication', () => {
     await expect(page.getByRole('heading', { name: 'RoadBoard' })).toBeVisible();
     await expect(page.getByLabel('Username')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Accedi' })).toBeVisible();
   });
 
 
@@ -25,7 +25,7 @@ test.describe('Authentication', () => {
     await page.goto('/login');
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('roadboard2025');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Accedi' }).click();
 
     await expect(page).toHaveURL('/projects');
     await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
@@ -37,7 +37,7 @@ test.describe('Authentication', () => {
     await page.goto('/login');
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('wrong-password');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Accedi' }).click();
 
     await expect(page).toHaveURL('/login');
   });
@@ -48,7 +48,7 @@ test.describe('Authentication', () => {
     await page.goto('/login');
     await page.getByLabel('Username').fill('alessio');
     await page.getByLabel('Password').fill('roadboard2025');
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Accedi' }).click();
     await expect(page).toHaveURL('/projects');
 
     await page.getByRole('button', { name: 'Sign out' }).click();

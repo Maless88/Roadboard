@@ -41,4 +41,8 @@ export class UpdateTaskDto {
   @Type(() => Date)
   @IsDate()
   dueDate?: Date;
+
+  @IsOptional()
+  @IsString()
+  completionNotes?: string;
 }

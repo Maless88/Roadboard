@@ -72,6 +72,8 @@ export class TasksService {
 
     const existing = await this.findOne(id);
 
+    const isClosing = dto.status === TaskStatus.DONE && existing.status !== TaskStatus.DONE;
+
     const task = await this.prisma.task.update({
       where: { id },
       data: {
@@ -82,6 +84,8 @@ export class TasksService {
         priority: dto.priority,
         assigneeId: dto.assigneeId,
         dueDate: dto.dueDate,
+        completionNotes: dto.completionNotes,
+        completedAt: isClosing ? new Date() : undefined,
       },
     });
 
