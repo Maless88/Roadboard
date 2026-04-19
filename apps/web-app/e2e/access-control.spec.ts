@@ -136,9 +136,19 @@ test.describe.serial('Access Control GUI', () => {
     const addBtn = page.getByRole('button', { name: 'Aggiungi' });
     await expect(addBtn).not.toBeDisabled({ timeout: 5000 });
     await addBtn.click();
+    await page.waitForTimeout(1000);
 
-    // dev3 should now appear in the developer list (as @username paragraph, not option element)
-    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible({ timeout: 10000 });
+    // Navigate fresh to settings to pick up server-side revalidation
+    await page.goto('/settings');
+    await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: 'Membri' }).click();
+    await page.waitForSelector('select', { state: 'visible', timeout: 10000 });
+    const ps = page.locator('select').first();
+    await ps.selectOption({ label: PROJECT_NAME });
+    await page.waitForTimeout(300);
+
+    // dev3 should now appear in the developer list
+    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible({ timeout: 5000 });
   });
 
 
