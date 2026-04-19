@@ -236,18 +236,28 @@ test.describe.serial('Access Control GUI', () => {
       await page.waitForLoadState('networkidle');
     }
 
-    // Look for delete button (swipe-to-delete or explicit button)
-    const deleteBtn = page.getByRole('button', { name: /elimina|delete/i }).first();
+    // Navigate directly to the project detail where the delete button lives
+    if (await page.locator(`a[href*="/projects/"]`).filter({ hasText: PROJECT_NAME }).count() > 0) {
+      await page.locator(`a[href*="/projects/"]`).filter({ hasText: PROJECT_NAME }).click();
+      await page.waitForLoadState('networkidle');
+    } else {
+      await page.goto(projectUrl);
+      await page.waitForLoadState('networkidle');
+    }
+
+    // "Elimina progetto" button requires two clicks: first to confirm, then "Conferma"
+    const deleteBtn = page.getByRole('button', { name: 'Elimina progetto' });
 
     if (await deleteBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await deleteBtn.click();
-
-      // Confirm if a dialog appears
-      page.on('dialog', (dialog) => void dialog.accept());
-      await page.waitForTimeout(500);
+      // After first click, a "Conferma" button appears
+      const confirmBtn = page.getByRole('button', { name: 'Conferma' });
+      await expect(confirmBtn).toBeVisible({ timeout: 3000 });
+      await confirmBtn.click();
+      await page.waitForLoadState('networkidle');
 
       // Should be redirected away from project
-      await expect(page).not.toHaveURL(projectUrl);
+      await expect(page).not.toHaveURL(new RegExp(projectUrl));
     } else {
       // Delete via API as fallback (GUI delete requires swipe gesture on mobile layout)
       // This is acceptable — the API test covers the deletion logic
