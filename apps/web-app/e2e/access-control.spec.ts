@@ -132,12 +132,13 @@ test.describe.serial('Access Control GUI', () => {
     await addSelect.waitFor({ state: 'visible', timeout: 10000 });
     await addSelect.selectOption({ index: 1 }); // first real user (index 0 is empty placeholder)
 
+    // Wait for React to process onChange and enable the Aggiungi button
     const addBtn = page.getByRole('button', { name: 'Aggiungi' });
+    await expect(addBtn).not.toBeDisabled({ timeout: 5000 });
     await addBtn.click();
-    await page.waitForTimeout(500);
 
     // dev3 should now appear in the developer list (as @username paragraph, not option element)
-    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible();
+    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible({ timeout: 10000 });
   });
 
 
