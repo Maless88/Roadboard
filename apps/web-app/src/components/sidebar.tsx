@@ -202,7 +202,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
 
                     {userProjects.length > 5 && (
                       <Link
-                        href="/projects"
+                        href="/dashboard"
                         onClick={() => setMenuOpen(false)}
                         className="flex items-center gap-1.5 px-2 py-1.5 mt-0.5 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
                       >

@@ -222,6 +222,6 @@ export async function deleteProjectAction(projectId: string): Promise<{ error?: 
     return { error: (e as Error).message };
   }
 
-  revalidatePath('/projects');
-  redirect('/projects');
+  revalidatePath('/dashboard');
+  redirect('/dashboard');
 }

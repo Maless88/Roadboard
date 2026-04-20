@@ -390,12 +390,12 @@ function UsersTab({
               name="role"
               defaultValue="developer"
               className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              {isAdmin && <option value="admin">Admin</option>}
-              {isAdmin && <option value="team_leader">Team Leader</option>}
-              <option value="developer">Developer</option>
-              <option value="guest">Guest</option>
+              {isAdmin && <option value="admin" style={{ background: '#1e2030', color: '#fff' }}>Admin</option>}
+              {isAdmin && <option value="team_leader" style={{ background: '#1e2030', color: '#fff' }}>Team Leader</option>}
+              <option value="developer" style={{ background: '#1e2030', color: '#fff' }}>Developer</option>
+              <option value="guest" style={{ background: '#1e2030', color: '#fff' }}>Guest</option>
             </select>
           </div>
           <SubmitBtn pending={createPending} label={dict.settings.users.createButton} pendingLabel={dict.settings.users.creating} />
@@ -492,10 +492,10 @@ function MembriTab({
           value={selectedId}
           onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
           className="rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+          style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
         >
           {grantsPerProject.map(({ project: p }) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
+            <option key={p.id} value={p.id} style={{ background: '#1e2030', color: '#fff' }}>{p.name}</option>
           ))}
         </select>
       </div>
@@ -550,11 +550,11 @@ function MembriTab({
               value={addUserId}
               onChange={(e) => setAddUserId(e.target.value)}
               className="flex-1 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
             >
-              <option value="">{dict.settings.members.selectUser}</option>
+              <option value="" style={{ background: '#1e2030', color: '#fff' }}>{dict.settings.members.selectUser}</option>
               {addableUsers.map((u) => (
-                <option key={u.id} value={u.id}>{u.displayName} (@{u.username})</option>
+                <option key={u.id} value={u.id} style={{ background: '#1e2030', color: '#fff' }}>{u.displayName} (@{u.username})</option>
               ))}
             </select>
             <button
