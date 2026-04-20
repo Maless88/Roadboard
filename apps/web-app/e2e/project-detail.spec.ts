@@ -30,14 +30,14 @@ test.describe('Project Detail', () => {
   test('shows project header with back link and status badge', async ({ page }) => {
 
     await expect(page.getByText('← Progetti')).toBeVisible();
-    await expect(page.locator('main h1')).toBeVisible();
+    await expect(page.locator('h1').first()).toBeVisible();
   });
 
 
   test('tab navigation renders all 5 tabs', async ({ page }) => {
 
     await expect(page.getByRole('link', { name: 'Task' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Fasi' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Roadmap' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Decisioni' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Memoria' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Audit' })).toBeVisible();
@@ -74,7 +74,7 @@ test.describe('Project Detail', () => {
 
   test('phases tab shows phases and create button', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Fasi' }).click();
+    await page.getByRole('link', { name: 'Roadmap' }).click();
     await expect(page).toHaveURL(/\?tab=phases/);
     await expect(page.getByText('+ Nuova fase')).toBeVisible();
   });
@@ -82,7 +82,7 @@ test.describe('Project Detail', () => {
 
   test('phases tab: create phase form works', async ({ page }) => {
 
-    await page.getByRole('link', { name: 'Fasi' }).click();
+    await page.getByRole('link', { name: 'Roadmap' }).click();
 
     await page.getByText('+ Nuova fase').click();
     await page.getByPlaceholder('Titolo fase').fill('E2E test phase');

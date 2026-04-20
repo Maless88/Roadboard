@@ -65,21 +65,13 @@ test.describe.serial('Access Control GUI', () => {
 
     const submitBtn = page.getByRole('button', { name: /crea progetto/i }).last();
     await submitBtn.click();
+
+    // Wait for navigation to the newly created project detail page (router.push after server action)
+    await page.waitForURL(/\/projects\/[a-z0-9]+/, { timeout: 15000 });
     await page.waitForLoadState('networkidle');
 
-    // Should redirect to the new project or stay on dashboard
-    const url = page.url();
-    if (url.includes('/projects/')) {
-      projectId = url.split('/projects/')[1]?.split('?')[0] ?? '';
-      projectUrl = `/projects/${projectId}`;
-    } else {
-      // Find the project card by name on the dashboard
-      const card = page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME });
-      await expect(card).toBeVisible({ timeout: 5000 });
-      const href = await card.getAttribute('data-project-href');
-      projectUrl = href ?? '';
-      projectId = projectUrl.replace('/projects/', '');
-    }
+    projectId = page.url().split('/projects/')[1]?.split('?')[0] ?? '';
+    projectUrl = `/projects/${projectId}`;
 
     expect(projectId).not.toBe('');
 
