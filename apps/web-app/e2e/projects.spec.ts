@@ -10,7 +10,6 @@ test.describe('Projects', () => {
     await page.getByLabel('Password').fill('roadboard2025');
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('/dashboard');
-    await page.goto('/projects');
   });
 
 
@@ -31,17 +30,18 @@ test.describe('Projects', () => {
 
   test('clicking a project navigates to detail page', async ({ page }) => {
 
-    const projectLink = page.locator('a[href^="/projects/"]').first();
+    const card = page.locator('[data-testid="project-card"]').first();
 
-    const count = await projectLink.count();
+    const count = await card.count();
 
     if (count === 0) {
       test.skip();
       return;
     }
 
-    await projectLink.click();
-    await expect(page).toHaveURL(/\/projects\/.+/);
+    const href = await card.getAttribute('data-project-href');
+    await card.click();
+    await expect(page).toHaveURL(new RegExp(`${href}(\\?|$)`));
     await expect(page.getByText('← Progetti')).toBeVisible();
   });
 });

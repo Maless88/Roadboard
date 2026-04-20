@@ -12,18 +12,17 @@ test.describe('Project Detail', () => {
     await page.getByLabel('Password').fill('roadboard2025');
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('/dashboard');
-    await page.goto('/projects');
 
-    const projectLink = page.locator('a[href^="/projects/"]').first();
-    const count = await projectLink.count();
+    const card = page.locator('[data-testid="project-card"]').first();
+    const count = await card.count();
 
     if (count === 0) {
       test.skip();
       return;
     }
 
-    projectUrl = (await projectLink.getAttribute('href')) ?? '';
-    await projectLink.click();
+    projectUrl = (await card.getAttribute('data-project-href')) ?? '';
+    await card.click();
     await expect(page).toHaveURL(/\/projects\/.+/);
   });
 

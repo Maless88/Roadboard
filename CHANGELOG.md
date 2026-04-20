@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+- Unified the `/projects` list page into the Dashboard: the dashboard now hosts the "+ Crea progetto" button and uses swipeable project cards
+- `SwipeableProjectCard`: card-layout version of the row component with swipe-left gesture to reveal a delete affordance
+- `/projects` route now redirects to `/dashboard`; post-login redirect updated accordingly
+- `deleteProjectAction` revalidates and redirects to `/dashboard`
+- Sidebar "mostra altri" link points to `/dashboard`
+- E2E tests updated to use the `[data-testid="project-card"]` selector with `data-project-href`
+
+### Fixed
+- Settings → Membri: native select dropdown options are now readable (solid dark background on both `<select>` and `<option>` elements)
+
 ## [0.14.0] - 2026-04-19
 
 ### Added

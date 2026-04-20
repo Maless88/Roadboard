@@ -8,7 +8,7 @@ export default async function LoginPage() {
   const token = await getToken();
 
   if (token) {
-    redirect('/projects');
+    redirect('/dashboard');
   }
 
   return (

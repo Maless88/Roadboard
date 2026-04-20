@@ -49,10 +49,10 @@ test.describe.serial('Access Control GUI', () => {
 
   // ── 1. Owner creates project ───────────────────────────────────────────────
 
-  test('1. Owner creates a project via the projects page', async ({ page }) => {
+  test('1. Owner creates a project via the dashboard page', async ({ page }) => {
 
     await login(page, 'alessio', 'roadboard2025');
-    await page.goto('/projects');
+    await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
     // Open the create project form
@@ -67,17 +67,17 @@ test.describe.serial('Access Control GUI', () => {
     await submitBtn.click();
     await page.waitForLoadState('networkidle');
 
-    // Should redirect to the new project or stay on projects list
+    // Should redirect to the new project or stay on dashboard
     const url = page.url();
     if (url.includes('/projects/')) {
       projectId = url.split('/projects/')[1]?.split('?')[0] ?? '';
       projectUrl = `/projects/${projectId}`;
     } else {
-      // Find the project link in the list
-      const link = page.locator(`a[href*="/projects/"]`).filter({ hasText: PROJECT_NAME });
-      await expect(link).toBeVisible({ timeout: 5000 });
-      const href = await link.getAttribute('href');
-      projectUrl = href?.split('?')[0] ?? '';
+      // Find the project card by name on the dashboard
+      const card = page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME });
+      await expect(card).toBeVisible({ timeout: 5000 });
+      const href = await card.getAttribute('data-project-href');
+      projectUrl = href ?? '';
       projectId = projectUrl.replace('/projects/', '');
     }
 
@@ -194,12 +194,11 @@ test.describe.serial('Access Control GUI', () => {
   test('5. dev3 cannot delete the project (no delete option available)', async ({ page }) => {
 
     await login(page, 'dev3', 'roadboard2025');
-    await page.goto('/projects');
+    await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
-    // Find the test project row and check for delete affordance
-    const projectRow = page.locator('[data-testid="project-row"]').filter({ hasText: PROJECT_NAME })
-      .or(page.locator('li, article, div').filter({ hasText: PROJECT_NAME }));
+    // Find the test project card and check for delete affordance
+    const projectRow = page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME });
 
     // Swipe or hover to check for delete button
     if (await projectRow.count() > 0) {
@@ -219,26 +218,17 @@ test.describe.serial('Access Control GUI', () => {
 
   // ── 6. Owner deletes the test project ─────────────────────────────────────
 
-  test('6. Owner can delete the project via the projects list', async ({ page }) => {
+  test('6. Owner can delete the project via the dashboard', async ({ page }) => {
 
     await login(page, 'alessio', 'roadboard2025');
-    await page.goto('/projects');
+    await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
-    // Find the project row
-    const projectRow = page.locator('li, article, [class*="row"]')
-      .filter({ hasText: PROJECT_NAME })
-      .or(page.locator('a').filter({ hasText: PROJECT_NAME }).locator('..').locator('..'));
-
-    if (await projectRow.count() === 0) {
-      // Try navigating directly to the project detail
-      await page.goto(projectUrl);
-      await page.waitForLoadState('networkidle');
-    }
-
     // Navigate directly to the project detail where the delete button lives
-    if (await page.locator(`a[href*="/projects/"]`).filter({ hasText: PROJECT_NAME }).count() > 0) {
-      await page.locator(`a[href*="/projects/"]`).filter({ hasText: PROJECT_NAME }).click();
+    const card = page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME });
+
+    if (await card.count() > 0) {
+      await card.first().click();
       await page.waitForLoadState('networkidle');
     } else {
       await page.goto(projectUrl);
