@@ -43,15 +43,63 @@ async function logout(page: Page) {
 // Shared state across serial tests
 let projectId = '';
 let projectUrl = '';
+const DEV_USERNAME = `e2edev${RUN_ID}`;
+const DEV_DISPLAY = `E2E Dev ${RUN_ID}`;
+const DEV_PASSWORD = '***REDACTED***';
+
+
+async function adminApiToken(): Promise<string> {
+
+  const res = await fetch('http://localhost:3002/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'admin', password: '***REDACTED***' }),
+  });
+  const { token } = await res.json() as { token: string };
+  return token;
+}
 
 
 test.describe.serial('Access Control GUI', () => {
+
+  test.beforeAll(async () => {
+
+    const token = await adminApiToken();
+    await fetch('http://localhost:3002/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        username: DEV_USERNAME,
+        displayName: DEV_DISPLAY,
+        email: `${DEV_USERNAME}@e2e.dev`,
+        password: DEV_PASSWORD,
+        role: 'developer',
+      }),
+    });
+  });
+
+
+  test.afterAll(async () => {
+
+    const token = await adminApiToken();
+    const list = await fetch('http://localhost:3002/users', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const users = await list.json() as Array<{ id: string; username: string }>;
+    const dev = users.find((u) => u.username === DEV_USERNAME);
+    if (dev) {
+      await fetch(`http://localhost:3002/users/${dev.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  });
 
   // ── 1. Owner creates project ───────────────────────────────────────────────
 
   test('1. Owner creates a project via the dashboard page', async ({ page }) => {
 
-    await login(page, 'alessio', '***REDACTED***');
+    await login(page, 'admin', '***REDACTED***');
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -89,7 +137,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('2. Owner sees themselves as Proprietario in settings', async ({ page }) => {
 
-    await login(page, 'alessio', '***REDACTED***');
+    await login(page, 'admin', '***REDACTED***');
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
 
@@ -103,7 +151,7 @@ test.describe.serial('Access Control GUI', () => {
 
     // Owner section
     await expect(page.getByText('Proprietario').first()).toBeVisible();
-    await expect(page.getByText('alessio').first()).toBeVisible();
+    await expect(page.getByText('Admin').first()).toBeVisible();
   });
 
 
@@ -111,7 +159,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('3. Owner adds dev3 as developer via Membri tab', async ({ page }) => {
 
-    await login(page, 'alessio', '***REDACTED***');
+    await login(page, 'admin', '***REDACTED***');
     await page.goto('/settings');
     await page.waitForLoadState('networkidle');
 
@@ -130,7 +178,7 @@ test.describe.serial('Access Control GUI', () => {
     // Add dev3 via the dropdown — option label is "Developer 3 (@dev3)"
     const addSelect = page.locator('select').nth(1);
     await addSelect.waitFor({ state: 'visible', timeout: 10000 });
-    await addSelect.selectOption({ label: 'Developer 3 (@dev3)' });
+    await addSelect.selectOption({ label: `${DEV_DISPLAY} (@${DEV_USERNAME})` });
 
     // Wait for React to process onChange and enable the Aggiungi button
     const addBtn = page.getByRole('button', { name: 'Aggiungi' });
@@ -148,7 +196,7 @@ test.describe.serial('Access Control GUI', () => {
     await page.waitForTimeout(300);
 
     // dev3 should now appear in the developer list
-    await expect(page.locator('p').filter({ hasText: '@dev3' })).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('p').filter({ hasText: `@${DEV_USERNAME}` })).toBeVisible({ timeout: 5000 });
   });
 
 
@@ -156,7 +204,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('4. dev3 can navigate to the project and create a task', async ({ page }) => {
 
-    await login(page, 'dev3', '***REDACTED***');
+    await login(page, DEV_USERNAME, DEV_PASSWORD);
 
     // Navigate directly to the tasks tab
     await page.goto(projectUrl + '?tab=tasks');
@@ -185,7 +233,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('5. dev3 attempt to delete the project is rejected server-side', async ({ page }) => {
 
-    await login(page, 'dev3', '***REDACTED***');
+    await login(page, DEV_USERNAME, DEV_PASSWORD);
 
     // The UI affordance (swipe-to-delete) is rendered for any member — server-side
     // enforces ownership. Exercise the server action via a direct DELETE and expect
@@ -194,7 +242,7 @@ test.describe.serial('Access Control GUI', () => {
     const loginRes = await fetch('http://localhost:3002/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'dev3', password: '***REDACTED***' }),
+      body: JSON.stringify({ username: DEV_USERNAME, password: DEV_PASSWORD }),
     });
     const { token } = await loginRes.json() as { token: string };
     const delRes = await fetch(`http://localhost:3001/projects/${projectId}`, {
@@ -216,7 +264,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('6. Owner can delete the project via the dashboard', async ({ page }) => {
 
-    await login(page, 'alessio', '***REDACTED***');
+    await login(page, 'admin', '***REDACTED***');
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -256,7 +304,7 @@ test.describe.serial('Access Control GUI', () => {
       const loginRes = await fetch('http://localhost:3002/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'alessio', password: '***REDACTED***' }),
+        body: JSON.stringify({ username: 'admin', password: '***REDACTED***' }),
       });
       const { token } = await loginRes.json() as { token: string };
       await fetch(`http://localhost:3001/projects/${projectId}`, {

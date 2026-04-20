@@ -6,7 +6,7 @@ test.describe('Projects', () => {
   test.beforeEach(async ({ page }) => {
 
     await page.goto('/login');
-    await page.getByLabel('Username').fill('alessio');
+    await page.getByLabel('Username').fill('admin');
     await page.getByLabel('Password').fill('***REDACTED***');
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('/dashboard');
@@ -23,7 +23,7 @@ test.describe('Projects', () => {
   test('nav shows RoadBoard title and sign out', async ({ page }) => {
 
     await expect(page.locator('aside').getByText('RoadBoard')).toBeVisible();
-    await page.locator('aside button').filter({ hasText: 'alessio' }).click();
+    await page.locator('aside button').filter({ hasText: 'admin' }).click();
     await expect(page.getByRole('button', { name: 'Esci' })).toBeVisible();
   });
 

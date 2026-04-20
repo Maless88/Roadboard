@@ -8,7 +8,7 @@ test.describe('Project Detail', () => {
   test.beforeEach(async ({ page }) => {
 
     await page.goto('/login');
-    await page.getByLabel('Username').fill('alessio');
+    await page.getByLabel('Username').fill('admin');
     await page.getByLabel('Password').fill('***REDACTED***');
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('/dashboard');
