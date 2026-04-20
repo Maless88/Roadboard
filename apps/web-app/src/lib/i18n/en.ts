@@ -12,7 +12,7 @@ export const enDict: Dictionary = {
   },
   tabs: {
     tasks: 'Tasks',
-    phases: 'Phases',
+    phases: 'Roadmap',
     decisions: 'Decisions',
     memory: 'Memory',
     audit: 'Audit',

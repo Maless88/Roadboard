@@ -10,7 +10,7 @@ export const itDict = {
   },
   tabs: {
     tasks: 'Task',
-    phases: 'Fasi',
+    phases: 'Roadmap',
     decisions: 'Decisioni',
     memory: 'Memoria',
     audit: 'Audit',
