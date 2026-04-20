@@ -683,7 +683,7 @@ async function handleToolCall(
           },
           {
             step: 3,
-            action: "Before starting work, ensure a task exists. Use create_task if needed.",
+            action: "When planning any activity: (a) call list_phases(projectId) to discover existing phases; (b) if the work fits an existing phase, create the task with that phaseId; (c) if no suitable phase exists, call create_phase first, then create_task with the new phaseId. Never create a task without a phaseId. Never create a duplicate phase if one already covers the work.",
           },
           {
             step: 4,
@@ -704,7 +704,8 @@ async function handleToolCall(
         ],
         operating_rules: [
           "Always call initial_instructions once at session start.",
-          "Always open or identify a task before starting work.",
+          "Always open or identify a task before starting work. Every task MUST have a phaseId.",
+          "When planning any activity: call list_phases first, assign the task to an existing phase if one fits, otherwise create a new phase first. Never skip phase assignment.",
           "Do not report completion without updating the task status.",
           "Use create_memory_entry to persist architectural decisions and key findings.",
           "Use create_decision for any architectural choice, technology selection, or significant design decision.",

@@ -24,23 +24,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Refactoring**: Apply patches only. NO full refactoring without explicit consent.
 
 ## 3. MCP OPERATIONAL PROTOCOLS (AUTO-ONBOARDING)
-- **Serena Module**: If tools are available, you MUST execute `initial_instructions()` at the start of every session to inject the operational protocol.
-- **Memento Module**: If tools are available, you MUST execute `memento_onboarding()` at the start of every session to inject the memory management protocol.
-- **RoadBoard 2.0 MCP**: If tools are available, you MUST execute `initial_instructions()` at the start of every session to load the operational protocol, tool catalog, and workflow rules.
+- **Serena Module**: If tools are available and you have NOT yet called `initial_instructions()` in this session, call it IMMEDIATELY — before any other response, even if the opening message seems generic.
+- **RoadBoard 2.0 MCP**: If tools are available and you have NOT yet called `initial_instructions()` in this session, call it IMMEDIATELY — before any other response, even if the opening message seems generic.
 - **Context7 Module**: You MUST use Context7 tools whenever the user asks a question about any programming language, framework, library, API, software tool, or technology stack.
 
 ## 4. ROADBOARD 2.0 — WORKFLOW RULES
 - **Session start**: Always call `prepare_project_summary` or `get_project_changelog` to load the current project context before starting any work.
-- **Planning**: Before proposing or starting any implementation, verify existing tasks on RoadBoard 2.0 with `list_active_tasks`. If the planned work has no corresponding task, create one with `create_task` before proceeding.
+- **Planning**: When asked to plan any activity, ALWAYS follow this sequence via MCP — no exceptions:
+  1. Call `list_phases(projectId)` to discover existing phases.
+  2. If the work fits an existing phase → call `create_task` with that `phaseId`.
+  3. If no suitable phase exists → call `create_phase` first, then `create_task` with the new `phaseId`.
+  4. Never create a task without a `phaseId`. Never create a duplicate phase if one already covers the work.
 - **Task tracking**: Update task status via `update_task_status` as work progresses (`in_progress` when starting, `done` when complete). Never report a task as complete without updating its status first.
 - **Decisions**: After any architectural or significant design decision, record it with `create_decision` including rationale and impact level.
 - **Memory**: After any meaningful discovery, technical finding, or completed milestone, store a `create_memory_entry` autonomously — do NOT ask for permission.
 - **Session end**: Always call `create_handoff` at the end of every session with a summary and next steps.
-- **Autonomy**: All RoadBoard 2.0 write operations (create_task, update_task_status, create_memory_entry, create_decision, create_handoff) are background autonomous processes. DO NOT ask for permission.
+- **Autonomy**: All RoadBoard 2.0 write operations (create_task, create_phase, update_task_status, create_memory_entry, create_decision, create_handoff) are background autonomous processes. DO NOT ask for permission.
 
 ## 5. EXECUTION GUIDELINES
 - **Syntax**: Always use language markers in code blocks (e.g., ```typescript).
-- **Autonomy**: For Memento storage, DO NOT ask for permission. It is a background autonomous process.
+- **Autonomy**: For Roadboard MCP, DO NOT ask for permission. It is a background autonomous process.
 - **Performance**: Target 1-3 tool calls for simple info, max 5 for complex tasks.
 
 ---
