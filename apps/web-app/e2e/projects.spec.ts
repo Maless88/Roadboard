@@ -16,7 +16,7 @@ test.describe('Projects', () => {
 
   test('dashboard shows project list', async ({ page }) => {
 
-    await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Progetti' })).toBeVisible();
     await expect(page.locator('aside').getByText('RoadBoard')).toBeVisible();
   });
 
