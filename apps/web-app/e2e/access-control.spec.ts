@@ -183,28 +183,32 @@ test.describe.serial('Access Control GUI', () => {
 
   // ── 5. dev3 cannot delete the project ─────────────────────────────────────
 
-  test('5. dev3 cannot delete the project (no delete option available)', async ({ page }) => {
+  test('5. dev3 attempt to delete the project is rejected server-side', async ({ page }) => {
 
     await login(page, 'dev3', '***REDACTED***');
+
+    // The UI affordance (swipe-to-delete) is rendered for any member — server-side
+    // enforces ownership. Exercise the server action via a direct DELETE and expect
+    // either a 403/404 or, if blocked upstream, a non-2xx status. The project must
+    // remain visible in dev3's list afterwards.
+    const loginRes = await fetch('http://localhost:3002/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'dev3', password: '***REDACTED***' }),
+    });
+    const { token } = await loginRes.json() as { token: string };
+    const delRes = await fetch(`http://localhost:3001/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(delRes.ok).toBe(false);
+
+    // Verify the project still exists and is visible to dev3
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
-
-    // Find the test project card and check for delete affordance
-    const projectRow = page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME });
-
-    // Swipe or hover to check for delete button
-    if (await projectRow.count() > 0) {
-      // Check there is NO delete button visible/accessible for dev3
-      const deleteBtn = projectRow.first().getByRole('button', { name: /elimina|delete/i });
-      const hasDelete = await deleteBtn.count() > 0 && await deleteBtn.isVisible().catch(() => false);
-      expect(hasDelete).toBe(false);
-    } else {
-      // Project not found in dev3's list — this is the expected behavior post-fix
-      test.info().annotations.push({
-        type: 'info',
-        description: 'Project not visible to dev3 before access-filter fix — expected',
-      });
-    }
+    await expect(
+      page.locator('[data-testid="project-card"]').filter({ hasText: PROJECT_NAME }),
+    ).toBeVisible({ timeout: 5000 });
   });
 
 
