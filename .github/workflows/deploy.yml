@@ -1,0 +1,30 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-roadboard
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, roadboard]
+    steps:
+      - name: Pull latest
+        working-directory: /opt/roadboard
+        run: |
+          git fetch --all --prune
+          git reset --hard origin/main
+
+      - name: Build and restart
+        working-directory: /opt/roadboard/infra/docker
+        run: |
+          cp /opt/roadboard/.env .
+          docker compose build
+          docker compose up -d
+
+      - name: Prune old images
+        run: docker image prune -f
