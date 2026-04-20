@@ -16,6 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 - Settings → Membri: native select dropdown options are now readable (solid dark background on both `<select>` and `<option>` elements)
+- `SwipeableProjectCard`: delete overlay no longer "bleeds through" the translucent card background at rest; card stays fixed while the red overlay grows from the right during swipe
+- `SwipeableProjectCard`: `setPointerCapture` on pointerdown keeps the drag tracked when the cursor leaves the card; navigation handled directly in `onPointerUp` so card click still works after capture
+- `SwipeableProjectCard`: client component now uses `useDict()` instead of receiving the `Dictionary` as prop (dictionary contains functions, not serializable across the Server→Client boundary)
 
 ## [0.14.0] - 2026-04-19
 

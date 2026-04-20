@@ -69,7 +69,6 @@ export default async function DashboardPage() {
                   key={project.id}
                   project={project}
                   snap={snapshots[i]}
-                  dict={dict}
                 />
               ))}
             </div>

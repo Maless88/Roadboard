@@ -3,8 +3,8 @@
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { deleteProjectAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
 import type { Project, DashboardSnapshot } from '@/lib/api';
-import type { Dictionary } from '@/lib/i18n';
 
 
 const STATUS_DOT: Record<string, string> = {
@@ -37,12 +37,12 @@ const SNAP_OPEN = 80;
 interface Props {
   project: Project;
   snap: DashboardSnapshot | null;
-  dict: Dictionary;
 }
 
 
-export function SwipeableProjectCard({ project, snap, dict }: Props) {
+export function SwipeableProjectCard({ project, snap }: Props) {
 
+  const dict = useDict();
   const router = useRouter();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(false);
@@ -61,6 +61,7 @@ export function SwipeableProjectCard({ project, snap, dict }: Props) {
 
   function onPointerDown(e: React.PointerEvent) {
 
+    e.currentTarget.setPointerCapture(e.pointerId);
     startX.current = e.clientX;
     startY.current = e.clientY;
     startOffset.current = offset;
@@ -84,20 +85,25 @@ export function SwipeableProjectCard({ project, snap, dict }: Props) {
 
   function onPointerUp() {
 
+    const wasSwipe = didSwipe.current;
+    const wasOpen = open;
     startX.current = null;
-    const snapOpen = offset < -(REVEAL_THRESHOLD / 2);
-    setOffset(snapOpen ? -SNAP_OPEN : 0);
-    setOpen(snapOpen);
-  }
 
-  function onCardClick() {
+    if (!wasSwipe) {
 
-    if (didSwipe.current || open) {
-      if (open) { setOpen(false); setOffset(0); }
+      if (wasOpen) {
+        setOffset(0);
+        setOpen(false);
+        return;
+      }
+
+      router.push(`/projects/${project.id}?tab=tasks`);
       return;
     }
 
-    router.push(`/projects/${project.id}?tab=tasks`);
+    const snapOpen = offset < -(REVEAL_THRESHOLD / 2);
+    setOffset(snapOpen ? -SNAP_OPEN : 0);
+    setOpen(snapOpen);
   }
 
   function handleDelete() {
@@ -114,15 +120,14 @@ export function SwipeableProjectCard({ project, snap, dict }: Props) {
       data-testid="project-card"
       data-project-id={project.id}
       data-project-href={`/projects/${project.id}`}
-      className="relative rounded-2xl touch-pan-y select-none"
+      className="relative rounded-2xl touch-pan-y select-none overflow-hidden"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
       <div
-        onClick={onCardClick}
-        className="group block rounded-2xl p-5 cursor-pointer transition-all bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.055)] hover:border-[rgba(255,255,255,0.12)]"
+        className="group block rounded-2xl p-5 cursor-pointer transition-all bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.055)] hover:border-[rgba(255,255,255,0.12)] h-full"
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 min-w-0">
