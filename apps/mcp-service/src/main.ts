@@ -248,7 +248,7 @@ const TOOLS = [
   },
   {
     name: "create_memory_entry",
-    description: "Create a new memory entry in a project",
+    description: "Create a new memory entry in a project. Use `type` to classify the entry; only the enum values below are accepted.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -258,7 +258,8 @@ const TOOLS = [
         },
         type: {
           type: "string",
-          description: "The memory entry type",
+          description: "Memory entry type. Pick the closest match: done (milestone / completed work), next (planned action), decision (architectural or scope choice — prefer create_decision for formal decisions), handoff (session handoff — prefer create_handoff), architecture (system topology, module boundaries), issue (bug, defect, blocker, problem report), learning (insight, finding, discovery), operational_note (runbook, ops config, deploy detail), open_question (unresolved question).",
+          enum: ["done", "next", "decision", "handoff", "architecture", "issue", "learning", "operational_note", "open_question"],
         },
         title: {
           type: "string",

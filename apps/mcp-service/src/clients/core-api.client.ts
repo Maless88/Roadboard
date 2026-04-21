@@ -269,7 +269,8 @@ export class CoreApiClient {
     });
 
     if (!res.ok) {
-      throw new Error(`core-api createMemoryEntry failed: ${res.status}`);
+      const errBody = await res.text().catch(() => "");
+      throw new Error(`core-api createMemoryEntry failed: ${res.status} ${errBody}`);
     }
 
     return res.json() as Promise<unknown>;
