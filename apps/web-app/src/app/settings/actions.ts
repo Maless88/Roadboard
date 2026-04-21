@@ -65,12 +65,14 @@ export async function createTokenAction(
   if (!session) return { error: 'Sessione non valida' };
 
   const name = (formData.get('name') as string).trim();
-  const scope = (formData.get('scope') as string).trim() || 'read write';
+  const scopes = formData.getAll('scopes').map((s) => String(s).trim()).filter(Boolean);
 
   if (!name) return { error: 'Il nome è obbligatorio' };
 
+  if (scopes.length === 0) return { error: 'Seleziona almeno uno scope' };
+
   try {
-    const created = await createToken(token, { userId: session.userId, name, scope });
+    const created = await createToken(token, { userId: session.userId, name, scopes });
     revalidatePath('/settings');
     return { created: { token: created.token, name: created.name } };
   } catch (err) {

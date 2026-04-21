@@ -17,7 +17,7 @@ export interface User {
 export interface McpTokenInfo {
   id: string;
   name: string;
-  scope: string;
+  scopes: string[];
   status: string;
   createdAt: string;
   revokedAt: string | null;
@@ -337,7 +337,7 @@ export async function listTokens(token: string, userId: string): Promise<McpToke
 
 export async function createToken(
   token: string,
-  data: { userId: string; name: string; scope: string },
+  data: { userId: string; name: string; scopes: string[] },
 ): Promise<McpTokenCreated> {
 
   const res = await fetch(`${AUTH_API}/tokens`, {
@@ -346,7 +346,10 @@ export async function createToken(
     body: JSON.stringify(data),
   });
 
-  if (!res.ok) throw new Error('Failed to create token');
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to create token: ${res.status} ${body}`);
+  }
 
   return res.json() as Promise<McpTokenCreated>;
 }

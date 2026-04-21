@@ -114,6 +114,21 @@ function SecurityTab() {
 }
 
 
+const MCP_TOKEN_SCOPES: { value: string; defaultChecked: boolean }[] = [
+  { value: 'project.read', defaultChecked: true },
+  { value: 'project.write', defaultChecked: true },
+  { value: 'task.write', defaultChecked: true },
+  { value: 'memory.write', defaultChecked: true },
+  { value: 'decision.write', defaultChecked: true },
+  { value: 'dashboard.read', defaultChecked: true },
+  { value: 'token.manage', defaultChecked: false },
+  { value: 'project.admin', defaultChecked: false },
+  { value: 'codeflow.read', defaultChecked: false },
+  { value: 'codeflow.write', defaultChecked: false },
+  { value: 'codeflow.scan', defaultChecked: false },
+];
+
+
 function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTokens: McpTokenInfo[] }) {
 
   const dict = useDict();
@@ -199,7 +214,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
                 <div>
                   <p className="text-sm text-white font-medium">{t.name}</p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    scope: <span className="text-gray-400">{t.scope}</span>
+                    scopes: <span className="text-gray-400">{t.scopes.join(', ')}</span>
                     {' · '}
                     {new Date(t.createdAt).toLocaleDateString('it-IT')}
                   </p>
@@ -221,7 +236,23 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
           {createState.error && <Alert type="error" msg={createState.error} />}
           <input type="hidden" name="userId" value={session.userId} />
           <Field label="Nome" name="name" placeholder="es. claude-local" />
-          <input type="hidden" name="scope" value="read write" />
+          <div className="space-y-2">
+            <p className="text-xs text-gray-400 font-medium">Scopes</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {MCP_TOKEN_SCOPES.map((s) => (
+                <label key={s.value} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="scopes"
+                    value={s.value}
+                    defaultChecked={s.defaultChecked}
+                    className="rounded border-white/20 bg-black/30"
+                  />
+                  <span>{s.value}</span>
+                </label>
+              ))}
+            </div>
+          </div>
           <SubmitBtn pending={createPending} label={dict.settings.tokens.createButton} pendingLabel={dict.settings.tokens.creating} />
         </form>
       </Card>
