@@ -47,6 +47,7 @@ export interface Project {
   description: string | null;
   status: string;
   ownerTeamId: string;
+  ownerUserId: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -35,6 +35,7 @@ interface Props {
   teams: TeamWithMembers[];
   isAdmin: boolean;
   isTeamLeader: boolean;
+  canManageAnyProject: boolean;
 }
 
 
@@ -824,17 +825,19 @@ export function SettingsTabs({
   teams,
   isAdmin,
   isTeamLeader,
+  canManageAnyProject,
 }: Props) {
 
   const dict = useDict();
   const canManageUsers = isAdmin || isTeamLeader;
+  const canSeeMembers = isAdmin || canManageAnyProject;
 
   const visibleTabs: { key: TabKey; label: string }[] = [
     { key: 'security', label: dict.settings.tabs.security },
     { key: 'tokens', label: dict.settings.tabs.tokens },
     { key: 'teams', label: dict.settings.tabs.teams },
     ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
-    ...(isAdmin ? [{ key: 'members' as TabKey, label: dict.settings.tabs.members }] : []),
+    ...(canSeeMembers ? [{ key: 'members' as TabKey, label: dict.settings.tabs.members }] : []),
   ];
 
   const [active, setActive] = useState<TabKey>('security');
@@ -863,7 +866,7 @@ export function SettingsTabs({
       {active === 'users' && canManageUsers && (
         <UsersTab currentUserId={session.userId} initialUsers={users} isAdmin={isAdmin} />
       )}
-      {active === 'members' && isAdmin && (
+      {active === 'members' && canSeeMembers && (
         <MembriTab users={users} grantsPerProject={grantsPerProject} />
       )}
     </div>

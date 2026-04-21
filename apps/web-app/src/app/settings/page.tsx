@@ -44,6 +44,22 @@ export default async function SettingsPage() {
   const isAdmin = session.role === 'admin';
   const isTeamLeader = session.role === 'team_leader';
 
+  const myTeamIds = new Set(myMemberships.map((m) => m.teamId));
+  const manageableGrantsPerProject = isAdmin
+    ? grantsPerProject
+    : grantsPerProject.filter(({ project, grants }) => {
+
+      if (project.ownerUserId === session.userId) return true;
+
+      return grants.some((g) =>
+        g.grantType === 'project.admin' && (
+          (g.subjectType === 'user' && g.subjectId === session.userId)
+          || (g.subjectType === 'team' && myTeamIds.has(g.subjectId))
+        ),
+      );
+    });
+  const canManageAnyProject = manageableGrantsPerProject.length > 0;
+
   return (
     <AppShell username={session.username} displayName={session.displayName} userProjects={[...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((p) => ({ id: p.id, name: p.name, status: p.status }))}>
       <main className="mx-auto max-w-4xl px-4 py-8">
@@ -58,10 +74,11 @@ export default async function SettingsPage() {
           tokens={tokens}
           users={users}
           projects={projects}
-          grantsPerProject={grantsPerProject}
+          grantsPerProject={manageableGrantsPerProject}
           teams={teams}
           isAdmin={isAdmin}
           isTeamLeader={isTeamLeader}
+          canManageAnyProject={canManageAnyProject}
         />
       </main>
     </AppShell>
