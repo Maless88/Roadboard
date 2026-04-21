@@ -141,9 +141,25 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
   useEffect(() => {
 
     if (createState.created) {
-      setNewToken(createState.created.token);
+      const c = createState.created;
+      setNewToken(c.token);
       setCopied(false);
       formRef.current?.reset();
+      setTokens((prev) =>
+        prev.some((t) => t.id === c.id)
+          ? prev
+          : [
+              {
+                id: c.id,
+                name: c.name,
+                scopes: c.scopes,
+                status: 'active',
+                createdAt: c.createdAt,
+                revokedAt: null,
+              },
+              ...prev,
+            ],
+      );
     }
   }, [createState.created]);
 
