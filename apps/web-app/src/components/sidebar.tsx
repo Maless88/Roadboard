@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import { logoutAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
@@ -43,11 +42,8 @@ const STATUS_DOT: Record<string, string> = {
 export function Sidebar({ username, displayName, activeProject, userProjects = [], locale }: SidebarProps) {
 
   const dict = useDict();
-  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   const pct = activeProject && activeProject.taskTotal > 0
     ? Math.round((activeProject.taskDone / activeProject.taskTotal) * 100)
@@ -78,7 +74,11 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       }}
     >
       {/* Logo */}
-      <div className="px-4 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+      <Link
+        href="/dashboard"
+        className="px-4 py-4 flex items-center gap-2.5 hover:bg-white/5 transition-colors"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+      >
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
           style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)' }}
@@ -89,22 +89,10 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
           <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
           <span className="text-[10px] text-indigo-400 font-mono">2.0</span>
         </div>
-      </div>
+      </Link>
 
       {/* Nav principale */}
       <nav className="flex-1 px-2 py-4 flex flex-col gap-0.5 overflow-y-auto">
-
-        <NavItem
-          href="/dashboard"
-          active={isActive('/dashboard')}
-          icon={
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10-3a1 1 0 011-1h4a1 1 0 011 1v7a1 1 0 01-1 1h-4a1 1 0 01-1-1v-7z" />
-            </svg>
-          }
-        >
-          {dict.nav.dashboard}
-        </NavItem>
 
         {/* Progetto attivo */}
         {activeProject && (
@@ -251,27 +239,3 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
 }
 
 
-function NavItem({
-  href, active, icon, children,
-}: {
-  href: string;
-  active: boolean;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-
-  return (
-    <Link
-      href={href}
-      className={[
-        'flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors',
-        active
-          ? 'bg-indigo-600/20 text-indigo-300 font-medium'
-          : 'text-gray-500 hover:text-white hover:bg-white/5',
-      ].join(' ')}
-    >
-      {icon}
-      {children}
-    </Link>
-  );
-}
