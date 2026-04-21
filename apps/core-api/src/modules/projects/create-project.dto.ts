@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
 import { ProjectStatus } from '@roadboard/domain';
 
 
@@ -16,9 +16,15 @@ export class CreateProjectDto {
   @IsString()
   description?: string;
 
+  @ValidateIf((o) => !o.ownerTeamSlug)
   @IsString()
   @IsNotEmpty()
-  ownerTeamId!: string;
+  ownerTeamId?: string;
+
+  @ValidateIf((o) => !o.ownerTeamId)
+  @IsString()
+  @IsNotEmpty()
+  ownerTeamSlug?: string;
 
   @IsOptional()
   @IsEnum(ProjectStatus)

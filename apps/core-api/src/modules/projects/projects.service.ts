@@ -1,4 +1,4 @@
-import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
 import { CreateProjectDto } from './create-project.dto';
@@ -11,14 +11,36 @@ export class ProjectsService {
   constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
 
 
+  private async resolveOwnerTeamId(dto: CreateProjectDto): Promise<string> {
+
+    if (dto.ownerTeamId) {
+      return dto.ownerTeamId;
+    }
+
+    if (!dto.ownerTeamSlug) {
+      throw new BadRequestException('Either ownerTeamId or ownerTeamSlug must be provided');
+    }
+
+    const team = await this.prisma.team.findUnique({ where: { slug: dto.ownerTeamSlug } });
+
+    if (!team) {
+      throw new NotFoundException(`Team with slug "${dto.ownerTeamSlug}" not found`);
+    }
+
+    return team.id;
+  }
+
+
   async create(dto: CreateProjectDto, createdByUserId?: string) {
+
+    const ownerTeamId = await this.resolveOwnerTeamId(dto);
 
     const project = await this.prisma.project.create({
       data: {
         name: dto.name,
         slug: dto.slug,
         description: dto.description,
-        ownerTeamId: dto.ownerTeamId,
+        ownerTeamId,
         status: dto.status,
         ownerUserId: createdByUserId ?? null,
       },
@@ -28,7 +50,7 @@ export class ProjectsService {
       data: {
         projectId: project.id,
         subjectType: GrantSubjectType.TEAM,
-        subjectId: dto.ownerTeamId,
+        subjectId: ownerTeamId,
         grantType: GrantType.PROJECT_ADMIN,
         grantedByUserId: createdByUserId ?? null,
       },

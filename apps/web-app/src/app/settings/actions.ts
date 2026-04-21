@@ -13,6 +13,11 @@ import {
   deleteGrant,
   listGrants,
   validateSession,
+  createTeam,
+  deleteTeam,
+  createMembership,
+  deleteMembership,
+  listUsers,
 } from '@/lib/api';
 
 
@@ -269,6 +274,100 @@ export async function resetUserPasswordAction(
   try {
     await resetUserPassword(token, userId, newPassword);
     return { success: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Errore' };
+  }
+}
+
+
+export async function createTeamAction(
+  _prev: { error?: string; success?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  const session = await validateSession(token);
+
+  if (!session) return { error: 'Sessione non valida' };
+
+  const name = (formData.get('name') as string).trim();
+  const slug = (formData.get('slug') as string).trim();
+  const description = ((formData.get('description') as string) ?? '').trim();
+
+  if (!name || !slug) return { error: 'Nome e slug sono obbligatori' };
+
+  try {
+    const team = await createTeam(token, { name, slug, description: description || undefined });
+    await createMembership(token, { teamId: team.id, userId: session.userId, role: 'admin' });
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Errore';
+    return { error: msg.includes('Unique') || msg.includes('unique') ? 'Nome o slug già in uso' : msg };
+  }
+}
+
+
+export async function deleteTeamAction(idOrSlug: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  try {
+    await deleteTeam(token, idOrSlug);
+    revalidatePath('/settings');
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'Errore' };
+  }
+}
+
+
+export async function addTeamMemberAction(
+  _prev: { error?: string; success?: boolean },
+  formData: FormData,
+): Promise<{ error?: string; success?: boolean }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  const teamId = (formData.get('teamId') as string).trim();
+  const username = (formData.get('username') as string).trim();
+  const role = ((formData.get('role') as string) ?? 'member').trim();
+
+  if (!teamId || !username) return { error: 'Team e username obbligatori' };
+
+  try {
+    const users = await listUsers(token);
+    const target = users.find((u) => u.username === username || u.email === username);
+
+    if (!target) return { error: `Utente "${username}" non trovato` };
+
+    await createMembership(token, { teamId, userId: target.id, role });
+    revalidatePath('/settings');
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Errore';
+    return { error: msg.includes('Unique') ? 'Utente già membro di questo team' : msg };
+  }
+}
+
+
+export async function removeTeamMemberAction(membershipId: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  try {
+    await deleteMembership(token, membershipId);
+    revalidatePath('/settings');
+    return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Errore' };
   }

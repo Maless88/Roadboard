@@ -3,6 +3,7 @@ import { PrismaClient } from '@roadboard/database';
 import { hashPassword, verifyPassword, generateToken, hashToken } from '@roadboard/auth';
 import { LoginDto } from './login.dto';
 import { RegisterDto } from './register.dto';
+import { ensurePersonalTeam } from '../users/users.service';
 
 
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -63,13 +64,20 @@ export class AuthService {
 
     const hashed = await hashPassword(dto.password);
 
-    const user = await this.prisma.user.create({
-      data: {
-        username: dto.username,
-        displayName: dto.displayName,
-        email: dto.email,
-        password: hashed,
-      },
+    const user = await this.prisma.$transaction(async (tx) => {
+
+      const created = await tx.user.create({
+        data: {
+          username: dto.username,
+          displayName: dto.displayName,
+          email: dto.email,
+          password: hashed,
+        },
+      });
+
+      await ensurePersonalTeam(tx, { id: created.id, username: created.username, displayName: created.displayName });
+
+      return created;
     });
 
     const rawToken = generateToken();

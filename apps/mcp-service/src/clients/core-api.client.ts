@@ -20,7 +20,8 @@ export class CoreApiClient {
   async createProject(data: {
     name: string;
     slug: string;
-    ownerTeamId: string;
+    ownerTeamId?: string;
+    ownerTeamSlug?: string;
     description?: string;
     status?: string;
   }): Promise<unknown> {

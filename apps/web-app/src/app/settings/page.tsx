@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
-import { validateSession, listTokens, listUsers, listProjects, listGrants } from '@/lib/api';
+import { validateSession, listTokens, listUsers, listProjects, listGrants, listMyMemberships, listMemberships } from '@/lib/api';
 import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { SettingsTabs } from './settings-tabs';
@@ -19,16 +19,25 @@ export default async function SettingsPage() {
 
   if (!session) redirect('/login');
 
-  const [tokens, users, projects] = await Promise.all([
+  const [tokens, users, projects, myMemberships] = await Promise.all([
     listTokens(token, session.userId),
     listUsers(token),
     listProjects(token),
+    listMyMemberships(token, session.userId).catch(() => []),
   ]);
 
   const grantsPerProject = await Promise.all(
     projects.map(async (p) => ({
       project: p,
       grants: await listGrants(token, p.id),
+    })),
+  );
+
+  const teams = await Promise.all(
+    myMemberships.map(async (m) => ({
+      team: m.team,
+      role: m.role,
+      memberships: await listMemberships(token, m.teamId).catch(() => []),
     })),
   );
 
@@ -50,6 +59,7 @@ export default async function SettingsPage() {
           users={users}
           projects={projects}
           grantsPerProject={grantsPerProject}
+          teams={teams}
           isAdmin={isAdmin}
           isTeamLeader={isTeamLeader}
         />

@@ -453,6 +453,23 @@ export interface Team {
   id: string;
   name: string;
   slug: string;
+  description?: string | null;
+}
+
+
+export interface TeamMembership {
+  id: string;
+  teamId: string;
+  userId: string;
+  role: string;
+  status: string;
+  createdAt: string;
+  user?: {
+    id: string;
+    username: string;
+    displayName: string;
+    email: string;
+  };
 }
 
 
@@ -577,6 +594,91 @@ export async function listTeams(token: string): Promise<Team[]> {
   if (!res.ok) throw new Error('Failed to fetch teams');
 
   return res.json() as Promise<Team[]>;
+}
+
+
+export async function createTeam(
+  token: string,
+  data: { name: string; slug: string; description?: string },
+): Promise<Team> {
+
+  const res = await fetch(`${AUTH_API}/teams`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to create team: ${res.status} ${body}`);
+  }
+
+  return res.json() as Promise<Team>;
+}
+
+
+export async function deleteTeam(token: string, idOrSlug: string): Promise<void> {
+
+  const res = await fetch(`${AUTH_API}/teams/${idOrSlug}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error(`Failed to delete team: ${res.status}`);
+}
+
+
+export async function listMemberships(token: string, teamId: string): Promise<TeamMembership[]> {
+
+  const res = await fetch(`${AUTH_API}/memberships?teamId=${teamId}`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch memberships');
+
+  return res.json() as Promise<TeamMembership[]>;
+}
+
+
+export async function listMyMemberships(
+  token: string,
+  userId: string,
+): Promise<(TeamMembership & { team: Team })[]> {
+
+  const res = await fetch(`${AUTH_API}/memberships?userId=${userId}`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch memberships');
+
+  return res.json() as Promise<(TeamMembership & { team: Team })[]>;
+}
+
+
+export async function createMembership(
+  token: string,
+  data: { teamId: string; userId: string; role?: string },
+): Promise<TeamMembership> {
+
+  const res = await fetch(`${AUTH_API}/memberships`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Failed to create membership: ${res.status} ${body}`);
+  }
+
+  return res.json() as Promise<TeamMembership>;
+}
+
+
+export async function deleteMembership(token: string, id: string): Promise<void> {
+
+  const res = await fetch(`${AUTH_API}/memberships/${id}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error(`Failed to delete membership: ${res.status}`);
 }
 
 

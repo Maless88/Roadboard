@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useActionState, useEffect, useRef } from 'react';
-import type { SessionInfo, McpTokenInfo, User, Grant, Project } from '@/lib/api';
+import type { SessionInfo, McpTokenInfo, User, Grant, Project, Team, TeamMembership } from '@/lib/api';
 import { useDict } from '@/lib/i18n/locale-context';
 import {
   changePasswordAction,
@@ -12,7 +12,18 @@ import {
   resetUserPasswordAction,
   addDeveloperAction,
   removeDeveloperAction,
+  createTeamAction,
+  deleteTeamAction,
+  addTeamMemberAction,
+  removeTeamMemberAction,
 } from './actions';
+
+
+interface TeamWithMembers {
+  team: Team;
+  memberships: TeamMembership[];
+  role: string;
+}
 
 
 interface Props {
@@ -21,12 +32,13 @@ interface Props {
   users: User[];
   projects: Project[];
   grantsPerProject: { project: Project; grants: Grant[] }[];
+  teams: TeamWithMembers[];
   isAdmin: boolean;
   isTeamLeader: boolean;
 }
 
 
-type TabKey = 'security' | 'tokens' | 'users' | 'members';
+type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'members';
 
 
 function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
@@ -619,12 +631,197 @@ function MembriTab({
 }
 
 
+function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: TeamWithMembers[]; users: User[] }) {
+
+  const dict = useDict();
+  const [createState, createAction, createPending] = useActionState(createTeamAction, {});
+  const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
+  const [addState, addAction, addPending] = useActionState(addTeamMemberAction, {});
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const createFormRef = useRef<HTMLFormElement>(null);
+  const addFormRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+
+    if (createState.success) {
+      createFormRef.current?.reset();
+      setName('');
+      setSlug('');
+    }
+  }, [createState.success]);
+
+  useEffect(() => {
+
+    if (addState.success) {
+      addFormRef.current?.reset();
+    }
+  }, [addState.success]);
+
+  function handleNameChange(e: React.ChangeEvent<HTMLInputElement>) {
+
+    const value = e.target.value;
+    setName(value);
+    setSlug(value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''));
+  }
+
+  async function handleRemoveMember(membershipId: string) {
+
+    await removeTeamMemberAction(membershipId);
+  }
+
+  async function handleDeleteTeam(idOrSlug: string) {
+
+    if (!confirm(dict.settings.teams.confirmDelete)) return;
+
+    await deleteTeamAction(idOrSlug);
+  }
+
+  return (
+    <div className="space-y-5">
+
+      <Card title={dict.settings.teams.title}>
+        {teams.length === 0 ? (
+          <p className="text-sm text-gray-500">{dict.settings.teams.empty}</p>
+        ) : (
+          <div className="divide-y divide-white/[0.06]">
+            {teams.map(({ team, memberships, role }) => {
+
+              const isPersonal = team.slug === session.username.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+              const expanded = expandedId === team.id;
+              const addableUsers = users.filter((u) => !memberships.some((m) => m.userId === u.id));
+
+              return (
+                <div key={team.id} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-white font-medium">
+                        {team.name}
+                        {isPersonal && <span className="ml-2 text-xs text-indigo-400">({dict.settings.teams.personal})</span>}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {dict.settings.teams.slug}: <span className="text-gray-400 font-mono">{team.slug}</span>
+                        {' · '}
+                        {memberships.length} {dict.settings.teams.members}
+                        {' · '}
+                        <span className="text-gray-400">{role}</span>
+                      </p>
+                    </div>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setExpandedId(expanded ? null : team.id)}
+                        className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                      >
+                        {expanded ? '−' : '+'} {dict.settings.teams.members}
+                      </button>
+                      {!isPersonal && role === 'admin' && (
+                        <button
+                          onClick={() => void handleDeleteTeam(team.id)}
+                          className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                        >
+                          {dict.settings.teams.deleteTeam}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {expanded && (
+                    <div className="mt-3 pl-4 space-y-2">
+                      {memberships.map((m) => (
+                        <div key={m.id} className="flex items-center justify-between text-xs">
+                          <div>
+                            <span className="text-white">{m.user?.displayName ?? m.userId}</span>
+                            <span className="text-gray-500"> @{m.user?.username}</span>
+                            <span className="ml-2 text-gray-400">· {m.role}</span>
+                          </div>
+                          {role === 'admin' && m.userId !== session.userId && (
+                            <button
+                              onClick={() => void handleRemoveMember(m.id)}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              {dict.settings.teams.remove}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+
+                      {!isPersonal && role === 'admin' && addableUsers.length > 0 && (
+                        <form
+                          ref={addFormRef}
+                          action={addAction}
+                          className="flex gap-2 items-center pt-2 border-t border-white/[0.06]"
+                        >
+                          {addState.error && <Alert type="error" msg={addState.error} />}
+                          <input type="hidden" name="teamId" value={team.id} />
+                          <input
+                            name="username"
+                            type="text"
+                            placeholder={dict.settings.teams.memberUsername}
+                            className="flex-1 rounded-md px-2 py-1 text-xs text-white"
+                            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+                          />
+                          <select
+                            name="role"
+                            defaultValue="member"
+                            className="rounded-md px-2 py-1 text-xs text-white"
+                            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+                          >
+                            <option value="member">{dict.settings.teams.roleMember}</option>
+                            <option value="admin">{dict.settings.teams.roleAdmin}</option>
+                          </select>
+                          <SubmitBtn pending={addPending} label={dict.settings.teams.addButton} pendingLabel="…" />
+                        </form>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
+      <Card title={dict.settings.teams.createTitle}>
+        <form ref={createFormRef} action={createAction} className="space-y-3 max-w-sm">
+          {createState.error && <Alert type="error" msg={createState.error} />}
+          <input
+            name="name"
+            value={name}
+            onChange={handleNameChange}
+            placeholder={dict.settings.teams.namePlaceholder}
+            className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+          <input
+            name="slug"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            placeholder={dict.settings.teams.slugPlaceholder}
+            className="w-full rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+          <textarea
+            name="description"
+            placeholder={dict.settings.teams.descriptionPlaceholder}
+            rows={2}
+            className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
+            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+          <SubmitBtn pending={createPending} label={dict.settings.teams.createButton} pendingLabel={dict.settings.teams.creating} />
+        </form>
+      </Card>
+    </div>
+  );
+}
+
+
 export function SettingsTabs({
   session,
   tokens,
   users,
   projects,
   grantsPerProject,
+  teams,
   isAdmin,
   isTeamLeader,
 }: Props) {
@@ -635,6 +832,7 @@ export function SettingsTabs({
   const visibleTabs: { key: TabKey; label: string }[] = [
     { key: 'security', label: dict.settings.tabs.security },
     { key: 'tokens', label: dict.settings.tabs.tokens },
+    { key: 'teams', label: dict.settings.tabs.teams },
     ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
     ...(isAdmin ? [{ key: 'members' as TabKey, label: dict.settings.tabs.members }] : []),
   ];
@@ -661,6 +859,7 @@ export function SettingsTabs({
 
       {active === 'security' && <SecurityTab />}
       {active === 'tokens' && <TokensTab session={session} initialTokens={tokens} />}
+      {active === 'teams' && <TeamsTab session={session} teams={teams} users={users} />}
       {active === 'users' && canManageUsers && (
         <UsersTab currentUserId={session.userId} initialUsers={users} isAdmin={isAdmin} />
       )}

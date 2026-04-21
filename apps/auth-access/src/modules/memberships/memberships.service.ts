@@ -45,6 +45,17 @@ export class MembershipsService {
   }
 
 
+  async findByUser(userId: string) {
+
+    return this.prisma.teamMembership.findMany({
+      where: { userId },
+      include: {
+        team: true,
+      },
+    });
+  }
+
+
   async findOne(id: string) {
 
     const membership = await this.prisma.teamMembership.findUnique({

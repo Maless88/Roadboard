@@ -367,13 +367,14 @@ const TOOLS = [
   },
   {
     name: "create_project",
-    description: "Create a new project in RoadBoard. Requires an ownerTeamId — retrieve one from list_projects if unknown.",
+    description: "Create a new project in RoadBoard. Provide exactly one of ownerTeamId (CUID) or ownerTeamSlug (human-friendly identifier, e.g. your username for your personal team).",
     inputSchema: {
       type: "object" as const,
       properties: {
         name: { type: "string", description: "Project display name" },
         slug: { type: "string", description: "Unique URL-safe identifier (e.g. my-project)" },
-        ownerTeamId: { type: "string", description: "ID of the team that owns the project" },
+        ownerTeamId: { type: "string", description: "CUID of the team that owns the project" },
+        ownerTeamSlug: { type: "string", description: "Slug of the team that owns the project (e.g. 'alessio' for your personal team, or 'core-team')" },
         description: { type: "string", description: "Optional project description" },
         status: {
           type: "string",
@@ -381,7 +382,7 @@ const TOOLS = [
           enum: ["draft", "active", "paused", "completed", "archived"],
         },
       },
-      required: ["name", "slug", "ownerTeamId"],
+      required: ["name", "slug"],
     },
   },
   {
@@ -509,10 +510,10 @@ async function handleToolCall(
           project_management: [
             {
               name: "create_project",
-              purpose: "Bootstrap a new project in RoadBoard. Requires ownerTeamId — get it from list_projects if unknown.",
+              purpose: "Bootstrap a new project in RoadBoard. Provide exactly one of ownerTeamId or ownerTeamSlug (e.g. your username for the personal team).",
               when: "When onboarding a new codebase or work stream that has no RoadBoard project yet.",
-              required_args: ["name", "slug", "ownerTeamId"],
-              optional_args: ["description", "status"],
+              required_args: ["name", "slug"],
+              optional_args: ["ownerTeamId", "ownerTeamSlug", "description", "status"],
             },
           ],
           read: [
@@ -719,10 +720,16 @@ async function handleToolCall(
     }
 
     case "create_project": {
+
+      if (!args.ownerTeamId && !args.ownerTeamSlug) {
+        throw new Error("create_project requires either ownerTeamId or ownerTeamSlug");
+      }
+
       const result = await client.createProject({
         name: args.name as string,
         slug: args.slug as string,
-        ownerTeamId: args.ownerTeamId as string,
+        ownerTeamId: args.ownerTeamId as string | undefined,
+        ownerTeamSlug: args.ownerTeamSlug as string | undefined,
         description: args.description as string | undefined,
         status: args.status as string | undefined,
       });

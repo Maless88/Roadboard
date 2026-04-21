@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 
 export class FindByUserQueryDto {
@@ -14,6 +14,20 @@ export class FindByTeamQueryDto {
   @IsString()
   @IsNotEmpty()
   teamId!: string;
+}
+
+
+export class FindMembershipsQueryDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  teamId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  userId?: string;
 }
 
 

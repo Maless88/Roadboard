@@ -28,33 +28,37 @@ export class TeamsService {
   }
 
 
-  async findOne(id: string) {
+  async findOne(idOrSlug: string) {
 
-    const team = await this.prisma.team.findUnique({ where: { id } });
+    const isCuid = /^c[a-z0-9]{24}$/.test(idOrSlug);
+
+    const team = isCuid
+      ? await this.prisma.team.findUnique({ where: { id: idOrSlug } })
+      : await this.prisma.team.findUnique({ where: { slug: idOrSlug } });
 
     if (!team) {
-      throw new NotFoundException(`Team ${id} not found`);
+      throw new NotFoundException(`Team ${idOrSlug} not found`);
     }
 
     return team;
   }
 
 
-  async update(id: string, dto: UpdateTeamDto) {
+  async update(idOrSlug: string, dto: UpdateTeamDto) {
 
-    await this.findOne(id);
+    const existing = await this.findOne(idOrSlug);
 
     return this.prisma.team.update({
-      where: { id },
+      where: { id: existing.id },
       data: dto,
     });
   }
 
 
-  async delete(id: string) {
+  async delete(idOrSlug: string) {
 
-    await this.findOne(id);
+    const existing = await this.findOne(idOrSlug);
 
-    return this.prisma.team.delete({ where: { id } });
+    return this.prisma.team.delete({ where: { id: existing.id } });
   }
 }

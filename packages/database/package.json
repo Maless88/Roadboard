@@ -11,6 +11,7 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx src/seed.ts",
+    "db:backfill-personal-teams": "tsx src/backfill-personal-teams.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

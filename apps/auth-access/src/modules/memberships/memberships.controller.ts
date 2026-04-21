@@ -9,7 +9,7 @@ import {
   Query,
   Inject,
 } from '@nestjs/common';
-import { FindByTeamQueryDto } from '../../common/query.dto';
+import { FindMembershipsQueryDto } from '../../common/query.dto';
 import { MembershipsService } from './memberships.service';
 import { CreateMembershipDto } from './create-membership.dto';
 import { UpdateMembershipDto } from './update-membership.dto';
@@ -29,9 +29,13 @@ export class MembershipsController {
 
 
   @Get()
-  findByTeam(@Query() query: FindByTeamQueryDto) {
+  find(@Query() query: FindMembershipsQueryDto) {
 
-    return this.membershipsService.findByTeam(query.teamId);
+    if (query.teamId) return this.membershipsService.findByTeam(query.teamId);
+
+    if (query.userId) return this.membershipsService.findByUser(query.userId);
+
+    throw new Error('Either teamId or userId is required');
   }
 
 
