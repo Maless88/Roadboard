@@ -16,8 +16,8 @@ export function TabNav({ activeTab }: TabNavProps) {
   const pathname = usePathname();
 
   const TABS = [
-    { key: 'tasks', label: dict.tabs.tasks },
     { key: 'phases', label: dict.tabs.phases },
+    { key: 'tasks', label: dict.tabs.tasks },
     { key: 'decisions', label: dict.tabs.decisions },
     { key: 'memory', label: dict.tabs.memory },
     { key: 'audit', label: dict.tabs.audit },
