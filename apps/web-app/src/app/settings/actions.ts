@@ -51,10 +51,19 @@ export async function changePasswordAction(
 }
 
 
+export interface CreatedTokenInfo {
+  id: string;
+  token: string;
+  name: string;
+  scopes: string[];
+  createdAt: string;
+}
+
+
 export async function createTokenAction(
-  _prev: { error?: string; created?: { token: string; name: string } },
+  _prev: { error?: string; created?: CreatedTokenInfo },
   formData: FormData,
-): Promise<{ error?: string; created?: { token: string; name: string } }> {
+): Promise<{ error?: string; created?: CreatedTokenInfo }> {
 
   const token = await getToken();
 
@@ -74,7 +83,15 @@ export async function createTokenAction(
   try {
     const created = await createToken(token, { userId: session.userId, name, scopes });
     revalidatePath('/settings');
-    return { created: { token: created.token, name: created.name } };
+    return {
+      created: {
+        id: created.id,
+        token: created.token,
+        name: created.name,
+        scopes: created.scopes,
+        createdAt: created.createdAt,
+      },
+    };
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Errore' };
   }
