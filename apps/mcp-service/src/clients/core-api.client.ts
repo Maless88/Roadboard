@@ -5,6 +5,10 @@ const CORE_API_HOST = optionalEnv("CORE_API_HOST", "localhost");
 const CORE_API_PORT = optionalEnv("CORE_API_PORT", "4001");
 const BASE_URL = `http://${CORE_API_HOST}:${CORE_API_PORT}`;
 
+const AUTH_ACCESS_HOST = optionalEnv("AUTH_ACCESS_HOST", "localhost");
+const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "4002");
+const AUTH_URL = `http://${AUTH_ACCESS_HOST}:${AUTH_ACCESS_PORT}`;
+
 
 export class CoreApiClient {
 
@@ -415,6 +419,25 @@ export class CoreApiClient {
     const impact = impactRes.ok ? await impactRes.json() : null;
 
     return { node, impact };
+  }
+
+
+  async listMyTeams(userId: string): Promise<unknown[]> {
+
+    const res = await fetch(`${AUTH_URL}/memberships?userId=${encodeURIComponent(userId)}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`auth-access listMyTeams failed: ${res.status}`);
+    }
+
+    const memberships = (await res.json()) as Array<{
+      role: string;
+      team: { id: string; name: string; slug: string; description: string | null };
+    }>;
+
+    return memberships.map((m) => ({ ...m.team, role: m.role }));
   }
 
 

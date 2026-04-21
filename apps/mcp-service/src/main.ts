@@ -43,6 +43,14 @@ const TOOLS = [
     },
   },
   {
+    name: "list_teams",
+    description: "List teams the current user belongs to, each with its slug and the caller's role. Call this before create_project to offer the user a concrete choice of ownerTeamSlug (their personal team is the one whose slug matches their username).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+  {
     name: "get_project",
     description: "Get details of a specific project",
     inputSchema: {
@@ -367,7 +375,7 @@ const TOOLS = [
   },
   {
     name: "create_project",
-    description: "Create a new project in RoadBoard. Provide exactly one of ownerTeamId (CUID) or ownerTeamSlug (human-friendly identifier, e.g. your username for your personal team).",
+    description: "Create a new project in RoadBoard. **IMPORTANT**: before calling this tool, if the user has not explicitly specified the owner team, call list_teams first and ASK the user which team should own the project (their personal team vs a shared team). Never pick an owner team silently. Provide exactly one of ownerTeamId (CUID) or ownerTeamSlug (human-friendly slug, e.g. the username for a personal team).",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -417,6 +425,7 @@ const NO_SCOPE_TOOLS = new Set(["initial_instructions"]);
 // Maps each tool to the minimum GrantType required
 const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   list_projects: "project.read",
+  list_teams: "project.read",
   get_project: "project.read",
   list_active_tasks: "project.read",
   list_phases: "project.read",
@@ -486,6 +495,7 @@ async function handleToolCall(
   name: string,
   args: Record<string, unknown>,
   allowedScopes: string[],
+  callerUserId?: string,
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
 
   const scopeError = checkScope(name, allowedScopes);
@@ -510,7 +520,7 @@ async function handleToolCall(
           project_management: [
             {
               name: "create_project",
-              purpose: "Bootstrap a new project in RoadBoard. Provide exactly one of ownerTeamId or ownerTeamSlug (e.g. your username for the personal team).",
+              purpose: "Bootstrap a new project in RoadBoard. If the user has not specified the owner team, call list_teams first and ASK the user which team to use.",
               when: "When onboarding a new codebase or work stream that has no RoadBoard project yet.",
               required_args: ["name", "slug"],
               optional_args: ["ownerTeamId", "ownerTeamSlug", "description", "status"],
@@ -523,6 +533,13 @@ async function handleToolCall(
               when: "At session start or when switching project context.",
               required_args: [],
               optional_args: ["status"],
+            },
+            {
+              name: "list_teams",
+              purpose: "List teams the current user belongs to (id, slug, role). Use before create_project to let the user pick an owner team.",
+              when: "Before create_project when the owner team has not been specified by the user.",
+              required_args: [],
+              optional_args: [],
             },
             {
               name: "get_project",
@@ -741,6 +758,16 @@ async function handleToolCall(
         body: args.description ? `${args.description as string}` : undefined,
       }).catch(() => null);
       return jsonResponse(result);
+    }
+
+    case "list_teams": {
+
+      if (!callerUserId) {
+        return errorResponse("Cannot resolve caller identity from MCP token.");
+      }
+
+      const teams = await client.listMyTeams(callerUserId);
+      return jsonResponse(teams);
     }
 
     case "list_projects": {
@@ -1048,7 +1075,7 @@ async function handleToolCall(
 }
 
 
-function buildServer(client: CoreApiClient, allowedScopes: string[]): Server {
+function buildServer(client: CoreApiClient, allowedScopes: string[], callerUserId?: string): Server {
 
   const server = new Server(
     { name: "roadboard-mcp", version: "0.0.1" },
@@ -1065,7 +1092,7 @@ function buildServer(client: CoreApiClient, allowedScopes: string[]): Server {
     const { name, arguments: args } = request.params;
 
     try {
-      return await handleToolCall(client, name, (args ?? {}) as Record<string, unknown>, allowedScopes);
+      return await handleToolCall(client, name, (args ?? {}) as Record<string, unknown>, allowedScopes, callerUserId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message);
@@ -1162,17 +1189,18 @@ async function startHttp(): Promise<void> {
       return;
     }
 
-    const enriched = req as Request & { mcpToken: string; mcpScopes: string[] };
+    const enriched = req as Request & { mcpToken: string; mcpScopes: string[]; mcpUserId: string };
     enriched.mcpToken = token;
     enriched.mcpScopes = validation.scopes;
+    enriched.mcpUserId = validation.userId;
     next();
   });
 
   app.post("/mcp", async (req: Request, res: Response) => {
 
-    const enriched = req as Request & { mcpToken: string; mcpScopes: string[] };
+    const enriched = req as Request & { mcpToken: string; mcpScopes: string[]; mcpUserId: string };
     const client = new CoreApiClient(enriched.mcpToken);
-    const server = buildServer(client, enriched.mcpScopes);
+    const server = buildServer(client, enriched.mcpScopes, enriched.mcpUserId);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
@@ -1203,16 +1231,18 @@ async function startStdio(): Promise<void> {
   const client = new CoreApiClient(MCP_TOKEN);
 
   let scopes: string[] = ["project.admin"];
+  let userId: string | undefined;
 
   if (MCP_TOKEN) {
     const validation = await validateMcpToken(MCP_TOKEN).catch(() => null);
 
     if (validation) {
       scopes = validation.scopes;
+      userId = validation.userId;
     }
   }
 
-  const server = buildServer(client, scopes);
+  const server = buildServer(client, scopes, userId);
   const transport = new StdioServerTransport();
 
   await server.connect(transport);
