@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import type { Dictionary } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { ProgressRing } from '@/components/progress-ring';
 import { TabNav } from './tab-nav';
 import { TaskStatusSelect } from './task-status';
@@ -116,6 +117,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       activeProject={{ id, name: project.name, taskDone, taskTotal }}
       userProjects={[...userProjects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((p) => ({ id: p.id, name: p.name, status: p.status }))}
     >
+      <AutoRefresh />
       {/* Project header with glass health bar */}
       <div
         className="px-8 py-5"

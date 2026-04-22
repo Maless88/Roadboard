@@ -3,6 +3,7 @@ import { getToken } from '@/lib/auth';
 import { validateSession, listProjects, listTeams, getDashboardSnapshot } from '@/lib/api';
 import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
+import { AutoRefresh } from '@/components/auto-refresh';
 import { CreateProjectForm } from '@/app/projects/create-project-form';
 import { SwipeableProjectCard } from './swipeable-project-card';
 import type { Project } from '@/lib/api';
@@ -44,6 +45,7 @@ export default async function DashboardPage() {
       displayName={session.displayName}
       userProjects={sorted.map((p) => ({ id: p.id, name: p.name, status: p.status }))}
     >
+      <AutoRefresh />
       <main className="p-8">
         <div className="max-w-5xl mx-auto">
 

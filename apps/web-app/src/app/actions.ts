@@ -194,6 +194,7 @@ export async function createProjectAction(
   }
 
   revalidatePath('/projects');
+  revalidatePath('/dashboard');
   return { id: project.id };
 }
 
@@ -223,5 +224,6 @@ export async function deleteProjectAction(projectId: string): Promise<{ error?: 
   }
 
   revalidatePath('/dashboard');
+  revalidatePath('/projects');
   redirect('/dashboard');
 }
