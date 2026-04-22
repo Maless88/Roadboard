@@ -16,6 +16,9 @@ x-common-env: &common-env
   REDIS_PORT: "6379"
   CORE_API_HOST: core-api
   AUTH_ACCESS_HOST: auth-access
+  GRAPH_DB_URL: bolt://memgraph:7687
+  GRAPH_DB_USER: ""
+  GRAPH_DB_PASSWORD: ""
   NODE_ENV: production
 
 
@@ -53,6 +56,25 @@ services:
       timeout: 5s
       retries: 10
 
+  memgraph:
+    image: memgraph/memgraph:2.18.1
+    restart: unless-stopped
+    command:
+      - --log-level=WARNING
+      - --bolt-port=7687
+      - --also-log-to-stderr
+    ports:
+      - "7687:7687"
+    volumes:
+      - memgraph-data:/var/lib/memgraph
+      - memgraph-log:/var/log/memgraph
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 --username= --password= 2>/dev/null | grep -q 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   # ── One-shot database bootstrap ──────────────────────────────────────────────
 
   db-bootstrap:
@@ -87,6 +109,8 @@ services:
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
+      memgraph:
+        condition: service_healthy
 
   auth-access:
     build:
@@ -197,3 +221,5 @@ volumes:
   postgres-data:
   redis-data:
   journal-data:
+  memgraph-data:
+  memgraph-log:
