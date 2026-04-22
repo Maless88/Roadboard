@@ -30,10 +30,13 @@ async function fetchVersion(): Promise<VersionPayload | null> {
 }
 
 
+const BUNDLE_SHA = process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown';
+
+
 export function UpdateBanner() {
 
   const dict = useDict();
-  const initialShaRef = useRef<string | null>(null);
+  const baselineShaRef = useRef<string | null>(BUNDLE_SHA !== 'unknown' ? BUNDLE_SHA : null);
   const [newShaAvailable, setNewShaAvailable] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -53,12 +56,12 @@ export function UpdateBanner() {
         return;
       }
 
-      if (initialShaRef.current === null) {
-        initialShaRef.current = payload.sha;
+      if (baselineShaRef.current === null) {
+        baselineShaRef.current = payload.sha;
         return;
       }
 
-      if (payload.sha !== initialShaRef.current) {
+      if (payload.sha !== baselineShaRef.current) {
         setNewShaAvailable((prev) => {
 
           if (prev !== payload.sha) {
