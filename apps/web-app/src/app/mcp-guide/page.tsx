@@ -212,13 +212,14 @@ export default function McpGuidePage() {
         </div>
 
         {/* Nav rapida */}
-        <nav className="mb-12 grid grid-cols-2 md:grid-cols-5 gap-3">
+        <nav className="mb-12 grid grid-cols-2 md:grid-cols-6 gap-3">
           {[
             { href: '#prereqs', icon: '🔑', label: 'Prerequisiti' },
             { href: '#claude-code', icon: '⚡', label: 'Claude Code' },
             { href: '#zed', icon: '🔷', label: 'Zed' },
             { href: '#codex', icon: '🟣', label: 'VS Code / Codex' },
             { href: '#protocol', icon: '🤖', label: 'Protocollo sessione' },
+            { href: '#faq', icon: '❓', label: 'FAQ' },
           ].map((item) => (
             <a
               key={item.href}
@@ -459,6 +460,67 @@ export default function McpGuidePage() {
               ))}
             </div>
           </Step>
+        </Section>
+
+        {/* FAQ */}
+        <Section id="faq" icon="❓" title="Domande frequenti">
+          <div className="space-y-4">
+            {[
+              {
+                q: 'Serve un token diverso per ogni client (Claude Code, Zed, VS Code)?',
+                a: 'No. Lo stesso token MCP funziona per tutti i client: autentica l\'utente, non la macchina. Puoi però crearne più di uno (es. uno per desktop, uno per laptop) dalla pagina Settings → Token MCP, così puoi revocarne uno senza rompere gli altri.',
+              },
+              {
+                q: 'Posso far lavorare più agenti in parallelo sullo stesso progetto?',
+                a: 'Sì. Tutti gli agenti connessi condividono la stessa memoria di progetto in tempo reale: tasks, phases, decisions e memory entry sono persistite su PostgreSQL. Se due agenti aggiornano lo stesso task in contemporanea vince l\'ultima scrittura, quindi conviene coordinarli via create_handoff o assegnando task diversi.',
+              },
+              {
+                q: 'Le chiamate MCP consumano i token del mio piano Claude / Copilot?',
+                a: 'Le chiamate ai tool MCP non sono di per sé chiamate LLM: sono richieste HTTP verso il server RoadBoard. Consumano token del modello solo per la parte di prompt in cui l\'agente ragiona sui risultati. Per ridurre il consumo prediligi prepare_project_summary o get_project_changelog invece di multiple letture separate.',
+              },
+              {
+                q: 'Perché devo chiamare list_phases prima di create_task?',
+                a: 'Il dominio di RoadBoard non consente task orfani: ogni task vive dentro una phase (milestone). list_phases ti fa scegliere quella giusta; se nessuna esiste, create_phase prima. Se ometti phaseId, create_task usa la prima phase disponibile del progetto come fallback, ma è un comportamento implicito da evitare in planning formale.',
+              },
+              {
+                q: 'Qual è la differenza fra create_decision e create_memory_entry con type=decision?',
+                a: 'create_decision è il canale ufficiale per decisioni architetturali/di scope: supporta status (open/accepted/rejected/superseded), impact level, rationale e outcome strutturati, e alimenta list_recent_decisions e il changelog. create_memory_entry type=decision è un fallback più leggero — usalo solo per note veloci, non per decisioni che devono essere tracciate nel tempo.',
+              },
+              {
+                q: 'Se sto offline il server MCP funziona lo stesso?',
+                a: 'No: il server MCP è sempre quello centrale (HTTP sullo stesso endpoint della guida). Per lavoro offline c\'è il servizio local-sync-bridge (porta 3004) con SQLite, ma è usato dai tool di RoadBoard e non è esposto via MCP. Se il server centrale non è raggiungibile i tool ritornano errore.',
+              },
+              {
+                q: 'Posso restringere cosa può fare un token MCP?',
+                a: 'Sì: ogni token ha uno scope (lettura, scrittura, admin) e una lista di progetti autorizzati. Dalla pagina Settings → Token MCP puoi creare token dedicati con permessi minimi — utile per dare a un agente accesso read-only a un sottoinsieme di progetti.',
+              },
+              {
+                q: 'Come aggiorno la URL dell\'endpoint MCP?',
+                a: 'L\'admin imposta NEXT_PUBLIC_MCP_URL nell\'env della web-app e rifà il build (è una variabile Next.js public, viene inlinata a compile time). Gli esempi in questa pagina si aggiornano automaticamente. Client già configurati devono aggiornare la url anche nel loro .mcp.json / settings.',
+              },
+              {
+                q: 'initial_instructions va richiamato a ogni messaggio?',
+                a: 'No, una volta per sessione è sufficiente. Restituisce il catalog dei tool, il workflow raccomandato e le regole operative. Richiamarlo di nuovo è idempotente ma sprecato: le informazioni sono già nel contesto dell\'agente dopo la prima chiamata.',
+              },
+              {
+                q: 'Cosa succede se non chiamo create_handoff a fine sessione?',
+                a: 'Niente si rompe, ma il prossimo agente ripartirà da zero: dovrà chiamare prepare_project_summary e ricostruire il contesto dalle memory entry. create_handoff lascia un\'entry tipizzata "handoff" con summary e next steps ordinati, che è il modo più veloce per un altro agente di capire "a che punto eravamo".',
+              },
+            ].map((item) => (
+              <details
+                key={item.q}
+                className="group bg-gray-900 border border-gray-800 rounded-lg open:border-indigo-700 transition-colors"
+              >
+                <summary className="cursor-pointer list-none flex items-start gap-3 px-4 py-3">
+                  <span className="text-indigo-400 font-mono text-sm flex-shrink-0 group-open:rotate-90 transition-transform">▶</span>
+                  <span className="text-white text-sm font-medium flex-1">{item.q}</span>
+                </summary>
+                <div className="px-4 pb-4 pl-11 text-gray-400 text-sm leading-relaxed">
+                  {item.a}
+                </div>
+              </details>
+            ))}
+          </div>
         </Section>
 
         {/* Troubleshooting */}
