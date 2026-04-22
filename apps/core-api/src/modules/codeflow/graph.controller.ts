@@ -44,10 +44,10 @@ export class GraphController {
   createNode(
     @Param('projectId') projectId: string,
     @Body() dto: CreateNodeDto,
-    @CurrentUser() userId: string,
+    @CurrentUser() user: { userId: string },
   ) {
 
-    return this.graphService.createNode(projectId, dto, userId);
+    return this.graphService.createNode(projectId, dto, user.userId);
   }
 
 
@@ -100,10 +100,10 @@ export class GraphController {
     @Param('nodeId') nodeId: string,
     @Param('projectId') projectId: string,
     @Body() dto: CreateLinkDto,
-    @CurrentUser() userId: string,
+    @CurrentUser() user: { userId: string },
   ) {
 
-    return this.graphService.createLink(nodeId, projectId, dto, userId);
+    return this.graphService.createLink(nodeId, projectId, dto, user.userId);
   }
 
 
@@ -113,10 +113,10 @@ export class GraphController {
     @Param('nodeId') nodeId: string,
     @Param('projectId') projectId: string,
     @Body() dto: CreateAnnotationDto,
-    @CurrentUser() userId: string,
+    @CurrentUser() user: { userId: string },
   ) {
 
-    return this.graphService.createAnnotation(nodeId, projectId, dto, userId);
+    return this.graphService.createAnnotation(nodeId, projectId, dto, user.userId);
   }
 
 
