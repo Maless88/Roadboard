@@ -741,3 +741,93 @@ export async function getArchitectureGraph(
 
   return res.json() as Promise<ArchitectureGraph>;
 }
+
+
+export interface ArchitectureAnnotation {
+  id: string;
+  nodeId: string;
+  content: string;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+
+export interface ArchitectureLink {
+  id: string;
+  nodeId: string;
+  projectId: string;
+  entityType: string;
+  entityId: string;
+  linkType: string;
+  note: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+}
+
+
+export interface ArchitectureNodeDetail extends ArchitectureNode {
+  description: string | null;
+  repositoryId: string | null;
+  annotations: ArchitectureAnnotation[];
+  links: ArchitectureLink[];
+}
+
+
+export async function getArchitectureNode(
+  token: string,
+  projectId: string,
+  nodeId: string,
+): Promise<ArchitectureNodeDetail> {
+
+  const res = await fetch(
+    `${CORE_API}/projects/${projectId}/codeflow/graph/nodes/${nodeId}`,
+    { headers: authHeaders(token) },
+  );
+
+  if (!res.ok) throw new Error(`Failed to fetch node: ${res.status}`);
+
+  return res.json() as Promise<ArchitectureNodeDetail>;
+}
+
+
+export async function createArchitectureLink(
+  token: string,
+  projectId: string,
+  nodeId: string,
+  data: { entityType: string; entityId: string; linkType: string; note?: string },
+): Promise<ArchitectureLink> {
+
+  const res = await fetch(
+    `${CORE_API}/projects/${projectId}/codeflow/graph/nodes/${nodeId}/links`,
+    {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(data),
+    },
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create link');
+  }
+
+  return res.json() as Promise<ArchitectureLink>;
+}
+
+
+export async function deleteArchitectureLink(
+  token: string,
+  projectId: string,
+  linkId: string,
+): Promise<void> {
+
+  const res = await fetch(
+    `${CORE_API}/projects/${projectId}/codeflow/graph/links/${linkId}`,
+    {
+      method: 'DELETE',
+      headers: authHeaders(token),
+    },
+  );
+
+  if (!res.ok) throw new Error(`Failed to delete link: ${res.status}`);
+}
