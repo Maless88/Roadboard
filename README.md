@@ -230,6 +230,7 @@ pnpm -r build        # build all packages and apps
 - [SECURITY.md](SECURITY.md) — vulnerability reporting
 - [SUPPORT.md](SUPPORT.md) — where to ask questions
 - [CHANGELOG.md](CHANGELOG.md) — version history
+- [docs/atlas-manual-use.md](docs/atlas-manual-use.md) — using the Atlas architecture graph tab (Wave 5.1 manual MVP)
 - [docs/planning/](docs/planning/) — architecture and design notes
 
 ---
