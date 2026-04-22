@@ -119,10 +119,19 @@ export const itDict = {
     title: 'Impostazioni',
     tabs: {
       security: 'Sicurezza',
+      appearance: 'Aspetto',
       tokens: 'Token MCP',
       teams: 'Team',
       users: 'Utenti',
       members: 'Membri',
+    },
+    appearance: {
+      title: 'Tema',
+      description: 'Scegli il tema di visualizzazione dell\'interfaccia.',
+      dark: 'Scuro',
+      darkDesc: 'Palette scura, ideale per ambienti con poca luce.',
+      light: 'Chiaro',
+      lightDesc: 'Palette chiara, ideale per ambienti luminosi.',
     },
     teams: {
       title: 'I tuoi team',
@@ -225,6 +234,11 @@ export const itDict = {
   update: {
     available: 'Nuova versione disponibile',
     reload: 'Aggiorna',
+    dismiss: 'Ignora',
+  },
+  release: {
+    pending: 'Nuova release in attesa di deploy:',
+    deploy: 'Deploya ora',
     dismiss: 'Ignora',
   },
   teamPage: {

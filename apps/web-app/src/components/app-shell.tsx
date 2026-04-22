@@ -2,6 +2,7 @@ import { getLocale } from '@/lib/i18n';
 import { LocaleProvider } from '@/lib/i18n/locale-context';
 import { Sidebar } from './sidebar';
 import { UpdateBanner } from './update-banner';
+import { ReleaseBanner } from './release-banner';
 
 
 interface ActiveProject {
@@ -45,6 +46,7 @@ export async function AppShell({ children, username, displayName, activeProject,
           {children}
         </div>
         <UpdateBanner />
+        <ReleaseBanner />
       </div>
     </LocaleProvider>
   );

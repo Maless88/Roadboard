@@ -106,6 +106,8 @@ services:
       <<: *common-env
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
+      RELEASE_WEBHOOK_SECRET: ${RELEASE_WEBHOOK_SECRET:-}
+      DEPLOY_WORKFLOW_URL: ${DEPLOY_WORKFLOW_URL:-https://github.com/Maless88/RB/actions/workflows/deploy.yml}
     ports:
       - "3001:3001"
     depends_on:
