@@ -222,6 +222,11 @@ export const itDict = {
     it: 'Italiano',
     en: 'English',
   },
+  update: {
+    available: 'Nuova versione disponibile',
+    reload: 'Aggiorna',
+    dismiss: 'Ignora',
+  },
   teamPage: {
     backLink: '← Impostazioni',
     members: 'Membri',

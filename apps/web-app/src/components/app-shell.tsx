@@ -1,6 +1,7 @@
 import { getLocale } from '@/lib/i18n';
 import { LocaleProvider } from '@/lib/i18n/locale-context';
 import { Sidebar } from './sidebar';
+import { UpdateBanner } from './update-banner';
 
 
 interface ActiveProject {
@@ -43,6 +44,7 @@ export async function AppShell({ children, username, displayName, activeProject,
         <div className="flex-1 min-w-0">
           {children}
         </div>
+        <UpdateBanner />
       </div>
     </LocaleProvider>
   );

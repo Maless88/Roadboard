@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { PrismaModule } from "./prisma.module";
 import { CommonModule } from "./common/common.module";
 import { HealthModule } from "./modules/health/health.module";
+import { VersionModule } from "./modules/version/version.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
 import { PhasesModule } from "./modules/phases/phases.module";
 import { TasksModule } from "./modules/tasks/tasks.module";
@@ -18,6 +19,7 @@ import { CodeflowModule } from "./modules/codeflow/codeflow.module";
     PrismaModule,
     CommonModule,
     HealthModule,
+    VersionModule,
     ProjectsModule,
     PhasesModule,
     TasksModule,

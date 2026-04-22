@@ -99,6 +99,8 @@ services:
       <<: *nestjs-build
       args:
         APP_NAME: core-api
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       <<: *common-env
@@ -117,6 +119,8 @@ services:
       <<: *nestjs-build
       args:
         APP_NAME: auth-access
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       <<: *common-env
@@ -134,6 +138,8 @@ services:
       <<: *nestjs-build
       args:
         APP_NAME: mcp-service
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       <<: *common-env
@@ -159,6 +165,8 @@ services:
       <<: *nestjs-build
       args:
         APP_NAME: worker-jobs
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       <<: *common-env
@@ -178,6 +186,8 @@ services:
       <<: *nestjs-build
       args:
         APP_NAME: local-sync-bridge
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       <<: *common-env
@@ -199,6 +209,9 @@ services:
     build:
       context: ../..
       dockerfile: apps/web-app/Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     restart: unless-stopped
     environment:
       CORE_API_URL: http://core-api:3001

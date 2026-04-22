@@ -34,6 +34,10 @@ RUN pnpm install --frozen-lockfile
 
 # ── Build ────────────────────────────────────────────────────────────────────
 FROM deps AS builder
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
+ENV NEXT_PUBLIC_BUILD_SHA=${GIT_SHA}
+ENV NEXT_PUBLIC_BUILD_TIME=${BUILD_TIME}
 COPY . .
 RUN pnpm --filter @roadboard/database db:generate
 RUN pnpm --filter @roadboard/web-app... build
@@ -41,8 +45,14 @@ RUN pnpm --filter @roadboard/web-app... build
 
 # ── Lean runtime image (Next.js standalone) ──────────────────────────────────
 FROM node:20-alpine AS runner
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
 WORKDIR /app
 ENV NODE_ENV=production
+ENV BUILD_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV NEXT_PUBLIC_BUILD_SHA=${GIT_SHA}
+ENV NEXT_PUBLIC_BUILD_TIME=${BUILD_TIME}
 
 COPY --from=builder /app/apps/web-app/.next/standalone ./
 COPY --from=builder /app/apps/web-app/.next/static     ./apps/web-app/.next/static

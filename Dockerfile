@@ -62,9 +62,13 @@ RUN mkdir -p /runtime/apps/${APP_NAME} \
 # ── Lean runtime image ───────────────────────────────────────────────────────
 FROM node:20-alpine AS runner
 ARG APP_NAME
+ARG GIT_SHA=unknown
+ARG BUILD_TIME=unknown
 WORKDIR /app
 ENV NODE_ENV=production
 ENV APP_NAME=${APP_NAME}
+ENV BUILD_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
 COPY --from=packager /runtime .
 WORKDIR /app/apps/${APP_NAME}
 CMD ["node", "dist/main.js"]

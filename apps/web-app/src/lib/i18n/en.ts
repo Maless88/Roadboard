@@ -224,6 +224,11 @@ export const enDict: Dictionary = {
     it: 'Italiano',
     en: 'English',
   },
+  update: {
+    available: 'New version available',
+    reload: 'Reload',
+    dismiss: 'Dismiss',
+  },
   teamPage: {
     backLink: '← Settings',
     members: 'Members',

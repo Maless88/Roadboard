@@ -23,6 +23,9 @@ jobs:
         working-directory: /opt/roadboard/infra/docker
         run: |
           cp /opt/roadboard/.env .
+          export GIT_SHA=$(git -C /opt/roadboard rev-parse HEAD)
+          export BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "Building GIT_SHA=$GIT_SHA BUILD_TIME=$BUILD_TIME"
           docker compose build
           docker compose up -d
 
