@@ -1,0 +1,19 @@
+name: Notify Release Pending
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: [self-hosted, roadboard]
+    steps:
+      - name: Ping core-api
+        env:
+          RELEASE_WEBHOOK_SECRET: ${{ secrets.RELEASE_WEBHOOK_SECRET }}
+          SHA: ${{ github.sha }}
+        run: |
+          curl -fsS -X POST http://localhost:3001/internal/release-pending \
+            -H "Content-Type: application/json" \
+            -H "X-Release-Secret: ${RELEASE_WEBHOOK_SECRET}" \
+            -d "{\"sha\":\"${SHA}\"}"

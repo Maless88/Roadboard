@@ -121,10 +121,19 @@ export const enDict: Dictionary = {
     title: 'Settings',
     tabs: {
       security: 'Security',
+      appearance: 'Appearance',
       tokens: 'MCP Tokens',
       teams: 'Teams',
       users: 'Users',
       members: 'Members',
+    },
+    appearance: {
+      title: 'Theme',
+      description: 'Choose how the interface is displayed.',
+      dark: 'Dark',
+      darkDesc: 'Dark palette, ideal for low-light environments.',
+      light: 'Light',
+      lightDesc: 'Light palette, ideal for bright environments.',
     },
     teams: {
       title: 'Your teams',
@@ -227,6 +236,11 @@ export const enDict: Dictionary = {
   update: {
     available: 'New version available',
     reload: 'Reload',
+    dismiss: 'Dismiss',
+  },
+  release: {
+    pending: 'New release pending deploy:',
+    deploy: 'Deploy now',
     dismiss: 'Dismiss',
   },
   teamPage: {
