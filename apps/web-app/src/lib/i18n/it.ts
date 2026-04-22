@@ -193,4 +193,14 @@ export const itDict = {
     it: 'Italiano',
     en: 'English',
   },
+  teamPage: {
+    backLink: '← Impostazioni',
+    members: 'Membri',
+    noMembers: 'Nessun membro.',
+    projects: 'Progetti del team',
+    noProjects: 'Nessun progetto per questo team.',
+    notFound: 'Team non trovato o accesso negato.',
+    membersCount: (n: number) => `${n} membri`,
+    projectsCount: (n: number) => `${n} progetti`,
+  },
 };

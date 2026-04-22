@@ -195,4 +195,14 @@ export const enDict: Dictionary = {
     it: 'Italiano',
     en: 'English',
   },
+  teamPage: {
+    backLink: '← Settings',
+    members: 'Members',
+    noMembers: 'No members.',
+    projects: 'Team projects',
+    noProjects: 'No projects for this team.',
+    notFound: 'Team not found or access denied.',
+    membersCount: (n: number) => `${n} members`,
+    projectsCount: (n: number) => `${n} projects`,
+  },
 };

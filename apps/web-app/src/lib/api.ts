@@ -598,6 +598,16 @@ export async function listTeams(token: string): Promise<Team[]> {
 }
 
 
+export async function getTeam(token: string, idOrSlug: string): Promise<Team> {
+
+  const res = await fetch(`${AUTH_API}/teams/${idOrSlug}`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error(`Failed to fetch team: ${res.status}`);
+
+  return res.json() as Promise<Team>;
+}
+
+
 export async function createTeam(
   token: string,
   data: { name: string; slug: string; description?: string },
