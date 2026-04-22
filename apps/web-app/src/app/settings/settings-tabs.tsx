@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useActionState, useEffect, useRef } from 'react';
 import type { SessionInfo, McpTokenInfo, User, Grant, Project, Team, TeamMembership } from '@/lib/api';
 import { useDict } from '@/lib/i18n/locale-context';
@@ -697,7 +698,9 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-white font-medium">
-                        {team.name}
+                        <Link href={`/teams/${team.slug}`} className="hover:text-indigo-300 transition-colors">
+                          {team.name}
+                        </Link>
                         {isPersonal && <span className="ml-2 text-xs text-indigo-400">({dict.settings.teams.personal})</span>}
                       </p>
                       <p className="text-xs text-gray-500 mt-0.5">
