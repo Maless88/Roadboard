@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 
-const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? 'http://localhost:3005/mcp';
+const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? '<YOUR_MCP_URL>';
 const TOOL_COUNT = 24;
 
 
@@ -254,12 +254,23 @@ export default function McpGuidePage() {
             </div>
           </Step>
 
-          <Step n={2} title="Sostituisci il placeholder nelle configurazioni">
-            <p className="text-gray-400 text-sm">
-              In tutti gli esempi qui sotto, sostituisci{' '}
-              <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">&lt;YOUR_MCP_TOKEN&gt;</code>{' '}
-              con il token che hai ricevuto.
+          <Step n={2} title="Sostituisci i placeholder nelle configurazioni">
+            <p className="text-gray-400 text-sm mb-2">
+              In tutti gli esempi qui sotto, sostituisci:
             </p>
+            <ul className="text-gray-400 text-sm space-y-1.5 list-disc list-inside">
+              <li>
+                <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">&lt;YOUR_MCP_TOKEN&gt;</code>{' '}
+                con il token personale generato al passo 1.
+              </li>
+              <li>
+                <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">&lt;YOUR_MCP_URL&gt;</code>{' '}
+                con l&apos;endpoint MCP fornito dall&apos;amministratore
+                (es. <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">http://host:3005/mcp</code>).
+                Se l&apos;admin ha impostato <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">NEXT_PUBLIC_MCP_URL</code>{' '}
+                nell&apos;env della web-app, gli esempi qui sotto lo mostrano già compilato.
+              </li>
+            </ul>
           </Step>
         </Section>
 
