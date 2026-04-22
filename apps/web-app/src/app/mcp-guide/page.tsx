@@ -7,7 +7,8 @@ export const metadata: Metadata = {
 };
 
 
-const MCP_URL = 'http://10.0.254.5:3005/mcp';
+const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? 'http://localhost:3005/mcp';
+const TOOL_COUNT = 24;
 
 
 function CodeBlock({ code, lang = 'json' }: { code: string; lang?: string }) {
@@ -83,14 +84,15 @@ export default function McpGuidePage() {
     2,
   );
 
-  const zedConfig = JSON.stringify(
+  const zedConfigHttp = JSON.stringify(
     {
       context_servers: {
         roadboard: {
-          command: {
-            path: 'npx',
-            args: ['-y', '@modelcontextprotocol/client-cli', MCP_URL],
-            env: { MCP_BEARER_TOKEN: '<YOUR_MCP_TOKEN>' },
+          source: 'custom',
+          transport: {
+            type: 'http',
+            url: MCP_URL,
+            headers: { Authorization: 'Bearer <YOUR_MCP_TOKEN>' },
           },
           settings: {},
         },
@@ -100,14 +102,21 @@ export default function McpGuidePage() {
     2,
   );
 
-  const zedConfigHttp = JSON.stringify(
+  const zedConfigStdio = JSON.stringify(
     {
       context_servers: {
         roadboard: {
-          transport: {
-            type: 'http',
-            url: MCP_URL,
-            headers: { Authorization: 'Bearer <YOUR_MCP_TOKEN>' },
+          source: 'custom',
+          command: {
+            path: 'npx',
+            args: [
+              '-y',
+              'mcp-remote',
+              MCP_URL,
+              '--header',
+              'Authorization: Bearer <YOUR_MCP_TOKEN>',
+            ],
+            env: {},
           },
           settings: {},
         },
@@ -131,18 +140,34 @@ export default function McpGuidePage() {
     2,
   );
 
-  const tools = [
+  const tools: { name: string; desc: string; category: 'onboarding' | 'read' | 'context' | 'write' }[] = [
     { name: 'initial_instructions', desc: 'Protocollo operativo MCP: catalog dei tool, workflow raccomandato e regole. Chiamare una volta a inizio sessione.', category: 'onboarding' },
-    { name: 'list_projects', desc: 'Elenca tutti i progetti accessibili al token', category: 'read' },
-    { name: 'get_project', desc: 'Dettaglio di un progetto specifico', category: 'read' },
-    { name: 'list_active_tasks', desc: 'Task di un progetto, filtrabile per status', category: 'read' },
-    { name: 'get_project_memory', desc: 'Legge le memory entry di un progetto', category: 'read' },
-    { name: 'prepare_project_summary', desc: 'Snapshot narrativo del progetto per onboarding agente', category: 'context' },
-    { name: 'prepare_task_context', desc: 'Contesto completo per un task (progetto + task + sibling + memory)', category: 'context' },
-    { name: 'create_task', desc: 'Crea un nuovo task in un progetto', category: 'write' },
-    { name: 'update_task_status', desc: 'Aggiorna lo status di un task', category: 'write' },
-    { name: 'create_memory_entry', desc: 'Scrive una memory entry nel progetto', category: 'write' },
-    { name: 'create_handoff', desc: 'Crea un handoff strutturato a fine sessione', category: 'write' },
+
+    { name: 'list_projects', desc: 'Elenca i progetti accessibili al token (filtrabile per status).', category: 'read' },
+    { name: 'get_project', desc: 'Dettaglio di un progetto specifico.', category: 'read' },
+    { name: 'list_teams', desc: 'Elenca i team dell\'utente con slug e ruolo. Richiesto prima di create_project.', category: 'read' },
+    { name: 'list_phases', desc: 'Elenca le phase (milestone di roadmap) di un progetto.', category: 'read' },
+    { name: 'list_active_tasks', desc: 'Task di un progetto, filtrabile per status.', category: 'read' },
+    { name: 'get_project_memory', desc: 'Memory entry di un progetto, filtrabili per tipo.', category: 'read' },
+    { name: 'list_recent_decisions', desc: 'Decisions del progetto (open, accepted, rejected, superseded).', category: 'read' },
+    { name: 'search_memory', desc: 'Ricerca full-text nelle memory entry (title + body).', category: 'read' },
+    { name: 'get_architecture_map', desc: 'Grafo di architettura: nodi (apps, package, moduli) ed edge.', category: 'read' },
+    { name: 'get_node_context', desc: 'Contesto completo di un nodo: annotation, link a task/decision/memory, impact analysis.', category: 'read' },
+
+    { name: 'prepare_project_summary', desc: 'Snapshot strutturato del progetto per onboarding agente.', category: 'context' },
+    { name: 'prepare_task_context', desc: 'Contesto completo di un task: progetto, task, sibling, memory recenti.', category: 'context' },
+    { name: 'get_project_changelog', desc: 'Changelog agent-readable: task summary, phase attive, decision e memory recenti, audit events.', category: 'context' },
+
+    { name: 'create_project', desc: 'Crea un nuovo progetto. Richiede ownerTeamId/ownerTeamSlug (usa list_teams prima).', category: 'write' },
+    { name: 'create_phase', desc: 'Crea una phase (milestone di roadmap) nel progetto.', category: 'write' },
+    { name: 'update_phase', desc: 'Aggiorna phase esistente (titolo, status, date, decision collegata).', category: 'write' },
+    { name: 'create_task', desc: 'Crea un task in una phase. Se phaseId è omesso usa la prima disponibile.', category: 'write' },
+    { name: 'update_task', desc: 'Aggiorna campi del task (title, description, priority, phase, assignee, due date). Per lo status usa update_task_status.', category: 'write' },
+    { name: 'update_task_status', desc: 'Cambia lo status. Con status=done richiede un completionReport markdown dettagliato.', category: 'write' },
+    { name: 'create_memory_entry', desc: 'Scrive una memory entry tipizzata (done, next, decision, handoff, architecture, issue, learning, operational_note, open_question).', category: 'write' },
+    { name: 'create_decision', desc: 'Registra una decision architetturale/di progetto con impact level.', category: 'write' },
+    { name: 'update_decision', desc: 'Aggiorna una decision: status, outcome, rationale, risoluzione.', category: 'write' },
+    { name: 'create_handoff', desc: 'Crea un handoff strutturato a fine sessione con next steps ordinati.', category: 'write' },
   ];
 
   const categoryColors: Record<string, string> = {
@@ -165,7 +190,7 @@ export default function McpGuidePage() {
           </div>
           <div className="flex items-center gap-2">
             <Badge text="Streamable HTTP" color="green" />
-            <Badge text="v1.29.0 SDK" color="gray" />
+            <Badge text={`${TOOL_COUNT} tool`} color="gray" />
           </div>
         </div>
       </header>
@@ -260,7 +285,7 @@ export default function McpGuidePage() {
             </p>
             <CodeBlock code="/mcp" lang="bash" />
             <p className="text-gray-400 text-sm mt-3">
-              Dovresti vedere <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">roadboard</code> nell&apos;elenco dei server connessi con 11 tool disponibili.
+              Dovresti vedere <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">roadboard</code> nell&apos;elenco dei server connessi con {TOOL_COUNT} tool disponibili.
             </p>
           </Step>
 
@@ -273,39 +298,34 @@ export default function McpGuidePage() {
         {/* Zed */}
         <Section id="zed" icon="🔷" title="Zed">
           <div className="mb-6 text-sm text-gray-400">
-            <p className="mb-2">
+            <p>
               Zed supporta MCP tramite Context Servers. La configurazione va in{' '}
-              <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">~/.config/zed/settings.json</code>.
+              <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">~/.config/zed/settings.json</code>
+              {' '}(oppure via <strong className="text-white">Agent Panel → Settings → Context Servers → + Add Custom Server</strong>).
             </p>
-            <div className="bg-yellow-900/30 border border-yellow-700/50 rounded-lg p-4 mt-3">
-              <p className="text-yellow-200 text-sm">
-                ⚠️ Il supporto HTTP nativo in Zed dipende dalla versione. Nelle versioni recenti (0.140+)
-                è disponibile il transport HTTP diretto. Per versioni precedenti usa la configurazione stdio di fallback qui sotto.
-              </p>
-            </div>
           </div>
 
-          <Step n={1} title="Configurazione HTTP nativa (Zed 0.140+) — raccomandata">
-            <p className="text-gray-400 text-sm mb-3">
-              Apri <strong className="text-white">Zed → Settings → Open Settings (JSON)</strong> e aggiungi:
-            </p>
+          <Step n={1} title="Configurazione HTTP (raccomandata)">
             <CodeBlock code={zedConfigHttp} />
           </Step>
 
-          <Step n={2} title="Configurazione stdio di fallback (versioni precedenti)">
+          <Step n={2} title="Configurazione stdio via mcp-remote (fallback)">
             <p className="text-gray-400 text-sm mb-3">
-              Se la configurazione HTTP non è riconosciuta, usa questo approccio alternativo:
+              Se la versione di Zed non espone ancora il transport HTTP, fai proxy con{' '}
+              <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">mcp-remote</code>:
             </p>
-            <CodeBlock code={zedConfig} />
+            <CodeBlock code={zedConfigStdio} />
             <p className="text-gray-400 text-sm mt-3">
-              Richiede <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">npx</code> nel PATH.
+              Richiede <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs">npx</code> (Node 18+) nel PATH.
+              <code className="text-green-400 bg-gray-900 px-1.5 py-0.5 rounded text-xs ml-1">mcp-remote</code>{' '}
+              è il proxy ufficiale mantenuto da Anthropic per esporre un endpoint HTTP MCP come stdio server.
             </p>
           </Step>
 
           <Step n={3} title="Verifica in Zed">
             <p className="text-gray-400 text-sm">
-              Apri l&apos;AI Panel (<kbd className="bg-gray-800 border border-gray-600 px-1.5 py-0.5 rounded text-xs">Ctrl+?</kbd>) → dovresti vedere
-              RoadBoard nell&apos;elenco dei context server attivi.
+              Apri l&apos;Agent Panel (<kbd className="bg-gray-800 border border-gray-600 px-1.5 py-0.5 rounded text-xs">Ctrl+?</kbd>) → dovresti vedere
+              RoadBoard nell&apos;elenco dei context server attivi, con {TOOL_COUNT} tool esposti.
             </p>
           </Step>
         </Section>
@@ -344,7 +364,7 @@ export default function McpGuidePage() {
         </Section>
 
         {/* Tool disponibili */}
-        <Section id="tools" icon="🛠️" title="Tool disponibili">
+        <Section id="tools" icon="🛠️" title={`Tool disponibili (${TOOL_COUNT})`}>
           <div className="flex flex-wrap gap-2 mb-4 text-xs">
             {(['onboarding', 'read', 'context', 'write'] as const).map((cat) => (
               <span key={cat} className={`inline-flex items-center px-2 py-0.5 rounded border font-medium ${categoryColors[cat]}`}>
@@ -382,7 +402,7 @@ export default function McpGuidePage() {
               Per rendere l&apos;onboarding automatico, aggiungi questa riga nelle istruzioni del tuo agente:
             </p>
             <CodeBlock
-              code={`## MCP Operational Protocols\n- **RoadBoard 2.0 MCP**: If tools are available, you MUST execute \`initial_instructions()\`\n  at the start of every session to load the operational protocol, tool catalog,\n  and workflow rules.`}
+              code={`## MCP Operational Protocols\n- **RoadBoard 2.0 MCP**: If tools are available and you have NOT yet called\n  \`initial_instructions()\` in this session, call it IMMEDIATELY — before any\n  other response. It loads the operational protocol, tool catalog and workflow.`}
               lang="markdown"
             />
           </Step>
@@ -390,12 +410,14 @@ export default function McpGuidePage() {
           <Step n={2} title="Workflow raccomandato (restituito da initial_instructions)">
             <div className="space-y-2">
               {[
-                { n: 1, action: 'Chiama prepare_project_summary(projectId) per caricare il contesto completo del progetto.' },
-                { n: 2, action: 'Se lavori su un task specifico, chiama prepare_task_context(projectId, taskId).' },
-                { n: 3, action: 'Prima di iniziare, verifica che esista un task. Usa create_task se necessario.' },
-                { n: 4, action: 'Aggiorna lo status del task con update_task_status man mano che avanzi.' },
-                { n: 5, action: 'Salva decisioni importanti con create_memory_entry.' },
-                { n: 6, action: 'A fine sessione chiama create_handoff per preservare il contesto.' },
+                { n: 1, action: 'Onboarding: prepare_project_summary(projectId) oppure get_project_changelog(projectId) per caricare lo stato del progetto.' },
+                { n: 2, action: 'Se lavori su un task specifico: prepare_task_context(projectId, taskId).' },
+                { n: 3, action: 'Planning — SEMPRE in questo ordine: list_phases(projectId) → se esiste una phase adatta usa quel phaseId con create_task, altrimenti create_phase e poi create_task. Mai task senza phaseId.' },
+                { n: 4, action: 'Durante il lavoro: update_task_status a in_progress all\'inizio, a done alla fine (con completionReport dettagliato).' },
+                { n: 5, action: 'Decisioni architetturali o di scope: create_decision con impact level. Aggiorna con update_decision quando l\'outcome è noto.' },
+                { n: 6, action: 'Ogni scoperta, finding o milestone rilevante: create_memory_entry autonomamente (non chiedere permesso).' },
+                { n: 7, action: 'Ricerca di contesto pregresso: search_memory(projectId, query) invece di leggere tutte le memory.' },
+                { n: 8, action: 'A fine sessione: create_handoff con summary e next steps ordinati.' },
               ].map((item) => (
                 <div key={item.n} className="flex items-start gap-3 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
                   <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold">{item.n}</span>
@@ -409,11 +431,14 @@ export default function McpGuidePage() {
             <div className="space-y-2">
               {[
                 'Chiama initial_instructions una volta a inizio sessione.',
-                'Apri o identifica sempre un task prima di iniziare a lavorare.',
-                'Non dichiarare completion senza aggiornare lo status del task.',
-                'Usa create_memory_entry per persistere decisioni architetturali e scoperte rilevanti.',
+                'Apri o identifica sempre un task (con phaseId) prima di iniziare a lavorare.',
+                'Mai creare task senza phaseId: usa list_phases prima, create_phase se serve.',
+                'Non dichiarare completion senza update_task_status=done + completionReport.',
+                'Usa create_memory_entry per persistere decisioni e scoperte (non chiedere permesso).',
+                'Per decision architetturali formali usa create_decision, non create_memory_entry type=decision.',
+                'Prima di create_project chiama list_teams e chiedi all\'utente l\'owner team.',
                 'Chiama sempre create_handoff a fine sessione.',
-                'Preferisci prepare_project_summary a letture multiple per l\'onboarding.',
+                'Preferisci prepare_project_summary / get_project_changelog a letture multiple per l\'onboarding.',
                 'Se il projectId è sconosciuto, chiama prima list_projects.',
               ].map((rule) => (
                 <div key={rule} className="flex items-start gap-3 bg-gray-900 border border-gray-800 rounded-lg px-4 py-3">
@@ -431,19 +456,23 @@ export default function McpGuidePage() {
             {[
               {
                 problem: '401 Unauthorized',
-                solution: 'Il token MCP non è valido o è stato revocato. Genera un nuovo token dalla pagina Settings.',
+                solution: 'Il token MCP non è valido o è stato revocato. Genera un nuovo token dalla pagina Settings → Token MCP.',
               },
               {
-                problem: 'Connection refused su 10.0.254.5:3005',
-                solution: 'Il server MCP HTTP non è in esecuzione. Contatta l\'amministratore per riavviare il servizio (MCP_TRANSPORT=http).',
+                problem: 'Connection refused sull\'endpoint MCP',
+                solution: 'Il server MCP HTTP non è in esecuzione o la URL è errata. Richiede MCP_TRANSPORT=http (porta configurabile via MCP_HTTP_PORT, default 3005). La URL mostrata in questa pagina viene da NEXT_PUBLIC_MCP_URL: se è sbagliata, aggiornala nell\'env della web-app e rifai il build.',
               },
               {
-                problem: '0 tool mostrati nella configurazione',
-                solution: "Aggiungi 'Accept: application/json, text/event-stream' agli header. Alcuni client MCP lo aggiungono automaticamente.",
+                problem: '0 tool mostrati nel client',
+                solution: 'Alcuni client MCP richiedono l\'header Accept: application/json, text/event-stream. Claude Code, Zed recenti e VS Code lo inviano automaticamente; se stai usando un client custom aggiungilo.',
               },
               {
-                problem: 'Zed non riconosce la configurazione',
-                solution: 'Verifica la versione di Zed. Il transport HTTP richiede Zed 0.140+. Usa la configurazione stdio di fallback per versioni precedenti.',
+                problem: 'Zed non riconosce il transport HTTP',
+                solution: 'Usa la configurazione stdio di fallback con mcp-remote: fa da proxy stdio → HTTP verso lo stesso endpoint.',
+              },
+              {
+                problem: 'create_task fallisce con "phaseId required"',
+                solution: 'Chiama prima list_phases(projectId) e passa un phaseId valido, oppure crea la phase con create_phase. Il workflow non consente task orfani.',
               },
             ].map((item) => (
               <div key={item.problem} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
@@ -456,7 +485,7 @@ export default function McpGuidePage() {
 
         {/* Footer */}
         <footer className="border-t border-gray-800 pt-8 text-center text-gray-600 text-sm">
-          <p>RoadBoard 2.0 · MCP Streamable HTTP · SDK v1.29.0</p>
+          <p>RoadBoard 2.0 · MCP Streamable HTTP · {TOOL_COUNT} tool esposti</p>
           <p className="mt-1">
             Hai problemi?{' '}
             <a href="/projects" className="text-indigo-400 hover:text-indigo-300">
