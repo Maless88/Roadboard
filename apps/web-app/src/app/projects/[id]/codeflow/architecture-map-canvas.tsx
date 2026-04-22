@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -8,9 +8,11 @@ import {
   MiniMap,
   type Node,
   type Edge,
+  type NodeMouseHandler,
 } from '@xyflow/react';
 import dagre from 'dagre';
 import type { ArchitectureNode, ArchitectureEdge } from '@/lib/api';
+import { NodeDrawer } from './node-drawer';
 
 import '@xyflow/react/dist/style.css';
 
@@ -23,6 +25,7 @@ interface CanvasDict {
 
 
 interface Props {
+  projectId: string;
   nodes: ArchitectureNode[];
   edges: ArchitectureEdge[];
   dict: CanvasDict;
@@ -102,10 +105,15 @@ function layoutGraph(
 }
 
 
-export function ArchitectureMapCanvas({ nodes: archNodes, edges: archEdges, dict }: Props) {
+export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: archEdges, dict }: Props) {
 
   const [query, setQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
+    setSelectedNodeId(node.id);
+  }, []);
 
   const availableTypes = useMemo(
     () => Array.from(new Set(archNodes.map((n) => n.type))).sort(),
@@ -181,6 +189,7 @@ export function ArchitectureMapCanvas({ nodes: archNodes, edges: archEdges, dict
             nodesDraggable={false}
             nodesConnectable={false}
             elementsSelectable
+            onNodeClick={handleNodeClick}
           >
             <Background color="rgba(255,255,255,0.06)" gap={16} />
             <Controls showInteractive={false} />
@@ -188,6 +197,12 @@ export function ArchitectureMapCanvas({ nodes: archNodes, edges: archEdges, dict
           </ReactFlow>
         )}
       </div>
+
+      <NodeDrawer
+        projectId={projectId}
+        nodeId={selectedNodeId}
+        onClose={() => setSelectedNodeId(null)}
+      />
     </div>
   );
 }

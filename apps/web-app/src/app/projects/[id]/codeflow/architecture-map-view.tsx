@@ -57,6 +57,7 @@ export async function ArchitectureMapView({ token, projectId, dict }: Props) {
       </div>
 
       <ArchitectureMapCanvas
+        projectId={projectId}
         nodes={graph.nodes}
         edges={graph.edges}
         dict={{
