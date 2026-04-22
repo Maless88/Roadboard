@@ -10,7 +10,6 @@ import {
   listPhases,
   listDecisions,
   getDashboardSnapshot,
-  listAuditEvents,
   validateSession,
 } from '@/lib/api';
 import type { Dictionary } from '@/lib/i18n';
@@ -28,6 +27,9 @@ import { DeleteProjectButton } from './delete-project-button';
 import { PhaseAccordion } from './phase-accordion';
 import { DecisionAccordion } from './decision-accordion';
 import { TaskRow } from './task-row';
+import { CodeflowSubNav } from './codeflow/sub-nav';
+import { ArchitectureMapView } from './codeflow/architecture-map-view';
+import { ChangeImpactView, DecisionGraphView, AgentContextView } from './codeflow/placeholder-views';
 import type { Task, Phase } from '@/lib/api';
 
 
@@ -74,14 +76,14 @@ const DECISION_IMPACT_COLOR: Record<string, string> = {
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; q?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; cf?: string }>;
 }
 
 
 export default async function ProjectDetailPage({ params, searchParams }: Props) {
 
   const { id } = await params;
-  const { tab = 'tasks', q } = await searchParams;
+  const { tab = 'tasks', q, cf = 'map' } = await searchParams;
   const token = await getToken();
 
   if (!token) {
@@ -212,7 +214,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'phases' && <PhasesTab token={token} projectId={id} dict={dict} />}
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} dict={dict} />}
         {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} dict={dict} />}
-        {tab === 'audit' && <AuditTab token={token} projectId={id} dict={dict} />}
+        {tab === 'codeflow' && <CodeflowTab token={token} projectId={id} activeView={cf} dict={dict} />}
       </main>
     </AppShell>
   );
@@ -386,61 +388,6 @@ async function MemoryTab({ token, projectId, q, dict }: { token: string; project
 }
 
 
-async function AuditTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
-
-  let page;
-
-  try {
-    page = await listAuditEvents(token, projectId);
-  } catch {
-    return <p className="text-xs text-gray-500">{dict.project.auditUnavailable}</p>;
-  }
-
-  const { events, total } = page;
-
-  return (
-    <div className="space-y-4">
-      <p className="text-xs text-gray-500">{dict.project.totalEvents(total)}</p>
-
-      {events.length === 0 && (
-        <p className="text-xs text-gray-500">{dict.project.noEvents}</p>
-      )}
-
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
-        {events.map((event) => (
-          <div key={event.id} className="px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.02)' }}>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="shrink-0 text-xs px-2 py-0.5 rounded text-gray-400 font-mono" style={{ background: 'rgba(255,255,255,0.06)' }}>
-                  {event.eventType}
-                </span>
-                <span className="text-xs text-gray-300 truncate">
-                  {event.targetType} <span className="text-gray-500">{event.targetId.slice(0, 8)}</span>
-                </span>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-gray-500">{event.actorType}:{event.actorId.slice(0, 8)}</span>
-                <span className="text-xs text-gray-600">
-                  {new Date(event.createdAt).toLocaleString('it-IT', {
-                    month: 'short', day: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
-                  })}
-                </span>
-              </div>
-            </div>
-            {event.metadata && Object.keys(event.metadata).length > 0 && (
-              <p className="text-xs text-gray-600 mt-1 font-mono truncate">
-                {JSON.stringify(event.metadata)}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-
 function TaskList({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
 
   return (
@@ -448,6 +395,31 @@ function TaskList({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
       {tasks.map((task, i) => (
         <TaskRow key={task.id} task={task} projectId={projectId} isLast={i === tasks.length - 1} />
       ))}
+    </div>
+  );
+}
+
+
+function CodeflowTab({
+  token,
+  projectId,
+  activeView,
+  dict,
+}: {
+  token: string;
+  projectId: string;
+  activeView: string;
+  dict: Dictionary;
+}) {
+
+  return (
+    <div className="space-y-4">
+      <CodeflowSubNav activeView={activeView} />
+
+      {activeView === 'map' && <ArchitectureMapView token={token} projectId={projectId} dict={dict} />}
+      {activeView === 'impact' && <ChangeImpactView dict={dict} />}
+      {activeView === 'decisionGraph' && <DecisionGraphView dict={dict} />}
+      {activeView === 'agentContext' && <AgentContextView dict={dict} />}
     </div>
   );
 }

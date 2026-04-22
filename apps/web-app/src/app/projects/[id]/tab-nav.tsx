@@ -20,7 +20,7 @@ export function TabNav({ activeTab }: TabNavProps) {
     { key: 'tasks', label: dict.tabs.tasks },
     { key: 'decisions', label: dict.tabs.decisions },
     { key: 'memory', label: dict.tabs.memory },
-    { key: 'audit', label: dict.tabs.audit },
+    { key: 'codeflow', label: dict.tabs.codeflow },
   ] as const;
 
   return (

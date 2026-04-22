@@ -683,40 +683,51 @@ export async function deleteMembership(token: string, id: string): Promise<void>
 }
 
 
-export interface AuditEvent {
+export interface ArchitectureNode {
   id: string;
-  actorType: string;
-  actorId: string;
-  eventType: string;
-  targetType: string;
-  targetId: string;
-  projectId: string | null;
+  type: string;
+  name: string;
+  path: string | null;
+  domainGroup: string | null;
+  isManual: boolean;
+  ownerUserId: string | null;
+  ownerTeamId: string | null;
+  openTaskCount: number;
+  decisionCount: number;
+  annotationCount: number;
   metadata: Record<string, unknown> | null;
-  createdAt: string;
 }
 
 
-export interface AuditPage {
-  events: AuditEvent[];
-  total: number;
-  take: number;
-  skip: number;
+export interface ArchitectureEdge {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+  edgeType: string;
+  weight: number;
+  isManual: boolean;
 }
 
 
-export async function listAuditEvents(
+export interface ArchitectureGraph {
+  snapshotId: string | null;
+  snapshotStatus: string | null;
+  lastScannedAt: string | null;
+  nodes: ArchitectureNode[];
+  edges: ArchitectureEdge[];
+}
+
+
+export async function getArchitectureGraph(
   token: string,
   projectId: string,
-  take = 50,
-  skip = 0,
-): Promise<AuditPage> {
+): Promise<ArchitectureGraph> {
 
-  const params = new URLSearchParams({ take: String(take), skip: String(skip) });
-  const res = await fetch(`${CORE_API}/projects/${projectId}/audit?${params}`, {
+  const res = await fetch(`${CORE_API}/projects/${projectId}/codeflow/graph`, {
     headers: authHeaders(token),
   });
 
-  if (!res.ok) throw new Error('Failed to fetch audit log');
+  if (!res.ok) throw new Error('Failed to fetch architecture graph');
 
-  return res.json() as Promise<AuditPage>;
+  return res.json() as Promise<ArchitectureGraph>;
 }
