@@ -417,6 +417,102 @@ const TOOLS = [
       required: ["projectId", "nodeId"],
     },
   },
+  {
+    name: "create_architecture_repository",
+    description: "Create a CodeRepository record for a project. Required before creating any ArchitectureNode. Typical agent flow: call once at the start of an onboarding scan, then use the returned id as repositoryId for each create_architecture_node call.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        name: { type: "string", description: "Repository name (e.g. 'my-monorepo')" },
+        repoUrl: { type: "string", description: "Optional repo URL (git or local://)" },
+        provider: {
+          type: "string",
+          enum: ["github", "gitlab", "local", "manual"],
+          description: "Source provider. Use 'manual' for an agent-driven scan of a local path",
+        },
+        defaultBranch: { type: "string", description: "Default branch (default: 'main')" },
+      },
+      required: ["projectId", "name"],
+    },
+  },
+  {
+    name: "create_architecture_node",
+    description: "Create an ArchitectureNode (workspace/module/service) in the project graph. Call once per workspace while parsing package.json. Requires a repositoryId from create_architecture_repository.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        repositoryId: { type: "string", description: "CodeRepository ID" },
+        type: {
+          type: "string",
+          enum: ["repository", "app", "package", "module", "service", "file"],
+          description: "Node type — app/package for monorepo workspaces",
+        },
+        name: { type: "string", description: "Short name (e.g. 'web-app')" },
+        path: { type: "string", description: "Path relative to repo root" },
+        description: { type: "string", description: "Optional human description" },
+        domainGroup: { type: "string", description: "Optional domain/bounded-context label" },
+      },
+      required: ["projectId", "repositoryId", "type", "name"],
+    },
+  },
+  {
+    name: "create_architecture_edge",
+    description: "Create a directed edge between two ArchitectureNodes. Emit edgeType='depends_on' for each workspace-internal dependency from package.json.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        fromNodeId: { type: "string", description: "Source node ID" },
+        toNodeId: { type: "string", description: "Target node ID" },
+        edgeType: {
+          type: "string",
+          enum: ["depends_on", "imports", "impacts", "linked_to"],
+          description: "Relationship type",
+        },
+        weight: { type: "number", description: "Optional weight (default 1.0)" },
+      },
+      required: ["projectId", "fromNodeId", "toNodeId", "edgeType"],
+    },
+  },
+  {
+    name: "create_architecture_link",
+    description: "Link an ArchitectureNode to an existing RB entity (task, decision, milestone, memory entry). Use when the agent reads context and wants to tie a node to its motivating task or decision.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        nodeId: { type: "string", description: "Source node ID" },
+        entityType: {
+          type: "string",
+          enum: ["task", "decision", "milestone", "memory_entry"],
+          description: "Target entity type",
+        },
+        entityId: { type: "string", description: "Target entity CUID" },
+        linkType: {
+          type: "string",
+          enum: ["implements", "modifies", "fixes", "addresses", "motivates", "constrains", "delivers", "describes", "warns_about"],
+          description: "Semantic relation",
+        },
+        note: { type: "string", description: "Optional note" },
+      },
+      required: ["projectId", "nodeId", "entityType", "entityId", "linkType"],
+    },
+  },
+  {
+    name: "create_architecture_annotation",
+    description: "Attach a free-text annotation to an ArchitectureNode. Use for semantic context that cannot be derived from source (e.g. 'legacy module scheduled for deprecation', 'high-churn hotspot').",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        nodeId: { type: "string", description: "Node ID" },
+        content: { type: "string", description: "Annotation text" },
+      },
+      required: ["projectId", "nodeId", "content"],
+    },
+  },
 ];
 
 
@@ -448,6 +544,11 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_project: "project.admin",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
+  create_architecture_repository: "codeflow.write",
+  create_architecture_node: "codeflow.write",
+  create_architecture_edge: "codeflow.write",
+  create_architecture_link: "codeflow.write",
+  create_architecture_annotation: "codeflow.write",
 };
 
 
@@ -1066,6 +1167,70 @@ async function handleToolCall(
       const result = await client.getNodeContext(
         args.projectId as string,
         args.nodeId as string,
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_architecture_repository": {
+      const result = await client.createArchitectureRepository(
+        args.projectId as string,
+        {
+          name: args.name as string,
+          repoUrl: args.repoUrl as string | undefined,
+          provider: args.provider as string | undefined,
+          defaultBranch: args.defaultBranch as string | undefined,
+        },
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_architecture_node": {
+      const result = await client.createArchitectureNode(
+        args.projectId as string,
+        {
+          repositoryId: args.repositoryId as string,
+          type: args.type as string,
+          name: args.name as string,
+          path: args.path as string | undefined,
+          description: args.description as string | undefined,
+          domainGroup: args.domainGroup as string | undefined,
+        },
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_architecture_edge": {
+      const result = await client.createArchitectureEdge(
+        args.projectId as string,
+        {
+          fromNodeId: args.fromNodeId as string,
+          toNodeId: args.toNodeId as string,
+          edgeType: args.edgeType as string,
+          weight: args.weight as number | undefined,
+        },
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_architecture_link": {
+      const result = await client.createArchitectureLink(
+        args.projectId as string,
+        args.nodeId as string,
+        {
+          entityType: args.entityType as string,
+          entityId: args.entityId as string,
+          linkType: args.linkType as string,
+          note: args.note as string | undefined,
+        },
+      );
+      return jsonResponse(result);
+    }
+
+    case "create_architecture_annotation": {
+      const result = await client.createArchitectureAnnotation(
+        args.projectId as string,
+        args.nodeId as string,
+        args.content as string,
       );
       return jsonResponse(result);
     }

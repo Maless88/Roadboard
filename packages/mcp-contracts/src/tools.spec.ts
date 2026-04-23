@@ -17,13 +17,18 @@ import {
   SEARCH_MEMORY_TOOL,
   GET_ARCHITECTURE_MAP_TOOL,
   GET_NODE_CONTEXT_TOOL,
+  CREATE_ARCHITECTURE_REPOSITORY_TOOL,
+  CREATE_ARCHITECTURE_NODE_TOOL,
+  CREATE_ARCHITECTURE_EDGE_TOOL,
+  CREATE_ARCHITECTURE_LINK_TOOL,
+  CREATE_ARCHITECTURE_ANNOTATION_TOOL,
 } from './tools';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 17 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(17);
+  it('exports exactly 22 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(22);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -149,5 +154,30 @@ describe('codeflow tools', () => {
     expect(GET_NODE_CONTEXT_TOOL.name).toBe('get_node_context');
     expect(GET_NODE_CONTEXT_TOOL.inputSchema.required).toContain('projectId');
     expect(GET_NODE_CONTEXT_TOOL.inputSchema.required).toContain('nodeId');
+  });
+
+  it('create_architecture_repository requires projectId and name', () => {
+    expect(CREATE_ARCHITECTURE_REPOSITORY_TOOL.name).toBe('create_architecture_repository');
+    expect(CREATE_ARCHITECTURE_REPOSITORY_TOOL.inputSchema.required).toEqual(['projectId', 'name']);
+  });
+
+  it('create_architecture_node requires projectId, repositoryId, type, name', () => {
+    expect(CREATE_ARCHITECTURE_NODE_TOOL.name).toBe('create_architecture_node');
+    expect(CREATE_ARCHITECTURE_NODE_TOOL.inputSchema.required).toEqual(['projectId', 'repositoryId', 'type', 'name']);
+  });
+
+  it('create_architecture_edge requires projectId, fromNodeId, toNodeId, edgeType', () => {
+    expect(CREATE_ARCHITECTURE_EDGE_TOOL.name).toBe('create_architecture_edge');
+    expect(CREATE_ARCHITECTURE_EDGE_TOOL.inputSchema.required).toEqual(['projectId', 'fromNodeId', 'toNodeId', 'edgeType']);
+  });
+
+  it('create_architecture_link requires projectId, nodeId, entityType, entityId, linkType', () => {
+    expect(CREATE_ARCHITECTURE_LINK_TOOL.name).toBe('create_architecture_link');
+    expect(CREATE_ARCHITECTURE_LINK_TOOL.inputSchema.required).toEqual(['projectId', 'nodeId', 'entityType', 'entityId', 'linkType']);
+  });
+
+  it('create_architecture_annotation requires projectId, nodeId, content', () => {
+    expect(CREATE_ARCHITECTURE_ANNOTATION_TOOL.name).toBe('create_architecture_annotation');
+    expect(CREATE_ARCHITECTURE_ANNOTATION_TOOL.inputSchema.required).toEqual(['projectId', 'nodeId', 'content']);
   });
 });
