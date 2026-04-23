@@ -20,6 +20,48 @@ export class GraphService {
 
   // ── Graph ────────────────────────────────────────────
 
+  async listEntityLinks(projectId: string, entityType: string, entityId: string): Promise<unknown> {
+
+    const links = await this.prisma.architectureLink.findMany({
+      where: { projectId, entityType, entityId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (links.length === 0) {
+      return { links: [], nodes: [] };
+    }
+
+    const nodeIds = [...new Set(links.map((l) => l.nodeId))];
+    const nodes = await this.prisma.architectureNode.findMany({
+      where: { id: { in: nodeIds } },
+      include: {
+        annotations: { orderBy: { createdAt: 'desc' }, take: 3 },
+      },
+    });
+
+    return {
+      links: links.map((l) => ({
+        id: l.id,
+        nodeId: l.nodeId,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        linkType: l.linkType,
+        note: l.note,
+        createdAt: l.createdAt,
+      })),
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        type: n.type,
+        name: n.name,
+        path: n.path,
+        domainGroup: n.domainGroup,
+        description: n.description,
+        annotationsPreview: n.annotations.map((a) => ({ content: a.content, createdAt: a.createdAt })),
+      })),
+    };
+  }
+
+
   async resetProject(projectId: string): Promise<{ deletedNodes: number; deletedEdges: number }> {
 
     // Delete in FK order: edges → links → annotations → nodes → snapshots → repositories

@@ -23,13 +23,14 @@ import {
   CREATE_ARCHITECTURE_LINK_TOOL,
   CREATE_ARCHITECTURE_ANNOTATION_TOOL,
   INGEST_ARCHITECTURE_TOOL,
+  LINK_TASK_TO_NODE_TOOL,
 } from './tools';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 23 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(23);
+  it('exports exactly 24 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(24);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -185,5 +186,10 @@ describe('codeflow tools', () => {
   it('ingest_architecture requires projectId, repository, nodes', () => {
     expect(INGEST_ARCHITECTURE_TOOL.name).toBe('ingest_architecture');
     expect(INGEST_ARCHITECTURE_TOOL.inputSchema.required).toEqual(['projectId', 'repository', 'nodes']);
+  });
+
+  it('link_task_to_node requires projectId, taskId, nodeId', () => {
+    expect(LINK_TASK_TO_NODE_TOOL.name).toBe('link_task_to_node');
+    expect(LINK_TASK_TO_NODE_TOOL.inputSchema.required).toEqual(['projectId', 'taskId', 'nodeId']);
   });
 });

@@ -1,5 +1,5 @@
 import {
-  Body, Controller, Delete, Get, Inject, Param, Patch, Post, UseGuards,
+  Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards,
 } from '@nestjs/common';
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
@@ -34,6 +34,18 @@ export class GraphController {
   resetGraph(@Param('projectId') projectId: string) {
 
     return this.graphService.resetProject(projectId);
+  }
+
+
+  @RequireGrant(GrantType.CODEFLOW_READ)
+  @Get('entity-links')
+  listEntityLinks(
+    @Param('projectId') projectId: string,
+    @Query('entityType') entityType: string,
+    @Query('entityId') entityId: string,
+  ) {
+
+    return this.graphService.listEntityLinks(projectId, entityType, entityId);
   }
 
 
