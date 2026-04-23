@@ -231,6 +231,7 @@ pnpm -r build        # build all packages and apps
 - [SUPPORT.md](SUPPORT.md) — where to ask questions
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [docs/atlas-manual-use.md](docs/atlas-manual-use.md) — using the Atlas architecture graph tab (Wave 5.1 manual MVP)
+- [docs/mcp-client-setup.md](docs/mcp-client-setup.md) — connecting Claude Code or another MCP client to Roadboard
 - [docs/planning/](docs/planning/) — architecture and design notes
 
 ---

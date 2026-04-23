@@ -1,0 +1,14 @@
+{
+  "//": "Copy this file to .mcp.json at the repo root (or merge into ~/.config/claude/mcp.json) to give an MCP client like Claude Code access to this Roadboard instance.",
+  "//token": "Generate a token from Settings → MCP Tokens. Select scopes codeflow.write + project.admin if the agent must onboard new projects.",
+  "mcpServers": {
+    "roadboard": {
+      "type": "http",
+      "url": "http://localhost:3005/mcp",
+      "headers": {
+        "Authorization": "Bearer REPLACE_ME_WITH_YOUR_MCP_TOKEN"
+      }
+    },
+    "//comment-prod": "For a remote Roadboard deployment replace the url with e.g. https://roadboard.example.com/mcp — the token remains the authentication mechanism."
+  }
+}

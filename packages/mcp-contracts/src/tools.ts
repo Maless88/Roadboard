@@ -458,11 +458,12 @@ export const CREATE_ARCHITECTURE_ANNOTATION_TOOL: McpToolDefinition = {
 
 export const INGEST_ARCHITECTURE_TOOL: McpToolDefinition = {
   name: 'ingest_architecture',
-  description: 'One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally, and returns the mapping. Much faster than dozens of create_architecture_* calls. Node keys inside the payload are arbitrary string identifiers (usually package names) used only to link edges to nodes; they have no meaning in the database.',
+  description: 'One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally, and returns the mapping. Much faster than dozens of create_architecture_* calls. Node keys inside the payload are arbitrary string identifiers (usually package names) used only to link edges to nodes; they have no meaning in the database. Use `replaceExisting: true` to re-scan an already-onboarded project idempotently (wipes previous CodeFlow data for the project first).',
   inputSchema: {
     type: 'object',
     properties: {
       projectId: { type: 'string', description: 'Target project ID' },
+      replaceExisting: { type: 'boolean', description: 'If true, wipe all CodeFlow data (repositories, nodes, edges, links, annotations, snapshots) for this project before ingesting. Makes the call idempotent — safe to re-run on every scan. Default false.' },
       repository: {
         type: 'object',
         description: 'Single CodeRepository to create for this scan',

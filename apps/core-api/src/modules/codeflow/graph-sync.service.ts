@@ -162,4 +162,20 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`deleteEdge failed for ${edgeId}: ${err instanceof Error ? err.message : err}`);
     }
   }
+
+
+  async resetProject(projectId: string): Promise<void> {
+
+    if (!this.enabled || !this.client) return;
+
+    try {
+      await this.client.run(
+        'MATCH (n {projectId: $pid}) DETACH DELETE n',
+        { pid: projectId },
+        { mode: 'write' },
+      );
+    } catch (err) {
+      this.logger.warn(`resetProject failed for ${projectId}: ${err instanceof Error ? err.message : err}`);
+    }
+  }
 }

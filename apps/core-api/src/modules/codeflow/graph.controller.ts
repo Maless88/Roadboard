@@ -29,6 +29,14 @@ export class GraphController {
   }
 
 
+  @RequireGrant(GrantType.CODEFLOW_WRITE)
+  @Delete('reset')
+  resetGraph(@Param('projectId') projectId: string) {
+
+    return this.graphService.resetProject(projectId);
+  }
+
+
   @RequireGrant(GrantType.CODEFLOW_READ)
   @Get('snapshot')
   getSnapshot(@Param('projectId') projectId: string) {
