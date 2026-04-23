@@ -48,20 +48,20 @@ const TYPE_COLORS_DARK: TypePalettes = {
 };
 
 const TYPE_COLORS_LIGHT: TypePalettes = {
-  app: { bg: 'rgba(99,102,241,0.12)', border: '#4f46e5', text: '#3730a3' },
-  package: { bg: 'rgba(16,185,129,0.14)', border: '#059669', text: '#065f46' },
-  module: { bg: 'rgba(234,179,8,0.18)', border: '#ca8a04', text: '#854d0e' },
-  service: { bg: 'rgba(236,72,153,0.12)', border: '#db2777', text: '#9d174d' },
+  app: { bg: '#e0e7ff', border: '#4338ca', text: '#1e1b4b' },
+  package: { bg: '#d1fae5', border: '#047857', text: '#064e3b' },
+  module: { bg: '#fef3c7', border: '#b45309', text: '#78350f' },
+  service: { bg: '#fce7f3', border: '#be185d', text: '#831843' },
 };
 
 const DEFAULT_DARK: Palette = { bg: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.25)', text: '#d1d5db' };
-const DEFAULT_LIGHT: Palette = { bg: '#ffffff', border: 'rgba(17,24,39,0.15)', text: '#374151' };
+const DEFAULT_LIGHT: Palette = { bg: '#f3f4f6', border: '#6b7280', text: '#1f2937' };
 
 
 function layoutGraph(
   archNodes: ArchitectureNode[],
   archEdges: ArchitectureEdge[],
-  palette: { types: TypePalettes; fallback: Palette; edgeStroke: string; edgeLabel: string },
+  palette: { types: TypePalettes; fallback: Palette; edgeStroke: string; edgeLabel: string; nodeShadow: string },
 ): { nodes: Node[]; edges: Edge[] } {
 
   const g = new dagre.graphlib.Graph();
@@ -95,10 +95,11 @@ function layoutGraph(
       style: {
         width: NODE_WIDTH,
         background: colors.bg,
-        border: `1px solid ${colors.border}`,
+        border: `1.5px solid ${colors.border}`,
         borderRadius: 8,
         padding: 0,
         fontSize: 12,
+        boxShadow: palette.nodeShadow,
       },
     };
   });
@@ -128,10 +129,11 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
     ? {
         types: TYPE_COLORS_LIGHT,
         fallback: DEFAULT_LIGHT,
-        edgeStroke: 'rgba(17,24,39,0.2)',
-        edgeLabel: '#4b5563',
-        gridColor: 'rgba(17,24,39,0.08)',
-        canvasBg: '#f9fafb',
+        edgeStroke: 'rgba(17,24,39,0.45)',
+        edgeLabel: '#374151',
+        gridColor: 'rgba(17,24,39,0.1)',
+        canvasBg: '#ffffff',
+        nodeShadow: '0 1px 2px rgba(17,24,39,0.08), 0 1px 3px rgba(17,24,39,0.1)',
       }
     : {
         types: TYPE_COLORS_DARK,
@@ -140,6 +142,7 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         edgeLabel: '#9ca3af',
         gridColor: 'rgba(255,255,255,0.06)',
         canvasBg: 'rgba(0,0,0,0.2)',
+        nodeShadow: '0 1px 3px rgba(0,0,0,0.3)',
       },
   [theme]);
 
