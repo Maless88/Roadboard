@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useActionState, useEffect, useRef } from 'react';
 import type { SessionInfo, McpTokenInfo, User, Grant, Project, Team, TeamMembership } from '@/lib/api';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useTheme } from '@/lib/theme-context';
 import {
   changePasswordAction,
   createTokenAction,
@@ -40,7 +41,52 @@ interface Props {
 }
 
 
-type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'members';
+type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'members' | 'appearance';
+
+
+function AppearanceTab() {
+
+  const dict = useDict();
+  const { theme, setTheme } = useTheme();
+
+  const options: { value: 'dark' | 'light'; label: string; desc: string }[] = [
+    { value: 'dark', label: dict.settings.appearance.dark, desc: dict.settings.appearance.darkDesc },
+    { value: 'light', label: dict.settings.appearance.light, desc: dict.settings.appearance.lightDesc },
+  ];
+
+  return (
+    <Card title={dict.settings.appearance.title}>
+      <p className="text-xs text-gray-400 mb-4">{dict.settings.appearance.description}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-xl">
+        {options.map((opt) => {
+
+          const selected = theme === opt.value;
+
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setTheme(opt.value)}
+              className="rounded-lg p-4 text-left transition-all"
+              style={{
+                background: selected ? 'rgba(99,102,241,0.1)' : 'var(--surface)',
+                border: `1px solid ${selected ? 'rgba(99,102,241,0.5)' : 'var(--border-soft)'}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold text-white">{opt.label}</span>
+                {selected && (
+                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                )}
+              </div>
+              <p className="text-xs text-gray-400">{opt.desc}</p>
+            </button>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
 
 
 function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
@@ -68,7 +114,7 @@ function Field({ label, name, type = 'text', placeholder, required = true }: {
         required={required}
         placeholder={placeholder}
         className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
       />
     </div>
   );
@@ -94,7 +140,7 @@ function SubmitBtn({ pending, label, pendingLabel }: {
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
 
   return (
-    <div className="rounded-xl p-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)' }}>
+    <div className="rounded-xl p-5" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
       {title && <h3 className="text-sm font-semibold text-white mb-4">{title}</h3>}
       {children}
     </div>
@@ -210,7 +256,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
 
       {newToken && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(34,197,94,0.25)', backdropFilter: 'blur(20px)' }}>
+          <div className="rounded-xl p-6 w-full max-w-lg mx-4 shadow-2xl" style={{ background: 'var(--surface-overlay)', border: '1px solid rgba(34,197,94,0.25)', backdropFilter: 'blur(20px)' }}>
             <h3 className="text-sm font-semibold text-green-400 mb-1">{dict.settings.tokens.createdTitle}</h3>
             <p className="text-xs text-gray-400 mb-4">{dict.settings.tokens.createdWarning}</p>
             <code className="block rounded-lg px-4 py-3 text-green-400 font-mono text-xs break-all leading-relaxed" style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(34,197,94,0.15)' }}>
@@ -343,7 +389,7 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-      <div className="rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl" style={{ background: 'rgba(13,13,20,0.97)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(20px)' }}>
+      <div className="rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', backdropFilter: 'blur(20px)' }}>
         <h3 className="text-sm font-semibold text-white mb-1">{dict.settings.users.resetTitle}</h3>
         <p className="text-xs text-gray-400 mb-4">
           Imposta una nuova password per <strong className="text-white">{user.displayName}</strong>
@@ -451,12 +497,12 @@ function UsersTab({
               name="role"
               defaultValue="developer"
               className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
             >
-              {isAdmin && <option value="admin" style={{ background: '#1e2030', color: '#fff' }}>Admin</option>}
-              {isAdmin && <option value="team_leader" style={{ background: '#1e2030', color: '#fff' }}>Team Leader</option>}
-              <option value="developer" style={{ background: '#1e2030', color: '#fff' }}>Developer</option>
-              <option value="guest" style={{ background: '#1e2030', color: '#fff' }}>Guest</option>
+              {isAdmin && <option value="admin" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Admin</option>}
+              {isAdmin && <option value="team_leader" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Team Leader</option>}
+              <option value="developer" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Developer</option>
+              <option value="guest" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Guest</option>
             </select>
           </div>
           <SubmitBtn pending={createPending} label={dict.settings.users.createButton} pendingLabel={dict.settings.users.creating} />
@@ -553,10 +599,10 @@ function MembriTab({
           value={selectedId}
           onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
           className="rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+          style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
         >
           {grantsPerProject.map(({ project: p }) => (
-            <option key={p.id} value={p.id} style={{ background: '#1e2030', color: '#fff' }}>{p.name}</option>
+            <option key={p.id} value={p.id} style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{p.name}</option>
           ))}
         </select>
       </div>
@@ -611,11 +657,11 @@ function MembriTab({
               value={addUserId}
               onChange={(e) => setAddUserId(e.target.value)}
               className="flex-1 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+              style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
             >
-              <option value="" style={{ background: '#1e2030', color: '#fff' }}>{dict.settings.members.selectUser}</option>
+              <option value="" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.settings.members.selectUser}</option>
               {addableUsers.map((u) => (
-                <option key={u.id} value={u.id} style={{ background: '#1e2030', color: '#fff' }}>{u.displayName} (@{u.username})</option>
+                <option key={u.id} value={u.id} style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{u.displayName} (@{u.username})</option>
               ))}
             </select>
             <button
@@ -762,13 +808,13 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
                             type="text"
                             placeholder={dict.settings.teams.memberUsername}
                             className="flex-1 rounded-md px-2 py-1 text-xs text-white"
-                            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+                            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
                           />
                           <select
                             name="role"
                             defaultValue="member"
                             className="rounded-md px-2 py-1 text-xs text-white"
-                            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+                            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
                           >
                             <option value="member">{dict.settings.teams.roleMember}</option>
                             <option value="admin">{dict.settings.teams.roleAdmin}</option>
@@ -794,7 +840,7 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
             onChange={handleNameChange}
             placeholder={dict.settings.teams.namePlaceholder}
             className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
           />
           <input
             name="slug"
@@ -802,14 +848,14 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
             onChange={(e) => setSlug(e.target.value)}
             placeholder={dict.settings.teams.slugPlaceholder}
             className="w-full rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
           />
           <textarea
             name="description"
             placeholder={dict.settings.teams.descriptionPlaceholder}
             rows={2}
             className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
-            style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
           />
           <SubmitBtn pending={createPending} label={dict.settings.teams.createButton} pendingLabel={dict.settings.teams.creating} />
         </form>
@@ -837,6 +883,7 @@ export function SettingsTabs({
 
   const visibleTabs: { key: TabKey; label: string }[] = [
     { key: 'security', label: dict.settings.tabs.security },
+    { key: 'appearance', label: dict.settings.tabs.appearance },
     { key: 'tokens', label: dict.settings.tabs.tokens },
     { key: 'teams', label: dict.settings.tabs.teams },
     ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
@@ -847,7 +894,7 @@ export function SettingsTabs({
 
   return (
     <div>
-      <div className="flex gap-1 mb-6 rounded-xl p-1 w-fit" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="flex gap-1 mb-6 rounded-xl p-1 w-fit" style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}>
         {visibleTabs.map((tab) => (
           <button
             key={tab.key}
@@ -864,6 +911,7 @@ export function SettingsTabs({
       </div>
 
       {active === 'security' && <SecurityTab />}
+      {active === 'appearance' && <AppearanceTab />}
       {active === 'tokens' && <TokensTab session={session} initialTokens={tokens} />}
       {active === 'teams' && <TeamsTab session={session} teams={teams} users={users} />}
       {active === 'users' && canManageUsers && (

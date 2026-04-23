@@ -60,7 +60,7 @@ export default async function DashboardPage() {
           {sorted.length === 0 ? (
             <div
               className="rounded-2xl p-12 text-center"
-              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
             >
               <p className="text-sm text-gray-500">{dict.projects.noProjects}</p>
             </div>

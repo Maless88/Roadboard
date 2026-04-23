@@ -33,7 +33,7 @@ export function CodeflowSubNav({ activeView }: SubNavProps) {
   return (
     <nav
       className="flex gap-1 rounded-lg p-1 mb-4 w-fit"
-      style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)' }}
+      style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
     >
       {VIEWS.map((view) => {
         const isActive = activeView === view.key;
@@ -45,7 +45,7 @@ export function CodeflowSubNav({ activeView }: SubNavProps) {
             className={[
               'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
               isActive
-                ? 'bg-indigo-500/20 text-indigo-200'
+                ? 'bg-indigo-500/20 text-indigo-300'
                 : 'text-gray-500 hover:text-gray-300',
             ].join(' ')}
           >

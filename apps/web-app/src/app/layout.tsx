@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ThemeProvider, THEME_INIT_SCRIPT } from '@/lib/theme-context';
 
 
 export const metadata: Metadata = {
@@ -12,8 +13,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
-      <body className="min-h-screen bg-gray-950 text-gray-100 antialiased">
-        {children}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body
+        className="min-h-screen antialiased"
+        style={{ background: 'var(--bg)', color: 'var(--text)' }}
+      >
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

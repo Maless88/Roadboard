@@ -1,13 +1,111 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #030712;
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-hover: rgba(255, 255, 255, 0.09);
+  --surface-strong: rgba(13, 13, 20, 0.92);
+  --surface-overlay: rgba(30, 32, 48, 1);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-soft: rgba(255, 255, 255, 0.06);
+  --text: #f3f4f6;
+  --text-muted: #9ca3af;
+  --text-faint: #6b7280;
+  --shadow-card: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+  color-scheme: dark;
+}
+
+html.light {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-hover: #f9fafb;
+  --surface-strong: #ffffff;
+  --surface-overlay: #ffffff;
+  --border: rgba(17, 24, 39, 0.08);
+  --border-soft: rgba(17, 24, 39, 0.05);
+  --text: #111827;
+  --text-muted: #4b5563;
+  --text-faint: #6b7280;
+  --shadow-card: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.06);
+  color-scheme: light;
+}
+
+html.light aside {
+  box-shadow: 1px 0 0 rgba(17, 24, 39, 0.05), 0 4px 16px rgba(17, 24, 39, 0.04);
+}
+
+html.light a[href].text-indigo-400,
+html.light .text-indigo-400 { color: #4f46e5; }
+html.light .text-indigo-300 { color: #4338ca; }
+html.light .bg-indigo-600 { background-color: #4f46e5 !important; }
+html.light .hover\:bg-indigo-500:hover { background-color: #4338ca !important; }
+
+html.light .text-green-400 { color: #15803d; }
+html.light .text-yellow-400 { color: #a16207; }
+html.light .text-blue-400 { color: #1d4ed8; }
+html.light .text-purple-400 { color: #6d28d9; }
+html.light .text-red-400 { color: #b91c1c; }
+html.light .text-red-300 { color: #991b1b; }
+
+html.light .react-flow__controls-button {
+  background: #ffffff !important;
+  border-bottom: 1px solid rgba(17,24,39,0.08) !important;
+  color: #111827 !important;
+  fill: #111827 !important;
+}
+html.light .react-flow__controls-button:hover { background: #f3f4f6 !important; }
+html.light .react-flow__minimap { background: #ffffff !important; border: 1px solid rgba(17,24,39,0.08) !important; }
+html.light .react-flow__attribution { background: rgba(255,255,255,0.7) !important; color: #6b7280 !important; }
+
+/* Dark theme overrides for react-flow controls */
+.react-flow__controls {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+}
+.react-flow__controls-button {
+  background: rgba(17, 17, 27, 0.85) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  color: #e5e7eb !important;
+  fill: #e5e7eb !important;
+}
+.react-flow__controls-button:hover {
+  background: rgba(30, 32, 48, 0.95) !important;
+  color: #ffffff !important;
+  fill: #ffffff !important;
+}
+
 @layer utilities {
   .glass-input {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: var(--surface);
+    border: 1px solid var(--border);
   }
 
   .glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
   }
 }
+
+html.light .text-white { color: var(--text); }
+html.light .text-gray-100 { color: var(--text); }
+html.light .text-gray-200 { color: var(--text); }
+html.light .text-gray-300 { color: var(--text-muted); }
+html.light .text-gray-400 { color: var(--text-muted); }
+html.light .text-gray-500 { color: var(--text-faint); }
+html.light .text-gray-600 { color: var(--text-faint); }
+html.light .bg-gray-950,
+html.light .bg-gray-900 { background-color: var(--bg) !important; }
+
+html.light [class*="bg-indigo-"] .text-white,
+html.light [class*="bg-indigo-"].text-white,
+html.light [class*="bg-green-"] .text-white,
+html.light [class*="bg-green-"].text-white,
+html.light [class*="bg-red-"] .text-white,
+html.light [class*="bg-red-"].text-white,
+html.light [class*="bg-yellow-"] .text-white,
+html.light [class*="bg-yellow-"].text-white,
+html.light [class*="bg-blue-"] .text-white,
+html.light [class*="bg-blue-"].text-white,
+html.light [class*="bg-gradient"] .text-white,
+html.light [class*="bg-gradient"].text-white { color: #fff; }

@@ -5,7 +5,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   type Node,
   type Edge,
   type NodeMouseHandler,
@@ -132,11 +131,7 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         edgeStroke: 'rgba(17,24,39,0.2)',
         edgeLabel: '#4b5563',
         gridColor: 'rgba(17,24,39,0.08)',
-        maskColor: 'rgba(229,231,235,0.55)',
-        maskStroke: 'rgba(99,102,241,0.6)',
         canvasBg: '#f9fafb',
-        miniMapBg: 'rgba(255,255,255,0.9)',
-        miniMapStroke: 'rgba(17,24,39,0.1)',
       }
     : {
         types: TYPE_COLORS_DARK,
@@ -144,22 +139,9 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         edgeStroke: 'rgba(255,255,255,0.25)',
         edgeLabel: '#9ca3af',
         gridColor: 'rgba(255,255,255,0.06)',
-        maskColor: 'rgba(10,10,20,0.65)',
-        maskStroke: 'rgba(129,140,248,0.6)',
         canvasBg: 'rgba(0,0,0,0.2)',
-        miniMapBg: 'rgba(17,17,27,0.85)',
-        miniMapStroke: 'rgba(255,255,255,0.08)',
       },
   [theme]);
-
-  const miniMapNodeColor = useCallback(
-    (node: Node) => {
-      const arch = archNodes.find((a) => a.id === node.id);
-      const colors = arch ? palette.types[arch.type] ?? palette.fallback : palette.fallback;
-      return colors.border;
-    },
-    [archNodes, palette],
-  );
 
   const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
     setSelectedNodeId(node.id);
@@ -243,26 +225,6 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
           >
             <Background color={palette.gridColor} gap={16} />
             <Controls showInteractive={false} />
-            <MiniMap
-              pannable
-              zoomable
-              maskColor={palette.maskColor}
-              maskStrokeColor={palette.maskStroke}
-              maskStrokeWidth={2}
-              nodeColor={miniMapNodeColor}
-              nodeStrokeColor={palette.miniMapStroke}
-              nodeStrokeWidth={1}
-              nodeBorderRadius={3}
-              offsetScale={3}
-              style={{
-                width: 180,
-                height: 120,
-                background: palette.miniMapBg,
-                border: `1px solid ${palette.miniMapStroke}`,
-                borderRadius: 8,
-                overflow: 'hidden',
-              }}
-            />
           </ReactFlow>
         )}
       </div>

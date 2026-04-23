@@ -87,13 +87,13 @@ export function NodeDrawer({ projectId, nodeId, onClose }: DrawerProps) {
     <div
       className="fixed inset-y-0 right-0 w-full sm:w-[480px] z-50 flex flex-col"
       style={{
-        background: 'rgba(13,13,20,0.97)',
-        borderLeft: '1px solid rgba(255,255,255,0.08)',
+        background: 'var(--surface-strong)',
+        borderLeft: '1px solid var(--border)',
         backdropFilter: 'blur(20px)',
-        boxShadow: '-20px 0 40px rgba(0,0,0,0.4)',
+        boxShadow: '-20px 0 40px rgba(0,0,0,0.18)',
       }}
     >
-      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid var(--border-soft)' }}>
         <div className="min-w-0 flex-1">
           {loading && <p className="text-xs text-gray-500">{dict.codeflow.drawer.loading}</p>}
           {error && <p className="text-xs text-red-400">{dict.codeflow.drawer.loadError}: {error}</p>}
@@ -116,7 +116,7 @@ export function NodeDrawer({ projectId, nodeId, onClose }: DrawerProps) {
       {node && (
         <nav
           className="flex gap-1 px-3 pt-3"
-          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+          style={{ borderBottom: '1px solid var(--border-soft)' }}
         >
           {TABS.map((t) => {
             const active = tab === t.key;
@@ -175,7 +175,7 @@ export function NodeDrawer({ projectId, nodeId, onClose }: DrawerProps) {
               removeLabel={dict.codeflow.drawer.remove}
               showEntityBadge
             />
-            <div className="mt-6 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="mt-6 pt-4" style={{ borderTop: '1px solid var(--border-soft)' }}>
               <CreateLinkForm projectId={projectId} nodeId={node.id} />
             </div>
           </>
@@ -214,7 +214,7 @@ function InfoPanel({ node, dict }: { node: ArchitectureNodeDetail; dict: ReturnT
               <div
                 key={a.id}
                 className="rounded-md px-3 py-2"
-                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+                style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
               >
                 <p className="text-gray-300 whitespace-pre-wrap">{a.content}</p>
                 <p className="text-gray-600 mt-1">{new Date(a.createdAt).toLocaleString('it-IT')}</p>
@@ -280,7 +280,7 @@ function LinksList({
         <div
           key={l.id}
           className="rounded-md px-3 py-2 flex items-start justify-between gap-3"
-          style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)' }}
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)' }}
         >
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-xs mb-1">
@@ -396,10 +396,10 @@ function Select({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-        style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+        style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
       >
         {options.map((o) => (
-          <option key={o} value={o} style={{ background: '#1e2030' }}>{o}</option>
+          <option key={o} value={o} style={{ background: 'var(--surface-overlay)' }}>{o}</option>
         ))}
       </select>
     </label>
@@ -425,7 +425,7 @@ function Input({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full rounded-md px-2 py-1 text-xs text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
-        style={{ background: '#1e2030', border: '1px solid rgba(255,255,255,0.1)' }}
+        style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
       />
     </label>
   );

@@ -127,7 +127,14 @@ export function SwipeableProjectCard({ project, snap }: Props) {
       onPointerCancel={onPointerUp}
     >
       <div
-        className="group block rounded-2xl p-5 cursor-pointer transition-all bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.07)] hover:bg-[rgba(255,255,255,0.055)] hover:border-[rgba(255,255,255,0.12)] h-full"
+        className="group block rounded-2xl p-5 cursor-pointer transition-all h-full"
+        style={{
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-card)',
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
+        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
       >
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 min-w-0">

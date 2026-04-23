@@ -21,7 +21,7 @@ export async function ArchitectureMapView({ token, projectId, dict }: Props) {
     return <EmptyState title={dict.codeflow.loadError} />;
   }
 
-  if (!graph.snapshotId || graph.nodes.length === 0) {
+  if (graph.nodes.length === 0) {
     return (
       <EmptyState
         title={dict.codeflow.notScanned}

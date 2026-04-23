@@ -14,6 +14,7 @@ const STATUS_COLOR: Record<string, string> = {
   archived: 'bg-gray-500/[0.07] text-gray-500',
   planned: 'bg-purple-500/10 text-purple-400',
   blocked: 'bg-red-500/10 text-red-400',
+  pending: 'bg-gray-500/10 text-gray-400',
 };
 
 
@@ -55,7 +56,7 @@ export function PhaseAccordion({ phase, tasks, projectId }: PhaseAccordionProps)
         </div>
         <div className="flex items-center gap-3 shrink-0 ml-4">
           <span className="text-xs text-gray-500">{tasks.length} task</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[phase.status] ?? 'bg-gray-700 text-gray-300'}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[phase.status] ?? 'bg-gray-500/10 text-gray-400'}`}>
             {phase.status}
           </span>
         </div>

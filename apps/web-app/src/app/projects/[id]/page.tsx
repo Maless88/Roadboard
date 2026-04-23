@@ -124,9 +124,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       <div
         className="px-8 py-5"
         style={{
-          background: 'rgba(17,17,27,0.6)',
+          background: 'var(--surface-strong)',
           backdropFilter: 'blur(12px)',
-          borderBottom: '1px solid rgba(255,255,255,0.05)',
+          borderBottom: '1px solid var(--border-soft)',
         }}
       >
         <div className="max-w-5xl mx-auto">

@@ -67,17 +67,17 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
     <aside
       className="w-52 shrink-0 flex flex-col h-screen sticky top-0 overflow-hidden"
       style={{
-        background: 'rgba(13,13,20,0.92)',
+        background: 'var(--surface-strong)',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderRight: '1px solid rgba(255,255,255,0.05)',
+        borderRight: '1px solid var(--border-soft)',
       }}
     >
       {/* Logo */}
       <Link
         href="/dashboard"
         className="px-4 py-4 flex items-center gap-2.5 hover:bg-white/5 transition-colors"
-        style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+        style={{ borderBottom: '1px solid var(--border-soft)' }}
       >
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
@@ -123,7 +123,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       </nav>
 
       {/* Footer */}
-      <div className="px-2 py-3 space-y-0.5" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+      <div className="px-2 py-3 space-y-0.5" style={{ borderTop: '1px solid var(--border-soft)' }}>
 
         {/* User menu */}
         <div ref={menuRef} className="relative mt-1">
@@ -154,11 +154,11 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             <div
               className="absolute bottom-full mb-2 left-0 right-0 rounded-xl overflow-hidden z-50"
               style={{
-                background: 'rgba(18,18,28,0.97)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'var(--surface-overlay)',
+                border: '1px solid var(--border)',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
-                boxShadow: '0 -8px 32px rgba(0,0,0,0.5)',
+                boxShadow: 'var(--shadow-card), 0 -8px 32px rgba(0,0,0,0.18)',
               }}
             >
               {/* Projects */}
