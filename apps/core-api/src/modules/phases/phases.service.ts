@@ -51,7 +51,7 @@ export class PhasesService {
 
     return this.prisma.phase.findMany({
       where: { projectId, ...(decisionId ? { decisionId } : {}) },
-      orderBy: { orderIndex: 'asc' },
+      orderBy: { createdAt: 'desc' },
       include: AUTHOR_INCLUDE,
     });
   }
