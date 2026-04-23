@@ -46,3 +46,10 @@ npm-debug.log*
 
 # Test coverage
 coverage/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Playwright test output
+test-results/
+playwright-report/
