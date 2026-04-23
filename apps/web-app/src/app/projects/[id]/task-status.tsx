@@ -32,10 +32,11 @@ export function TaskStatusSelect({ taskId, projectId, currentStatus }: TaskStatu
       value={currentStatus}
       onChange={handleChange}
       disabled={isPending}
-      className="glass-input text-xs rounded-lg text-gray-300 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+      className="text-xs rounded-lg px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+      style={{ background: 'var(--surface-overlay)', color: 'var(--text)', border: '1px solid var(--border)' }}
     >
       {TASK_STATUSES.map((s) => (
-        <option key={s} value={s}>
+        <option key={s} value={s} style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>
           {s.replace('_', ' ')}
         </option>
       ))}
