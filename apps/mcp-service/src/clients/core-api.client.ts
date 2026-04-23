@@ -423,6 +423,113 @@ export class CoreApiClient {
   }
 
 
+  async createArchitectureRepository(projectId: string, data: {
+    name: string;
+    repoUrl?: string;
+    provider?: string;
+    defaultBranch?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/repositories`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ projectId, ...data }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api createArchitectureRepository failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
+  async createArchitectureNode(projectId: string, data: {
+    repositoryId: string;
+    type: string;
+    name: string;
+    path?: string;
+    description?: string;
+    domainGroup?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/nodes`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ ...data, isManual: true }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api createArchitectureNode failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
+  async createArchitectureEdge(projectId: string, data: {
+    fromNodeId: string;
+    toNodeId: string;
+    edgeType: string;
+    weight?: number;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/edges`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ ...data, isManual: true }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api createArchitectureEdge failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
+  async createArchitectureLink(projectId: string, nodeId: string, data: {
+    entityType: string;
+    entityId: string;
+    linkType: string;
+    note?: string;
+  }): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/nodes/${nodeId}/links`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api createArchitectureLink failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
+  async createArchitectureAnnotation(projectId: string, nodeId: string, content: string): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/nodes/${nodeId}/annotations`, {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify({ content }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api createArchitectureAnnotation failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
   async listMyTeams(userId: string): Promise<unknown[]> {
 
     const res = await fetch(`${AUTH_URL}/memberships?userId=${encodeURIComponent(userId)}`, {

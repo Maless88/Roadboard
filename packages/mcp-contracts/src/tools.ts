@@ -348,6 +348,114 @@ export const GET_NODE_CONTEXT_TOOL: McpToolDefinition = {
 };
 
 
+// ── Atomic write tools for agent-driven onboarding (B.2 flow) ──────────
+
+export const CREATE_ARCHITECTURE_REPOSITORY_TOOL: McpToolDefinition = {
+  name: 'create_architecture_repository',
+  description: 'Create a CodeRepository record for a project. Required before creating any ArchitectureNode. Typical usage from an onboarding agent: call once per project at the start of the scan.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      name: { type: 'string', description: 'Repository name (e.g. "my-monorepo")' },
+      repoUrl: { type: 'string', description: 'Optional repo URL (git or local://)' },
+      provider: {
+        type: 'string',
+        enum: ['github', 'gitlab', 'local', 'manual'],
+        description: 'Source provider. Use "manual" when the agent scans a local path without a real remote',
+      },
+      defaultBranch: { type: 'string', description: 'Default branch (default: "main")' },
+    },
+    required: ['projectId', 'name'],
+  },
+};
+
+
+export const CREATE_ARCHITECTURE_NODE_TOOL: McpToolDefinition = {
+  name: 'create_architecture_node',
+  description: 'Create an ArchitectureNode (workspace/module/service) inside the project graph. Call once per workspace when onboarding a monorepo. Requires a repositoryId created via create_architecture_repository.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      repositoryId: { type: 'string', description: 'The CodeRepository ID (from create_architecture_repository)' },
+      type: {
+        type: 'string',
+        enum: ['repository', 'app', 'package', 'module', 'service', 'file'],
+        description: 'Node type — app/package for monorepo workspaces, module/service for finer grain',
+      },
+      name: { type: 'string', description: 'Short name (e.g. "web-app")' },
+      path: { type: 'string', description: 'Path relative to repo root (e.g. "apps/web-app")' },
+      description: { type: 'string', description: 'Optional human description (e.g. the full npm name)' },
+      domainGroup: { type: 'string', description: 'Optional domain/bounded-context label (e.g. "billing")' },
+    },
+    required: ['projectId', 'repositoryId', 'type', 'name'],
+  },
+};
+
+
+export const CREATE_ARCHITECTURE_EDGE_TOOL: McpToolDefinition = {
+  name: 'create_architecture_edge',
+  description: 'Create a directed edge between two ArchitectureNodes. The common case is edgeType="depends_on" emitted for each workspace-internal dependency discovered while parsing package.json.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      fromNodeId: { type: 'string', description: 'Source node ID (the one that depends on the target)' },
+      toNodeId: { type: 'string', description: 'Target node ID (the dependency)' },
+      edgeType: {
+        type: 'string',
+        enum: ['depends_on', 'imports', 'impacts', 'linked_to'],
+        description: 'Relationship type. depends_on for package.json deps, imports for ts-morph-parsed imports',
+      },
+      weight: { type: 'number', description: 'Optional weight (default 1.0)' },
+    },
+    required: ['projectId', 'fromNodeId', 'toNodeId', 'edgeType'],
+  },
+};
+
+
+export const CREATE_ARCHITECTURE_LINK_TOOL: McpToolDefinition = {
+  name: 'create_architecture_link',
+  description: 'Link an ArchitectureNode to an existing RB entity (task, decision, milestone, memory entry). Use when the agent reads context (README, decision records) and wants to tie a node to its motivating task or architectural decision.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      nodeId: { type: 'string', description: 'The source ArchitectureNode ID' },
+      entityType: {
+        type: 'string',
+        enum: ['task', 'decision', 'milestone', 'memory_entry'],
+        description: 'Type of target RB entity',
+      },
+      entityId: { type: 'string', description: 'CUID of the target RB entity' },
+      linkType: {
+        type: 'string',
+        enum: ['implements', 'modifies', 'fixes', 'addresses', 'motivates', 'constrains', 'delivers', 'describes', 'warns_about'],
+        description: 'Semantic relation from node to entity',
+      },
+      note: { type: 'string', description: 'Optional free-text note' },
+    },
+    required: ['projectId', 'nodeId', 'entityType', 'entityId', 'linkType'],
+  },
+};
+
+
+export const CREATE_ARCHITECTURE_ANNOTATION_TOOL: McpToolDefinition = {
+  name: 'create_architecture_annotation',
+  description: 'Attach a free-text annotation to an ArchitectureNode. Use when the agent identifies something non-obvious from scanning code (e.g. "legacy module, scheduled for deprecation", "high-churn hotspot").',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      nodeId: { type: 'string', description: 'The ArchitectureNode ID' },
+      content: { type: 'string', description: 'Annotation text' },
+    },
+    required: ['projectId', 'nodeId', 'content'],
+  },
+};
+
+
 export const MCP_TOOLS = [
   CREATE_PROJECT_TOOL,
   LIST_PROJECTS_TOOL,
@@ -366,4 +474,9 @@ export const MCP_TOOLS = [
   SEARCH_MEMORY_TOOL,
   GET_ARCHITECTURE_MAP_TOOL,
   GET_NODE_CONTEXT_TOOL,
+  CREATE_ARCHITECTURE_REPOSITORY_TOOL,
+  CREATE_ARCHITECTURE_NODE_TOOL,
+  CREATE_ARCHITECTURE_EDGE_TOOL,
+  CREATE_ARCHITECTURE_LINK_TOOL,
+  CREATE_ARCHITECTURE_ANNOTATION_TOOL,
 ] as const;
