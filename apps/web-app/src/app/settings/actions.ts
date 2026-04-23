@@ -223,6 +223,10 @@ export async function addDeveloperAction(
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.read', grantedByUserId: session.userId }),
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.write', grantedByUserId: session.userId }),
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'task.write', grantedByUserId: session.userId }),
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'memory.write', grantedByUserId: session.userId }),
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'decision.write', grantedByUserId: session.userId }),
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'codeflow.read', grantedByUserId: session.userId }),
+      createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'codeflow.write', grantedByUserId: session.userId }),
     ]);
     revalidatePath('/settings');
     return {};
