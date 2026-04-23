@@ -71,7 +71,7 @@ export const enDict: Dictionary = {
       path: 'Path',
       owner: 'Owner',
       domainGroup: 'Domain',
-      counts: 'Links',
+      counts: 'Counts',
       noDecisions: 'No linked decisions.',
       noTasks: 'No linked tasks.',
       noMemory: 'No linked memory entries.',

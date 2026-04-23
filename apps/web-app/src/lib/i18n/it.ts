@@ -69,7 +69,7 @@ export const itDict = {
       path: 'Path',
       owner: 'Proprietario',
       domainGroup: 'Dominio',
-      counts: 'Collegamenti',
+      counts: 'Conteggi',
       noDecisions: 'Nessuna decisione collegata.',
       noTasks: 'Nessun task collegato.',
       noMemory: 'Nessuna memory entry collegata.',
