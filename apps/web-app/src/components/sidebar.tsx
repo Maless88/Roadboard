@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from 'react';
 import { logoutAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
 import { LanguageSwitcher } from './language-switcher';
+import { formatBuildLabel } from '@/lib/build-label';
 import type { Locale } from '@/lib/i18n';
 
 
@@ -87,7 +88,9 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
         </div>
         <div className="flex flex-col leading-none">
           <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
-          <span className="text-[10px] text-indigo-400 font-mono">2.0</span>
+          <span className="text-[10px] text-indigo-400 font-mono" title={process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown'}>
+            {formatBuildLabel(process.env.NEXT_PUBLIC_BUILD_TIME)}
+          </span>
         </div>
       </Link>
 

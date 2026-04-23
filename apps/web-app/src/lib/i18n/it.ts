@@ -237,8 +237,8 @@ export const itDict = {
     dismiss: 'Ignora',
   },
   release: {
-    pending: 'Nuova release in attesa di deploy:',
-    deploy: 'Deploya ora',
+    pending: 'Aggiornamento disponibile',
+    deploy: 'Deploya',
     deploying: 'Deploy in corso…',
     dismiss: 'Ignora',
   },

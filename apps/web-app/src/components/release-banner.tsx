@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
+import { formatBuildLabel } from '@/lib/build-label';
 
 
 const POLL_INTERVAL_MS = 60_000;
@@ -100,12 +101,13 @@ export function ReleaseBanner() {
     return null;
   }
 
-  const shortSha = status.pending.sha.slice(0, 7);
+  const fullSha = status.pending.sha;
+  const versionLabel = formatBuildLabel(status.pending.at);
 
   return (
     <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-600/90 px-4 py-3 text-sm text-white shadow-lg backdrop-blur">
-      <span>
-        {dict.release.pending} <code className="font-mono text-xs opacity-80">{shortSha}</code>
+      <span title={fullSha}>
+        {dict.release.pending} <code className="font-mono text-xs opacity-80">{versionLabel}</code>
       </span>
       <button
         type="button"

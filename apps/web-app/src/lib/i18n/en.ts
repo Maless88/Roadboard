@@ -239,8 +239,8 @@ export const enDict: Dictionary = {
     dismiss: 'Dismiss',
   },
   release: {
-    pending: 'New release pending deploy:',
-    deploy: 'Deploy now',
+    pending: 'Update available',
+    deploy: 'Deploy',
     deploying: 'Deploying…',
     dismiss: 'Dismiss',
   },
