@@ -71,7 +71,11 @@ export class TasksService {
       where.status = filters.status;
     }
 
-    return this.prisma.task.findMany({ where, include: AUTHOR_INCLUDE });
+    return this.prisma.task.findMany({
+      where,
+      include: AUTHOR_INCLUDE,
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
 
