@@ -514,6 +514,25 @@ const TOOLS = [
     },
   },
   {
+    name: "link_task_to_node",
+    description: "Semantic wrapper over create_architecture_link: tie a task to one ArchitectureNode it will touch. Call this immediately after create_task when you know which workspace/module the task modifies. Populates the graph so that subsequent prepare_task_context calls receive richer execution context.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+        taskId: { type: "string", description: "The task ID" },
+        nodeId: { type: "string", description: "The ArchitectureNode ID" },
+        linkType: {
+          type: "string",
+          enum: ["implements", "modifies", "fixes", "addresses", "motivates", "constrains", "delivers", "describes", "warns_about"],
+          description: "Semantic relation from task to node. Default: 'modifies'",
+        },
+        note: { type: "string", description: "Optional note" },
+      },
+      required: ["projectId", "taskId", "nodeId"],
+    },
+  },
+  {
     name: "ingest_architecture",
     description: "One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally. Much faster than dozens of create_architecture_* calls. Use `replaceExisting: true` to re-scan an already-onboarded project idempotently.",
     inputSchema: {
@@ -613,6 +632,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_architecture_link: "codeflow.write",
   create_architecture_annotation: "codeflow.write",
   ingest_architecture: "codeflow.write",
+  link_task_to_node: "codeflow.write",
 };
 
 
@@ -1078,10 +1098,12 @@ async function handleToolCall(
       const projectId = args.projectId as string;
       const taskId = args.taskId as string;
 
-      const [project, tasks, memory] = await Promise.all([
+      const [project, tasks, memory, decisions, entityLinks] = await Promise.all([
         client.getProject(projectId),
         client.listTasks(projectId),
         client.listMemory(projectId),
+        client.listDecisions(projectId).catch(() => []),
+        client.listEntityArchitectureLinks(projectId, 'task', taskId).catch(() => ({ links: [], nodes: [] })),
       ]);
 
       const taskList = tasks as Array<Record<string, unknown>>;
@@ -1095,11 +1117,39 @@ async function handleToolCall(
         (t) => t.id !== taskId && t.phaseId === task.phaseId,
       );
 
+      // Architecture nodes linkati al task
+      const graphPayload = entityLinks as { links?: unknown[]; nodes?: unknown[] };
+      const architectureNodes = graphPayload.nodes ?? [];
+
+      // Decisions: (a) linkate al task direttamente via ArchitectureLink entityType='decision'
+      //            (b) risolte dalla phase del task (Phase.decisionId)
+      const linkedDecisionIds = new Set<string>();
+      const directLinks = graphPayload.links ?? [];
+      for (const l of directLinks as Array<{ entityType?: string; entityId?: string }>) {
+        if (l.entityType === 'decision' && l.entityId) linkedDecisionIds.add(l.entityId);
+      }
+      const decisionList = decisions as Array<Record<string, unknown>>;
+      const phaseId = task.phaseId as string | null | undefined;
+      const linkedDecisions = decisionList.filter((d) => linkedDecisionIds.has(d.id as string));
+      // Phase-level decision (Phase.decisionId) — resolver opzionale se phase include decisionId
+      // Il listPhases non è nel client, skip for now; questa info arriva via future extension.
+
+      // Memory targeted: filtra per tipi rilevanti ad esecuzione task
+      const relevantTypes = new Set(['architecture', 'decision', 'issue', 'learning', 'done']);
+      const memoryList = memory as Array<Record<string, unknown>>;
+      const relatedMemory = memoryList.filter((m) => relevantTypes.has(m.type as string)).slice(0, 10);
+
       return jsonResponse({
         project,
         task,
         related_tasks: relatedTasks,
-        recent_memory: (memory as unknown[]).slice(0, 5),
+        recent_memory: memoryList.slice(0, 5),
+        // New fields (CF-AGENT-01a) — additive, backward compatible
+        architecture_nodes: architectureNodes,
+        architecture_links: directLinks,
+        linked_decisions: linkedDecisions,
+        related_memory: relatedMemory,
+        task_phase_id: phaseId,
       });
     }
 
@@ -1295,6 +1345,20 @@ async function handleToolCall(
         args.projectId as string,
         args.nodeId as string,
         args.content as string,
+      );
+      return jsonResponse(result);
+    }
+
+    case "link_task_to_node": {
+      const result = await client.createArchitectureLink(
+        args.projectId as string,
+        args.nodeId as string,
+        {
+          entityType: 'task',
+          entityId: args.taskId as string,
+          linkType: (args.linkType as string) ?? 'modifies',
+          note: args.note as string | undefined,
+        },
       );
       return jsonResponse(result);
     }

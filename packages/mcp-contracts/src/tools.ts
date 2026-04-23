@@ -456,6 +456,27 @@ export const CREATE_ARCHITECTURE_ANNOTATION_TOOL: McpToolDefinition = {
 };
 
 
+export const LINK_TASK_TO_NODE_TOOL: McpToolDefinition = {
+  name: 'link_task_to_node',
+  description: 'Semantic wrapper over create_architecture_link: tie a task to one ArchitectureNode it will touch. Call this immediately after create_task when you know which workspace/module the task modifies. Populates the graph so that subsequent prepare_task_context calls receive richer execution context (related nodes, annotations, dependencies).',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'The project ID' },
+      taskId: { type: 'string', description: 'The task ID' },
+      nodeId: { type: 'string', description: 'The ArchitectureNode ID' },
+      linkType: {
+        type: 'string',
+        enum: ['implements', 'modifies', 'fixes', 'addresses', 'motivates', 'constrains', 'delivers', 'describes', 'warns_about'],
+        description: "Semantic relation from task to node. Default: 'modifies'",
+      },
+      note: { type: 'string', description: 'Optional free-text note' },
+    },
+    required: ['projectId', 'taskId', 'nodeId'],
+  },
+};
+
+
 export const INGEST_ARCHITECTURE_TOOL: McpToolDefinition = {
   name: 'ingest_architecture',
   description: 'One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally, and returns the mapping. Much faster than dozens of create_architecture_* calls. Node keys inside the payload are arbitrary string identifiers (usually package names) used only to link edges to nodes; they have no meaning in the database. Use `replaceExisting: true` to re-scan an already-onboarded project idempotently (wipes previous CodeFlow data for the project first).',
@@ -547,4 +568,5 @@ export const MCP_TOOLS = [
   CREATE_ARCHITECTURE_LINK_TOOL,
   CREATE_ARCHITECTURE_ANNOTATION_TOOL,
   INGEST_ARCHITECTURE_TOOL,
+  LINK_TASK_TO_NODE_TOOL,
 ] as const;

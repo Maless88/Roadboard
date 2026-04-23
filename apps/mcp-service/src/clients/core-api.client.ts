@@ -423,6 +423,21 @@ export class CoreApiClient {
   }
 
 
+  async listEntityArchitectureLinks(projectId: string, entityType: string, entityId: string): Promise<unknown> {
+
+    const params = new URLSearchParams({ entityType, entityId });
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/entity-links?${params}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api listEntityArchitectureLinks failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+
   async resetArchitecture(projectId: string): Promise<unknown> {
 
     const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/reset`, {
