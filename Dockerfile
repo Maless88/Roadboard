@@ -11,27 +11,14 @@ RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 WORKDIR /app
 
 
-# ── Install all dependencies (layer cached until lock file changes) ──────────
+# ── Install all dependencies (layer cached until any package.json changes) ──
+# COPY --parents (BuildKit) preserves the directory structure and picks up
+# every workspace package.json without manual enumeration. Adding a new
+# workspace no longer requires editing this Dockerfile.
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-
-COPY apps/core-api/package.json         apps/core-api/
-COPY apps/auth-access/package.json      apps/auth-access/
-COPY apps/mcp-service/package.json      apps/mcp-service/
-COPY apps/worker-jobs/package.json      apps/worker-jobs/
-COPY apps/local-sync-bridge/package.json apps/local-sync-bridge/
-
-COPY packages/api-contracts/package.json  packages/api-contracts/
-COPY packages/auth/package.json           packages/auth/
-COPY packages/config/package.json         packages/config/
-COPY packages/database/package.json       packages/database/
-COPY packages/demo-seed/package.json      packages/demo-seed/
-COPY packages/domain/package.json         packages/domain/
-COPY packages/grants/package.json         packages/grants/
-COPY packages/graph-db/package.json       packages/graph-db/
-COPY packages/local-storage/package.json  packages/local-storage/
-COPY packages/mcp-contracts/package.json  packages/mcp-contracts/
-COPY packages/observability/package.json  packages/observability/
+COPY --parents apps/*/package.json ./
+COPY --parents packages/*/package.json ./
 
 RUN pnpm install --frozen-lockfile
 
