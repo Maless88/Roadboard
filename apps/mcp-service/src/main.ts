@@ -98,7 +98,7 @@ const TOOLS = [
   },
   {
     name: "create_task",
-    description: "Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically.",
+    description: "Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically. IMPORTANT: immediately after the task is created, if it will modify any code (most tasks), call link_task_to_node for each ArchitectureNode it will touch. Use get_architecture_map to discover the right nodeId. This is mandatory unless the task is purely meta — it is how Roadboard populates the graph that powers future context retrieval.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -874,6 +874,20 @@ async function handleToolCall(
               required_args: ["projectId", "nodeId"],
               optional_args: [],
             },
+            {
+              name: "link_task_to_node",
+              purpose: "Tie a task to the ArchitectureNode(s) it will touch. Populates the task↔node graph so that subsequent prepare_task_context calls return richer execution context.",
+              when: "IMMEDIATELY after create_task, whenever the task clearly modifies a known workspace/module. Check get_architecture_map first to find the matching nodeId. If multiple nodes are involved, call link_task_to_node once per node.",
+              required_args: ["projectId", "taskId", "nodeId"],
+              optional_args: ["linkType", "note"],
+            },
+            {
+              name: "ingest_architecture",
+              purpose: "One-shot orchestrator for agent-driven repository onboarding (B.2). The agent scans the repo locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Use replaceExisting=true to re-scan idempotently.",
+              when: "At project onboarding when no architecture graph exists yet, or when re-scanning a repo after structural changes.",
+              required_args: ["projectId", "repository", "nodes"],
+              optional_args: ["replaceExisting", "edges"],
+            },
           ],
         },
         recommended_workflow: [
@@ -891,18 +905,22 @@ async function handleToolCall(
           },
           {
             step: 4,
-            action: "If the task involves architecture or CodeFlow, call get_architecture_map(projectId) to understand the current graph state.",
+            action: "IMMEDIATELY after create_task: call get_architecture_map(projectId) (if you haven't already) and then call link_task_to_node for every ArchitectureNode the task will touch. This is mandatory for any task that modifies code — it populates the graph so later sessions can reconstruct the execution context. Skip only if the task is purely meta (e.g. renaming a project) and touches no code.",
           },
           {
             step: 5,
-            action: "Update task status as work progresses via update_task_status.",
+            action: "If the task involves broader architecture concerns, also call get_node_context for the touched nodes to read existing annotations and decisions before proposing changes.",
           },
           {
             step: 6,
-            action: "Store important decisions or discoveries with create_memory_entry or create_decision.",
+            action: "Update task status as work progresses via update_task_status.",
           },
           {
             step: 7,
+            action: "Store important decisions or discoveries with create_memory_entry or create_decision.",
+          },
+          {
+            step: 8,
             action: "At session end, call create_handoff to preserve context for the next agent or session.",
           },
         ],
@@ -910,6 +928,7 @@ async function handleToolCall(
           "Always call initial_instructions once at session start.",
           "Always open or identify a task before starting work. Every task MUST have a phaseId.",
           "When planning any activity: call list_phases first, assign the task to an existing phase if one fits, otherwise create a new phase first. Never skip phase assignment.",
+          "Right after create_task, if the task modifies code, call link_task_to_node for EVERY ArchitectureNode the task touches. This is not optional — it is how Roadboard builds the graph that powers future context retrieval. If the architecture graph is empty, first run ingest_architecture or create_architecture_node.",
           "Do not report completion without updating the task status.",
           "Use create_memory_entry to persist architectural decisions and key findings.",
           "Use create_decision for any architectural choice, technology selection, or significant design decision.",
