@@ -3,7 +3,7 @@
 ## How to get help
 
 ### GitHub Discussions
-For questions, ideas, or general discussion, open a [GitHub Discussion](https://github.com/Maless88/rb/discussions).
+For questions, ideas, or general discussion, open a [GitHub Discussion](https://github.com/Maless88/Roadboard/discussions).
 
 This is the best place to ask:
 - How does X work in RoadBoard?
@@ -11,7 +11,7 @@ This is the best place to ask:
 - What is the recommended way to configure Z?
 
 ### GitHub Issues
-Use [GitHub Issues](https://github.com/Maless88/rb/issues) for:
+Use [GitHub Issues](https://github.com/Maless88/Roadboard/issues) for:
 - Bug reports
 - Feature requests
 - Documentation improvements

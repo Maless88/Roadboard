@@ -34,7 +34,7 @@ export class ReleaseController {
     const current = optionalEnv("BUILD_SHA", "unknown");
     const deployUrl = optionalEnv(
       "DEPLOY_WORKFLOW_URL",
-      "https://github.com/Maless88/RB/actions/workflows/deploy.yml",
+      "https://github.com/Maless88/Roadboard/actions/workflows/deploy.yml",
     );
     const pending = this.release.getPending();
     const hasPending = pending !== null && pending.sha !== current;
@@ -72,7 +72,7 @@ export class ReleaseController {
   async triggerDeploy(): Promise<TriggerDeployResponse> {
 
     const token = optionalEnv("GITHUB_DISPATCH_TOKEN", "");
-    const repo = optionalEnv("GITHUB_REPO", "Maless88/RB");
+    const repo = optionalEnv("GITHUB_REPO", "Maless88/Roadboard");
     const workflow = optionalEnv("GITHUB_DEPLOY_WORKFLOW", "deploy.yml");
     const ref = optionalEnv("GITHUB_DEPLOY_REF", "main");
 

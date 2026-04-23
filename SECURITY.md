@@ -8,7 +8,7 @@ Only the latest commit on the `main` branch is actively maintained.
 
 Please do **not** open a public GitHub issue for security vulnerabilities.
 
-Instead, send a private report via GitHub's [Security Advisories](https://github.com/Maless88/rb/security/advisories/new) feature.
+Instead, send a private report via GitHub's [Security Advisories](https://github.com/Maless88/Roadboard/security/advisories/new) feature.
 
 Include:
 - Description of the vulnerability

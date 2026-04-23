@@ -2,7 +2,7 @@
 
 Multi-project execution, memory, and collaboration platform for humans and AI agents.
 
-[![CI](https://github.com/Maless88/rb/actions/workflows/ci.yml/badge.svg)](https://github.com/Maless88/rb/actions/workflows/ci.yml)
+[![CI](https://github.com/Maless88/Roadboard/actions/workflows/ci.yml/badge.svg)](https://github.com/Maless88/Roadboard/actions/workflows/ci.yml)
 ![Status](https://img.shields.io/badge/status-pre--beta%20%7C%20active%20development-orange)
 
 > **Work in progress.** RoadBoard 2.0 is under active development and not yet in beta. APIs, data models, and interfaces may change without notice. Not recommended for production use.
@@ -78,7 +78,7 @@ infra/
 
 ```bash
 # Clone
-git clone https://github.com/Maless88/rb.git
+git clone https://github.com/Maless88/Roadboard.git
 cd rb
 
 # Install dependencies
