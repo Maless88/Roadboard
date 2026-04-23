@@ -188,13 +188,18 @@ export function NodeDrawer({ projectId, nodeId, onClose }: DrawerProps) {
 
 function InfoPanel({ node, dict }: { node: ArchitectureNodeDetail; dict: ReturnType<typeof useDict> }) {
 
+  const taskCount = node.links.filter((l) => l.entityType === 'task').length;
+  const decisionCount = node.links.filter((l) => l.entityType === 'decision').length;
+  const memoryCount = node.links.filter((l) => l.entityType === 'memory_entry').length;
+  const annotationCount = node.annotations.length;
+
   return (
     <div className="space-y-4 text-xs">
       <Row label={dict.codeflow.drawer.type}>{node.type}</Row>
       {node.path && <Row label={dict.codeflow.drawer.path}><code className="font-mono text-gray-400">{node.path}</code></Row>}
       {node.domainGroup && <Row label={dict.codeflow.drawer.domainGroup}>{node.domainGroup}</Row>}
       <Row label={dict.codeflow.drawer.counts}>
-        {node.openTaskCount} task · {node.decisionCount} decisioni · {node.annotationCount} annotazioni
+        {taskCount} task · {decisionCount} decisioni · {memoryCount} memory · {annotationCount} annotazioni
       </Row>
 
       {node.description && (
