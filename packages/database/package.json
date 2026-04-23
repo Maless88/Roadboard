@@ -13,12 +13,14 @@
     "db:seed": "tsx src/seed.ts",
     "db:backfill-personal-teams": "tsx src/backfill-personal-teams.ts",
     "db:seed-codeflow": "tsx src/seed-codeflow.ts",
+    "db:migrate-to-memgraph": "tsx src/migrate-to-memgraph.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {
     "@prisma/client": "^6.0.0",
     "@roadboard/auth": "workspace:*",
-    "@roadboard/domain": "workspace:*"
+    "@roadboard/domain": "workspace:*",
+    "@roadboard/graph-db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
