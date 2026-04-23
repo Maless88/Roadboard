@@ -1,6 +1,7 @@
-import { ConflictException, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { hashPassword, verifyPassword, generateToken, hashToken } from '@roadboard/auth';
+import { applyDemoSeed } from '@roadboard/demo-seed';
 import { LoginDto } from './login.dto';
 import { RegisterDto } from './register.dto';
 import { ensurePersonalTeam } from '../users/users.service';
@@ -11,6 +12,8 @@ const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
+
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
 
@@ -64,7 +67,10 @@ export class AuthService {
 
     const hashed = await hashPassword(dto.password);
 
-    const user = await this.prisma.$transaction(async (tx) => {
+    const seedDemoProject = dto.seedDemoProject !== false;
+    const demoLocale = dto.demoLocale ?? 'it';
+
+    const { user, teamId } = await this.prisma.$transaction(async (tx) => {
 
       const created = await tx.user.create({
         data: {
@@ -75,10 +81,21 @@ export class AuthService {
         },
       });
 
-      await ensurePersonalTeam(tx, { id: created.id, username: created.username, displayName: created.displayName });
+      const team = await ensurePersonalTeam(tx, { id: created.id, username: created.username, displayName: created.displayName });
 
-      return created;
+      return { user: created, teamId: team.id };
     });
+
+    if (seedDemoProject) {
+
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await applyDemoSeed(tx, { userId: user.id, teamId, locale: demoLocale });
+        });
+      } catch (err) {
+        this.logger.warn(`Demo seed failed for user ${user.username}: ${(err as Error).message}`);
+      }
+    }
 
     const rawToken = generateToken();
     const tokenHash = hashToken(rawToken);

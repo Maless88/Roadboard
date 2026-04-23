@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 
 export class RegisterDto {
@@ -17,4 +17,12 @@ export class RegisterDto {
   @IsString()
   @MinLength(8)
   password!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  seedDemoProject?: boolean;
+
+  @IsOptional()
+  @IsIn(['it', 'en'])
+  demoLocale?: 'it' | 'en';
 }

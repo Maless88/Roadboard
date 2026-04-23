@@ -131,6 +131,19 @@ function RegisterFields({ pending }: { pending: boolean }) {
         />
       </div>
 
+      <label className="flex items-start gap-2 text-sm text-gray-300 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          name="seedDemoProject"
+          defaultChecked
+          className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-800 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0"
+        />
+        <span>
+          Crea un progetto di esempio
+          <span className="block text-xs text-gray-500">Per esplorare subito task, decisioni, memoria e Atlas.</span>
+        </span>
+      </label>
+
       <button
         type="submit"
         disabled={pending}

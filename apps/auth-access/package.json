@@ -19,6 +19,7 @@
     "@roadboard/auth": "workspace:*",
     "@roadboard/config": "workspace:*",
     "@roadboard/database": "workspace:*",
+    "@roadboard/demo-seed": "workspace:*",
     "@roadboard/domain": "workspace:*",
     "@roadboard/grants": "workspace:*",
     "class-transformer": "^0.5.1",

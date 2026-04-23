@@ -40,13 +40,17 @@ export async function registerAction(
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirmPassword') as string;
+  const seedDemoProject = formData.get('seedDemoProject') === 'on';
+
+  const cookieStore = await cookies();
+  const demoLocale: 'it' | 'en' = cookieStore.get(LOCALE_COOKIE)?.value === 'en' ? 'en' : 'it';
 
   if (password !== confirmPassword) {
     return { error: 'Le password non coincidono.' };
   }
 
   try {
-    const { token } = await register({ username, displayName, email, password });
+    const { token } = await register({ username, displayName, email, password, seedDemoProject, demoLocale });
     await setToken(token);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Registrazione fallita.';

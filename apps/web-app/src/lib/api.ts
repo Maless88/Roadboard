@@ -148,6 +148,8 @@ export async function register(data: {
   displayName: string;
   email: string;
   password: string;
+  seedDemoProject?: boolean;
+  demoLocale?: 'it' | 'en';
 }): Promise<{ token: string; userId: string }> {
 
   const res = await fetch(`${AUTH_API}/auth/register`, {
