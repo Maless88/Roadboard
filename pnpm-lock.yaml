@@ -99,6 +99,9 @@ importers:
       '@roadboard/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@roadboard/graph-db':
+        specifier: workspace:*
+        version: link:../../packages/graph-db
       class-transformer:
         specifier: ^0.5.1
         version: 0.5.1
@@ -330,6 +333,9 @@ importers:
       '@roadboard/domain':
         specifier: workspace:*
         version: link:../domain
+      '@roadboard/graph-db':
+        specifier: workspace:*
+        version: link:../graph-db
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

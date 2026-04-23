@@ -6,12 +6,16 @@ import { UpdateNodeDto } from './dto/update-node.dto';
 import { CreateEdgeDto } from './dto/create-edge.dto';
 import { CreateLinkDto } from './dto/create-link.dto';
 import { CreateAnnotationDto } from './dto/create-annotation.dto';
+import { GraphSyncService } from './graph-sync.service';
 
 
 @Injectable()
 export class GraphService {
 
-  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject('PRISMA') private readonly prisma: PrismaClient,
+    @Inject(GraphSyncService) private readonly sync: GraphSyncService,
+  ) {}
 
 
   // ── Graph ────────────────────────────────────────────
@@ -91,7 +95,7 @@ export class GraphService {
 
   async createNode(projectId: string, dto: CreateNodeDto, createdByUserId: string): Promise<unknown> {
 
-    return this.prisma.architectureNode.create({
+    const node = await this.prisma.architectureNode.create({
       data: {
         projectId,
         repositoryId: dto.repositoryId,
@@ -105,6 +109,17 @@ export class GraphService {
         ownerTeamId: dto.ownerTeamId,
       },
     });
+
+    await this.sync.upsertNode({
+      id: node.id,
+      projectId: node.projectId,
+      type: node.type,
+      name: node.name,
+      path: node.path,
+      domainGroup: node.domainGroup,
+    });
+
+    return node;
   }
 
 
@@ -151,7 +166,9 @@ export class GraphService {
       throw new Error('Cannot delete auto-generated nodes; set isCurrent=false via rescan');
     }
 
-    return this.prisma.architectureNode.delete({ where: { id } });
+    const deleted = await this.prisma.architectureNode.delete({ where: { id } });
+    await this.sync.deleteNode(id);
+    return deleted;
   }
 
 
@@ -159,7 +176,7 @@ export class GraphService {
 
   async createEdge(projectId: string, dto: CreateEdgeDto): Promise<unknown> {
 
-    return this.prisma.architectureEdge.create({
+    const edge = await this.prisma.architectureEdge.create({
       data: {
         projectId,
         fromNodeId: dto.fromNodeId,
@@ -169,6 +186,17 @@ export class GraphService {
         isManual: dto.isManual ?? true,
       },
     });
+
+    await this.sync.upsertEdge({
+      id: edge.id,
+      projectId: edge.projectId,
+      fromNodeId: edge.fromNodeId,
+      toNodeId: edge.toNodeId,
+      edgeType: edge.edgeType,
+      weight: edge.weight,
+    });
+
+    return edge;
   }
 
 
@@ -184,7 +212,9 @@ export class GraphService {
       throw new Error('Cannot delete auto-generated edges; they are replaced on rescan');
     }
 
-    return this.prisma.architectureEdge.delete({ where: { id } });
+    const deleted = await this.prisma.architectureEdge.delete({ where: { id } });
+    await this.sync.deleteEdge(id);
+    return deleted;
   }
 
 

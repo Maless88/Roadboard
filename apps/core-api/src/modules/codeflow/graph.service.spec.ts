@@ -63,7 +63,13 @@ describe('GraphService', () => {
 
   beforeEach(() => {
     prisma = makePrisma();
-    service = new GraphService(prisma as never);
+    const sync = {
+      upsertNode: vi.fn(),
+      deleteNode: vi.fn(),
+      upsertEdge: vi.fn(),
+      deleteEdge: vi.fn(),
+    };
+    service = new GraphService(prisma as never, sync as never);
   });
 
 
