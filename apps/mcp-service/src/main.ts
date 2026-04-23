@@ -513,6 +513,68 @@ const TOOLS = [
       required: ["projectId", "nodeId", "content"],
     },
   },
+  {
+    name: "ingest_architecture",
+    description: "One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally. Much faster than dozens of create_architecture_* calls.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "Target project ID" },
+        repository: {
+          type: "object",
+          description: "Single CodeRepository to create",
+          properties: {
+            name: { type: "string" },
+            repoUrl: { type: "string" },
+            provider: {
+              type: "string",
+              enum: ["github", "gitlab", "local", "manual"],
+            },
+            defaultBranch: { type: "string" },
+          },
+          required: ["name"],
+        },
+        nodes: {
+          type: "array",
+          description: "All nodes. 'key' is a payload-local identifier used to resolve edges (typically the npm package name).",
+          items: {
+            type: "object",
+            properties: {
+              key: { type: "string" },
+              type: {
+                type: "string",
+                enum: ["repository", "app", "package", "module", "service", "file"],
+              },
+              name: { type: "string" },
+              path: { type: "string" },
+              description: { type: "string" },
+              domainGroup: { type: "string" },
+              annotation: { type: "string" },
+            },
+            required: ["key", "type", "name"],
+          },
+        },
+        edges: {
+          type: "array",
+          description: "Directed edges. Reference nodes by 'key'.",
+          items: {
+            type: "object",
+            properties: {
+              from: { type: "string" },
+              to: { type: "string" },
+              type: {
+                type: "string",
+                enum: ["depends_on", "imports", "impacts", "linked_to"],
+              },
+              weight: { type: "number" },
+            },
+            required: ["from", "to", "type"],
+          },
+        },
+      },
+      required: ["projectId", "repository", "nodes"],
+    },
+  },
 ];
 
 
@@ -549,6 +611,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_architecture_edge: "codeflow.write",
   create_architecture_link: "codeflow.write",
   create_architecture_annotation: "codeflow.write",
+  ingest_architecture: "codeflow.write",
 };
 
 
@@ -1233,6 +1296,92 @@ async function handleToolCall(
         args.content as string,
       );
       return jsonResponse(result);
+    }
+
+    case "ingest_architecture": {
+      const projectId = args.projectId as string;
+      const repositoryPayload = args.repository as {
+        name: string;
+        repoUrl?: string;
+        provider?: string;
+        defaultBranch?: string;
+      };
+      const nodesPayload = (args.nodes ?? []) as Array<{
+        key: string;
+        type: string;
+        name: string;
+        path?: string;
+        description?: string;
+        domainGroup?: string;
+        annotation?: string;
+      }>;
+      const edgesPayload = (args.edges ?? []) as Array<{
+        from: string;
+        to: string;
+        type: string;
+        weight?: number;
+      }>;
+
+      const repo = await client.createArchitectureRepository(projectId, {
+        name: repositoryPayload.name,
+        repoUrl: repositoryPayload.repoUrl,
+        provider: repositoryPayload.provider ?? "manual",
+        defaultBranch: repositoryPayload.defaultBranch,
+      }) as { id: string };
+
+      const keyToId: Record<string, string> = {};
+      let annotationCount = 0;
+
+      for (const n of nodesPayload) {
+        const created = await client.createArchitectureNode(projectId, {
+          repositoryId: repo.id,
+          type: n.type,
+          name: n.name,
+          path: n.path,
+          description: n.description,
+          domainGroup: n.domainGroup,
+        }) as { id: string };
+        keyToId[n.key] = created.id;
+
+        if (n.annotation && n.annotation.trim().length > 0) {
+          await client.createArchitectureAnnotation(projectId, created.id, n.annotation).catch(() => null);
+          annotationCount++;
+        }
+      }
+
+      let edgeCount = 0;
+      const skippedEdges: Array<{ from: string; to: string; reason: string }> = [];
+      for (const e of edgesPayload) {
+        const fromId = keyToId[e.from];
+        const toId = keyToId[e.to];
+
+        if (!fromId || !toId) {
+          skippedEdges.push({ from: e.from, to: e.to, reason: 'unknown key' });
+          continue;
+        }
+
+        if (fromId === toId) {
+          skippedEdges.push({ from: e.from, to: e.to, reason: 'self-edge' });
+          continue;
+        }
+
+        await client.createArchitectureEdge(projectId, {
+          fromNodeId: fromId,
+          toNodeId: toId,
+          edgeType: e.type,
+          weight: e.weight,
+        });
+        edgeCount++;
+      }
+
+      return jsonResponse({
+        repositoryId: repo.id,
+        nodeCount: Object.keys(keyToId).length,
+        edgeCount,
+        annotationCount,
+        skippedEdges,
+        nodesByKey: keyToId,
+      });
     }
 
     default:

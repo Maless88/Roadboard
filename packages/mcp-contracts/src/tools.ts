@@ -456,6 +456,72 @@ export const CREATE_ARCHITECTURE_ANNOTATION_TOOL: McpToolDefinition = {
 };
 
 
+export const INGEST_ARCHITECTURE_TOOL: McpToolDefinition = {
+  name: 'ingest_architecture',
+  description: 'One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally, and returns the mapping. Much faster than dozens of create_architecture_* calls. Node keys inside the payload are arbitrary string identifiers (usually package names) used only to link edges to nodes; they have no meaning in the database.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: { type: 'string', description: 'Target project ID' },
+      repository: {
+        type: 'object',
+        description: 'Single CodeRepository to create for this scan',
+        properties: {
+          name: { type: 'string', description: 'Repository name' },
+          repoUrl: { type: 'string', description: 'Optional repo URL' },
+          provider: {
+            type: 'string',
+            enum: ['github', 'gitlab', 'local', 'manual'],
+            description: 'Source provider (default: manual)',
+          },
+          defaultBranch: { type: 'string', description: 'Default branch (default: main)' },
+        },
+        required: ['name'],
+      },
+      nodes: {
+        type: 'array',
+        description: 'All ArchitectureNodes to create — one per workspace/module. The "key" field is an identifier local to this payload (e.g. the npm package name) used only to resolve edges.',
+        items: {
+          type: 'object',
+          properties: {
+            key: { type: 'string', description: 'Payload-local key, usually the npm package name' },
+            type: {
+              type: 'string',
+              enum: ['repository', 'app', 'package', 'module', 'service', 'file'],
+            },
+            name: { type: 'string', description: 'Short display name' },
+            path: { type: 'string', description: 'Path relative to repo root' },
+            description: { type: 'string', description: 'Optional description' },
+            domainGroup: { type: 'string', description: 'Optional domain/bounded-context label' },
+            annotation: { type: 'string', description: 'Optional free-text annotation created together with the node — use this to attach semantic insight the agent derived from reading README/docs/comments' },
+          },
+          required: ['key', 'type', 'name'],
+        },
+      },
+      edges: {
+        type: 'array',
+        description: 'Directed edges between nodes. Reference nodes by their "key" (not by id).',
+        items: {
+          type: 'object',
+          properties: {
+            from: { type: 'string', description: 'Source node key (must appear in nodes[])' },
+            to: { type: 'string', description: 'Target node key (must appear in nodes[])' },
+            type: {
+              type: 'string',
+              enum: ['depends_on', 'imports', 'impacts', 'linked_to'],
+              description: 'Edge relationship',
+            },
+            weight: { type: 'number', description: 'Optional weight (default 1.0)' },
+          },
+          required: ['from', 'to', 'type'],
+        },
+      },
+    },
+    required: ['projectId', 'repository', 'nodes'],
+  },
+};
+
+
 export const MCP_TOOLS = [
   CREATE_PROJECT_TOOL,
   LIST_PROJECTS_TOOL,
@@ -479,4 +545,5 @@ export const MCP_TOOLS = [
   CREATE_ARCHITECTURE_EDGE_TOOL,
   CREATE_ARCHITECTURE_LINK_TOOL,
   CREATE_ARCHITECTURE_ANNOTATION_TOOL,
+  INGEST_ARCHITECTURE_TOOL,
 ] as const;
