@@ -87,6 +87,26 @@ html.light .react-flow__attribution { background: rgba(255,255,255,0.7) !importa
   }
 }
 
+select {
+  background-color: var(--surface-overlay);
+  color: var(--text);
+}
+
+select option {
+  background-color: var(--surface-overlay);
+  color: var(--text);
+}
+
+select option:checked {
+  background: linear-gradient(var(--surface-hover), var(--surface-hover));
+  color: var(--text);
+  font-weight: 500;
+}
+
+select option:disabled {
+  color: var(--text-faint);
+}
+
 html.light .text-white { color: var(--text); }
 html.light .text-gray-100 { color: var(--text); }
 html.light .text-gray-200 { color: var(--text); }
