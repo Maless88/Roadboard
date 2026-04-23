@@ -36,6 +36,8 @@ export function ReleaseBanner() {
   const dict = useDict();
   const [status, setStatus] = useState<ReleaseStatus | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  const [deploying, setDeploying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
 
@@ -54,6 +56,10 @@ export function ReleaseBanner() {
       }
 
       setStatus(payload);
+
+      if (!payload.hasPending) {
+        setDeploying(false);
+      }
     }
 
     void check();
@@ -66,6 +72,25 @@ export function ReleaseBanner() {
       window.removeEventListener('focus', check);
     };
   }, []);
+
+  async function onDeploy() {
+
+    setError(null);
+    setDeploying(true);
+
+    try {
+      const res = await fetch('/api/deploy', { method: 'POST' });
+
+      if (!res.ok) {
+        const text = await res.text();
+        setError(text || 'deploy failed');
+        setDeploying(false);
+      }
+    } catch {
+      setError('network error');
+      setDeploying(false);
+    }
+  }
 
   if (!status?.hasPending || !status.pending) {
     return null;
@@ -82,14 +107,17 @@ export function ReleaseBanner() {
       <span>
         {dict.release.pending} <code className="font-mono text-xs opacity-80">{shortSha}</code>
       </span>
-      <a
-        href={status.deployUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+      <button
+        type="button"
+        onClick={onDeploy}
+        disabled={deploying}
+        className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {dict.release.deploy}
-      </a>
+        {deploying ? dict.release.deploying : dict.release.deploy}
+      </button>
+      {error !== null ? (
+        <span className="text-xs text-red-100" title={error}>⚠</span>
+      ) : null}
       <button
         type="button"
         onClick={() => setDismissed(status.pending!.sha)}

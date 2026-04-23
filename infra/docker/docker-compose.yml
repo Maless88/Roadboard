@@ -108,6 +108,10 @@ services:
       AUTH_ACCESS_PORT: "3002"
       RELEASE_WEBHOOK_SECRET: ${RELEASE_WEBHOOK_SECRET:-}
       DEPLOY_WORKFLOW_URL: ${DEPLOY_WORKFLOW_URL:-https://github.com/Maless88/RB/actions/workflows/deploy.yml}
+      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN:-}
+      GITHUB_REPO: ${GITHUB_REPO:-Maless88/RB}
+      GITHUB_DEPLOY_WORKFLOW: ${GITHUB_DEPLOY_WORKFLOW:-deploy.yml}
+      GITHUB_DEPLOY_REF: ${GITHUB_DEPLOY_REF:-main}
     ports:
       - "3001:3001"
     depends_on:

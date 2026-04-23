@@ -241,6 +241,7 @@ export const enDict: Dictionary = {
   release: {
     pending: 'New release pending deploy:',
     deploy: 'Deploy now',
+    deploying: 'Deploying…',
     dismiss: 'Dismiss',
   },
   teamPage: {

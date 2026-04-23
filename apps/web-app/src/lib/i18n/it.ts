@@ -239,6 +239,7 @@ export const itDict = {
   release: {
     pending: 'Nuova release in attesa di deploy:',
     deploy: 'Deploya ora',
+    deploying: 'Deploy in corso…',
     dismiss: 'Ignora',
   },
   teamPage: {
