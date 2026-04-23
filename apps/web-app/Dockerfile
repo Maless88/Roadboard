@@ -23,8 +23,10 @@ COPY packages/api-contracts/package.json  packages/api-contracts/
 COPY packages/auth/package.json           packages/auth/
 COPY packages/config/package.json         packages/config/
 COPY packages/database/package.json       packages/database/
+COPY packages/demo-seed/package.json      packages/demo-seed/
 COPY packages/domain/package.json         packages/domain/
 COPY packages/grants/package.json         packages/grants/
+COPY packages/graph-db/package.json       packages/graph-db/
 COPY packages/local-storage/package.json  packages/local-storage/
 COPY packages/mcp-contracts/package.json  packages/mcp-contracts/
 COPY packages/observability/package.json  packages/observability/
