@@ -1,6 +1,8 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { TaskStatus } from '@roadboard/domain';
+import type { AuthUser } from '../../common/auth-user';
+import { AuditService } from '../audit/audit.service';
 import { CreateTaskDto } from './create-task.dto';
 import { UpdateTaskDto } from './update-task.dto';
 
@@ -12,13 +14,22 @@ interface FindAllFilters {
 }
 
 
+const AUTHOR_INCLUDE = {
+  createdBy: { select: { id: true, username: true, displayName: true } },
+  updatedBy: { select: { id: true, username: true, displayName: true } },
+} as const;
+
+
 @Injectable()
 export class TasksService {
 
-  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject('PRISMA') private readonly prisma: PrismaClient,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
 
-  async create(dto: CreateTaskDto) {
+  async create(dto: CreateTaskDto, user: AuthUser) {
 
     const task = await this.prisma.task.create({
       data: {
@@ -30,7 +41,15 @@ export class TasksService {
         priority: dto.priority,
         assigneeId: dto.assigneeId,
         dueDate: dto.dueDate,
+        createdByUserId: user.userId,
+        updatedByUserId: user.userId,
       },
+      include: AUTHOR_INCLUDE,
+    });
+
+    await this.audit.recordForUser(user, 'task.created', 'task', task.id, task.projectId, {
+      title: task.title,
+      phaseId: task.phaseId,
     });
 
     await this.recomputePhaseStatus(task.phaseId);
@@ -52,13 +71,16 @@ export class TasksService {
       where.status = filters.status;
     }
 
-    return this.prisma.task.findMany({ where });
+    return this.prisma.task.findMany({ where, include: AUTHOR_INCLUDE });
   }
 
 
   async findOne(id: string) {
 
-    const task = await this.prisma.task.findUnique({ where: { id } });
+    const task = await this.prisma.task.findUnique({
+      where: { id },
+      include: AUTHOR_INCLUDE,
+    });
 
     if (!task) {
       throw new NotFoundException(`Task ${id} not found`);
@@ -68,11 +90,12 @@ export class TasksService {
   }
 
 
-  async update(id: string, dto: UpdateTaskDto) {
+  async update(id: string, dto: UpdateTaskDto, user: AuthUser) {
 
     const existing = await this.findOne(id);
 
     const isClosing = dto.status === TaskStatus.DONE && existing.status !== TaskStatus.DONE;
+    const statusChanged = dto.status !== undefined && dto.status !== existing.status;
 
     const task = await this.prisma.task.update({
       where: { id },
@@ -86,8 +109,19 @@ export class TasksService {
         dueDate: dto.dueDate,
         completionNotes: dto.completionNotes,
         completedAt: isClosing ? new Date() : undefined,
+        updatedByUserId: user.userId,
       },
+      include: AUTHOR_INCLUDE,
     });
+
+    if (statusChanged) {
+      await this.audit.recordForUser(user, 'task.status_changed', 'task', task.id, task.projectId, {
+        from: existing.status,
+        to: task.status,
+      });
+    } else {
+      await this.audit.recordForUser(user, 'task.updated', 'task', task.id, task.projectId);
+    }
 
     const phasesToRecompute = new Set<string>([task.phaseId]);
 
@@ -105,11 +139,15 @@ export class TasksService {
   }
 
 
-  async delete(id: string) {
+  async delete(id: string, user: AuthUser) {
 
     const task = await this.findOne(id);
 
     await this.prisma.task.delete({ where: { id } });
+
+    await this.audit.recordForUser(user, 'task.deleted', 'task', task.id, task.projectId, {
+      title: task.title,
+    });
 
     await this.recomputePhaseStatus(task.phaseId);
     await this.recomputeProjectStatus(task.projectId);

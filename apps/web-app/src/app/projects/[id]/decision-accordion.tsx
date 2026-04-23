@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useDict } from '@/lib/i18n/locale-context';
+import { AttributionLine } from './attribution-line';
 import type { Decision, Phase } from '@/lib/api';
 
 
@@ -42,6 +44,7 @@ interface DecisionAccordionProps {
 export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) {
 
   const [open, setOpen] = useState(false);
+  const dict = useDict();
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -126,6 +129,15 @@ export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) 
               <p className="text-xs text-gray-600">Risolto: {new Date(decision.resolvedAt).toLocaleDateString('it-IT')}</p>
             </div>
           )}
+
+          <div className="px-4 pb-3">
+            <AttributionLine
+              createdBy={decision.createdBy}
+              updatedBy={decision.updatedBy}
+              updatedAt={decision.updatedAt}
+              dict={dict}
+            />
+          </div>
         </div>
       )}
     </div>

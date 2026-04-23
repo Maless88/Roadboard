@@ -21,6 +21,7 @@ export function TabNav({ activeTab }: TabNavProps) {
     { key: 'decisions', label: dict.tabs.decisions },
     { key: 'memory', label: dict.tabs.memory },
     { key: 'codeflow', label: dict.tabs.codeflow },
+    { key: 'activity', label: dict.tabs.activity },
   ] as const;
 
   return (

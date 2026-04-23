@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useDict } from '@/lib/i18n/locale-context';
 import { TaskStatusSelect } from './task-status';
+import { AttributionLine } from './attribution-line';
 import type { Task } from '@/lib/api';
 
 
@@ -30,8 +32,9 @@ interface TaskRowProps {
 export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
 
   const [open, setOpen] = useState(false);
+  const dict = useDict();
 
-  const hasDetails = task.description || task.dueDate || task.completionNotes || task.completedAt;
+  const hasDetails = task.description || task.dueDate || task.completionNotes || task.completedAt || task.createdBy || task.updatedBy;
 
   return (
     <>
@@ -103,6 +106,13 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
               <p className="text-xs text-gray-400 mt-0.5 italic">{task.completionNotes}</p>
             </div>
           )}
+          <AttributionLine
+            createdBy={task.createdBy}
+            updatedBy={task.updatedBy}
+            updatedAt={task.updatedAt}
+            dict={dict}
+            className="pt-1"
+          />
         </div>
       )}
     </>

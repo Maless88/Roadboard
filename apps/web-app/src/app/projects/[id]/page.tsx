@@ -27,6 +27,8 @@ import { DeleteProjectButton } from './delete-project-button';
 import { PhaseAccordion } from './phase-accordion';
 import { DecisionAccordion } from './decision-accordion';
 import { TaskRow } from './task-row';
+import { ActivityTimeline } from './activity-timeline';
+import { AttributionLine } from './attribution-line';
 import { CodeflowSubNav } from './codeflow/sub-nav';
 import { ArchitectureMapView } from './codeflow/architecture-map-view';
 import { ChangeImpactView, DecisionGraphView, AgentContextView } from './codeflow/placeholder-views';
@@ -215,6 +217,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} dict={dict} />}
         {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} dict={dict} />}
         {tab === 'codeflow' && <CodeflowTab token={token} projectId={id} activeView={cf} dict={dict} />}
+        {tab === 'activity' && (
+          <div className="space-y-3">
+            <h2 className="text-sm font-semibold text-white">{dict.activity.title}</h2>
+            <ActivityTimeline token={token} projectId={id} dict={dict} />
+          </div>
+        )}
       </main>
     </AppShell>
   );
@@ -380,6 +388,13 @@ async function MemoryTab({ token, projectId, q, dict }: { token: string; project
             {entry.body && (
               <p className="text-xs text-gray-400 whitespace-pre-wrap">{entry.body}</p>
             )}
+            <AttributionLine
+              createdBy={entry.createdBy}
+              updatedBy={entry.updatedBy}
+              updatedAt={entry.updatedAt}
+              dict={dict}
+              className="mt-2"
+            />
           </div>
         ))}
       </div>

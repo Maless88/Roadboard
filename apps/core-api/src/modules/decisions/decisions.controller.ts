@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import type { AuthUser } from '../../common/auth-user';
+import { CurrentUser } from '../../common/user.decorator';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { FindDecisionsQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
@@ -29,9 +31,9 @@ export class DecisionsController {
 
   @RequireGrant(GrantType.DECISION_WRITE)
   @Post()
-  create(@Body() dto: CreateDecisionDto) {
+  create(@Body() dto: CreateDecisionDto, @CurrentUser() user: AuthUser) {
 
-    return this.decisionsService.create(dto);
+    return this.decisionsService.create(dto, user);
   }
 
 
@@ -53,16 +55,16 @@ export class DecisionsController {
 
   @RequireGrant(GrantType.DECISION_WRITE)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateDecisionDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateDecisionDto, @CurrentUser() user: AuthUser) {
 
-    return this.decisionsService.update(id, dto);
+    return this.decisionsService.update(id, dto, user);
   }
 
 
   @RequireGrant(GrantType.DECISION_WRITE)
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
 
-    return this.decisionsService.delete(id);
+    return this.decisionsService.delete(id, user);
   }
 }

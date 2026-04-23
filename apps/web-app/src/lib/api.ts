@@ -53,6 +53,13 @@ export interface Project {
 }
 
 
+export interface AuthorRef {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+
 export interface Phase {
   id: string;
   projectId: string;
@@ -63,6 +70,9 @@ export interface Phase {
   orderIndex: number;
   startDate: string | null;
   endDate: string | null;
+  createdBy: AuthorRef | null;
+  updatedBy: AuthorRef | null;
+  updatedAt: string;
 }
 
 
@@ -78,6 +88,8 @@ export interface Task {
   dueDate: string | null;
   completionNotes: string | null;
   completedAt: string | null;
+  createdBy: AuthorRef | null;
+  updatedBy: AuthorRef | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,7 +101,34 @@ export interface MemoryEntry {
   type: string;
   title: string;
   body: string | null;
+  createdBy: AuthorRef | null;
+  updatedBy: AuthorRef | null;
   createdAt: string;
+  updatedAt: string;
+}
+
+
+export interface ActivityEvent {
+  id: string;
+  projectId: string | null;
+  actorType: string;
+  actorId: string;
+  actorUserId: string | null;
+  source: string;
+  eventType: string;
+  targetType: string;
+  targetId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actor: AuthorRef | null;
+}
+
+
+export interface ActivityPage {
+  events: ActivityEvent[];
+  total: number;
+  take: number;
+  skip: number;
 }
 
 
@@ -437,8 +476,34 @@ export interface Decision {
   impactLevel: string | null;
   resolvedAt: string | null;
   createdByUserId: string | null;
+  createdBy: AuthorRef | null;
+  updatedBy: AuthorRef | null;
   createdAt: string;
   updatedAt: string;
+}
+
+
+export async function listActivity(
+  token: string,
+  projectId: string,
+  opts: { take?: number; skip?: number; eventType?: string; actorUserId?: string; targetType?: string } = {},
+): Promise<ActivityPage> {
+
+  const params = new URLSearchParams();
+
+  if (opts.take !== undefined) params.set('take', String(opts.take));
+  if (opts.skip !== undefined) params.set('skip', String(opts.skip));
+  if (opts.eventType) params.set('eventType', opts.eventType);
+  if (opts.actorUserId) params.set('actorUserId', opts.actorUserId);
+  if (opts.targetType) params.set('targetType', opts.targetType);
+
+  const qs = params.toString();
+  const url = `${CORE_API}/projects/${projectId}/activity${qs ? `?${qs}` : ''}`;
+  const res = await fetch(url, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch activity');
+
+  return res.json() as Promise<ActivityPage>;
 }
 
 

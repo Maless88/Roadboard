@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import type { AuthUser } from '../../common/auth-user';
+import { CurrentUser } from '../../common/user.decorator';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { FindPhasesQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
@@ -29,9 +31,9 @@ export class PhasesController {
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Post()
-  create(@Body() dto: CreatePhaseDto) {
+  create(@Body() dto: CreatePhaseDto, @CurrentUser() user: AuthUser) {
 
-    return this.phasesService.create(dto);
+    return this.phasesService.create(dto, user);
   }
 
 
@@ -53,16 +55,16 @@ export class PhasesController {
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePhaseDto) {
+  update(@Param('id') id: string, @Body() dto: UpdatePhaseDto, @CurrentUser() user: AuthUser) {
 
-    return this.phasesService.update(id, dto);
+    return this.phasesService.update(id, dto, user);
   }
 
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
 
-    return this.phasesService.delete(id);
+    return this.phasesService.delete(id, user);
   }
 }

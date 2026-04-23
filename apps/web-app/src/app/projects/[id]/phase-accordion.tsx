@@ -1,7 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useDict } from '@/lib/i18n/locale-context';
 import { TaskRow } from './task-row';
+import { AttributionLine } from './attribution-line';
 import type { Phase, Task } from '@/lib/api';
 
 
@@ -28,6 +30,7 @@ interface PhaseAccordionProps {
 export function PhaseAccordion({ phase, tasks, projectId }: PhaseAccordionProps) {
 
   const [open, setOpen] = useState(false);
+  const dict = useDict();
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.07)' }}>
@@ -73,6 +76,17 @@ export function PhaseAccordion({ phase, tasks, projectId }: PhaseAccordionProps)
       {open && tasks.length === 0 && (
         <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.01)' }}>
           <p className="text-xs text-gray-500">Nessun task in questa fase.</p>
+        </div>
+      )}
+
+      {open && (
+        <div className="px-4 py-2" style={{ borderTop: '1px solid rgba(255,255,255,0.05)', background: 'rgba(255,255,255,0.01)' }}>
+          <AttributionLine
+            createdBy={phase.createdBy}
+            updatedBy={phase.updatedBy}
+            updatedAt={phase.updatedAt}
+            dict={dict}
+          />
         </div>
       )}
     </div>

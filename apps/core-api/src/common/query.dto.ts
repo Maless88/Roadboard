@@ -74,6 +74,21 @@ export class FindProjectAuditQueryDto {
   @IsInt()
   @Min(0)
   skip?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  eventType?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  actorUserId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  targetType?: string;
 }
 
 

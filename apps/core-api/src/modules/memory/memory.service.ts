@@ -1,6 +1,8 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { MemoryEntryType } from '@roadboard/domain';
+import type { AuthUser } from '../../common/auth-user';
+import { AuditService } from '../audit/audit.service';
 import { CreateMemoryEntryDto } from './create-memory-entry.dto';
 import { UpdateMemoryEntryDto } from './update-memory-entry.dto';
 
@@ -12,22 +14,41 @@ interface FindAllFilters {
 }
 
 
+const AUTHOR_INCLUDE = {
+  createdBy: { select: { id: true, username: true, displayName: true } },
+  updatedBy: { select: { id: true, username: true, displayName: true } },
+} as const;
+
+
 @Injectable()
 export class MemoryService {
 
-  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject('PRISMA') private readonly prisma: PrismaClient,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
 
 
-  async create(dto: CreateMemoryEntryDto) {
+  async create(dto: CreateMemoryEntryDto, user: AuthUser) {
 
-    return this.prisma.memoryEntry.create({
+    const entry = await this.prisma.memoryEntry.create({
       data: {
         projectId: dto.projectId,
         type: dto.type,
         title: dto.title,
         body: dto.body,
+        createdByUserId: user.userId,
+        updatedByUserId: user.userId,
       },
+      include: AUTHOR_INCLUDE,
     });
+
+    await this.audit.recordForUser(user, 'memory.created', 'memory_entry', entry.id, entry.projectId, {
+      title: entry.title,
+      type: entry.type,
+    });
+
+    return entry;
   }
 
 
@@ -47,13 +68,17 @@ export class MemoryService {
           : {}),
       },
       orderBy: { createdAt: 'desc' },
+      include: AUTHOR_INCLUDE,
     });
   }
 
 
   async findOne(id: string) {
 
-    const entry = await this.prisma.memoryEntry.findUnique({ where: { id } });
+    const entry = await this.prisma.memoryEntry.findUnique({
+      where: { id },
+      include: AUTHOR_INCLUDE,
+    });
 
     if (!entry) {
       throw new NotFoundException(`MemoryEntry ${id} not found`);
@@ -63,26 +88,41 @@ export class MemoryService {
   }
 
 
-  async update(id: string, dto: UpdateMemoryEntryDto) {
+  async update(id: string, dto: UpdateMemoryEntryDto, user: AuthUser) {
 
-    await this.findOne(id);
+    const existing = await this.findOne(id);
 
-    return this.prisma.memoryEntry.update({
+    const entry = await this.prisma.memoryEntry.update({
       where: { id },
       data: {
         projectId: dto.projectId,
         type: dto.type,
         title: dto.title,
         body: dto.body,
+        updatedByUserId: user.userId,
       },
+      include: AUTHOR_INCLUDE,
     });
+
+    await this.audit.recordForUser(user, 'memory.updated', 'memory_entry', entry.id, entry.projectId, {
+      title: entry.title,
+      previousTitle: existing.title,
+    });
+
+    return entry;
   }
 
 
-  async delete(id: string) {
+  async delete(id: string, user: AuthUser) {
 
-    await this.findOne(id);
+    const entry = await this.findOne(id);
 
-    return this.prisma.memoryEntry.delete({ where: { id } });
+    const deleted = await this.prisma.memoryEntry.delete({ where: { id } });
+
+    await this.audit.recordForUser(user, 'memory.deleted', 'memory_entry', entry.id, entry.projectId, {
+      title: entry.title,
+    });
+
+    return deleted;
   }
 }

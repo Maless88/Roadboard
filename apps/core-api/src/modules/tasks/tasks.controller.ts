@@ -12,6 +12,8 @@ import {
 } from '@nestjs/common';
 import { GrantType } from '@roadboard/domain';
 import { AuthGuard } from '../../common/auth.guard';
+import type { AuthUser } from '../../common/auth-user';
+import { CurrentUser } from '../../common/user.decorator';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { FindTasksQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
@@ -29,9 +31,9 @@ export class TasksController {
 
   @RequireGrant(GrantType.TASK_WRITE)
   @Post()
-  create(@Body() dto: CreateTaskDto) {
+  create(@Body() dto: CreateTaskDto, @CurrentUser() user: AuthUser) {
 
-    return this.tasksService.create(dto);
+    return this.tasksService.create(dto, user);
   }
 
 
@@ -57,16 +59,16 @@ export class TasksController {
 
   @RequireGrant(GrantType.TASK_WRITE)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateTaskDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateTaskDto, @CurrentUser() user: AuthUser) {
 
-    return this.tasksService.update(id, dto);
+    return this.tasksService.update(id, dto, user);
   }
 
 
   @RequireGrant(GrantType.TASK_WRITE)
   @Delete(':id')
-  delete(@Param('id') id: string) {
+  delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
 
-    return this.tasksService.delete(id);
+    return this.tasksService.delete(id, user);
   }
 }

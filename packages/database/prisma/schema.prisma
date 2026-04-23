@@ -30,6 +30,16 @@ model User {
   mcpTokens       McpToken[]
   ownedProjects   Project[]        @relation("ProjectOwner")
 
+  createdTasks    Task[]          @relation("TaskCreator")
+  updatedTasks    Task[]          @relation("TaskLastEditor")
+  createdPhases   Phase[]         @relation("PhaseCreator")
+  updatedPhases   Phase[]         @relation("PhaseLastEditor")
+  createdDecisions Decision[]     @relation("DecisionCreator")
+  updatedDecisions Decision[]     @relation("DecisionLastEditor")
+  createdMemories MemoryEntry[]   @relation("MemoryCreator")
+  updatedMemories MemoryEntry[]   @relation("MemoryLastEditor")
+  activityEvents  ActivityEvent[] @relation("ActivityActor")
+
   @@map("users")
 }
 
@@ -103,42 +113,50 @@ model Project {
 }
 
 model Phase {
-  id          String    @id @default(cuid())
-  projectId   String    @map("project_id")
-  decisionId  String?   @map("decision_id")
-  title       String
-  description String?
-  orderIndex  Int       @default(0) @map("order_index")
-  status      String    @default("planned")
-  startDate   DateTime? @map("start_date")
-  endDate     DateTime? @map("end_date")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  projectId       String    @map("project_id")
+  decisionId      String?   @map("decision_id")
+  title           String
+  description     String?
+  orderIndex      Int       @default(0) @map("order_index")
+  status          String    @default("planned")
+  startDate       DateTime? @map("start_date")
+  endDate         DateTime? @map("end_date")
+  createdByUserId String?   @map("created_by_user_id")
+  updatedByUserId String?   @map("updated_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  decision Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
-  tasks    Task[]
+  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decision   Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  createdBy  User?     @relation("PhaseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy  User?     @relation("PhaseLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  tasks      Task[]
 
   @@map("phases")
 }
 
 model Task {
-  id          String    @id @default(cuid())
-  projectId   String    @map("project_id")
-  phaseId     String    @map("phase_id")
-  title       String
-  description String?
-  status      String    @default("todo")
-  priority    String    @default("medium")
+  id               String    @id @default(cuid())
+  projectId        String    @map("project_id")
+  phaseId          String    @map("phase_id")
+  title            String
+  description      String?
+  status           String    @default("todo")
+  priority         String    @default("medium")
   assigneeId       String?   @map("assignee_id")
   dueDate          DateTime? @map("due_date")
   completionNotes  String?   @map("completion_notes")
   completedAt      DateTime? @map("completed_at")
+  createdByUserId  String?   @map("created_by_user_id")
+  updatedByUserId  String?   @map("updated_by_user_id")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phase   Phase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  phase     Phase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
+  createdBy User?   @relation("TaskCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?   @relation("TaskLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@map("tasks")
 }
@@ -156,11 +174,14 @@ model Decision {
   impactLevel     String    @default("medium") @map("impact_level")
   resolvedAt      DateTime? @map("resolved_at")
   createdByUserId String?   @map("created_by_user_id")
+  updatedByUserId String?   @map("updated_by_user_id")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  phases  Phase[]
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("DecisionCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?   @relation("DecisionLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  phases    Phase[]
 
   @@map("decisions")
 }
@@ -168,34 +189,43 @@ model Decision {
 // ── Activity Events ──────────────────────────────────
 
 model ActivityEvent {
-  id         String   @id @default(cuid())
-  projectId  String?  @map("project_id")
-  actorType  String   @map("actor_type")
-  actorId    String   @map("actor_id")
-  eventType  String   @map("event_type")
-  targetType String   @map("target_type")
-  targetId   String   @map("target_id")
-  metadata   Json?
-  createdAt  DateTime @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  projectId     String?  @map("project_id")
+  actorType     String   @map("actor_type")
+  actorId       String   @map("actor_id")
+  actorUserId   String?  @map("actor_user_id")
+  source        String   @default("web")
+  eventType     String   @map("event_type")
+  targetType    String   @map("target_type")
+  targetId      String   @map("target_id")
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  actor User? @relation("ActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([eventType])
   @@index([createdAt])
+  @@index([actorUserId])
   @@map("activity_events")
 }
 
 // ── Memory ───────────────────────────────────────────
 
 model MemoryEntry {
-  id        String   @id @default(cuid())
-  projectId String   @map("project_id")
-  type      String
-  title     String
-  body      String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  type            String
+  title           String
+  body            String?
+  createdByUserId String?  @map("created_by_user_id")
+  updatedByUserId String?  @map("updated_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("MemoryCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?   @relation("MemoryLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
 
   @@map("memory_entries")
 }

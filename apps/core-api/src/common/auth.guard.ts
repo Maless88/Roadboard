@@ -56,7 +56,8 @@ export class AuthGuard implements CanActivate {
       });
 
       if (sessionRes.ok) {
-        request.user = (await sessionRes.json()) as SessionValidateResponse;
+        const session = (await sessionRes.json()) as SessionValidateResponse;
+        request.user = { ...session, source: 'web' };
         return true;
       }
 
@@ -68,7 +69,14 @@ export class AuthGuard implements CanActivate {
 
       if (mcpRes.ok) {
         const mcp = (await mcpRes.json()) as McpTokenValidateResponse;
-        request.user = { userId: mcp.userId, username: 'mcp-agent', sessionId: '', displayName: 'MCP Agent', expiresAt: '' };
+        request.user = {
+          userId: mcp.userId,
+          username: 'mcp-agent',
+          sessionId: '',
+          displayName: 'MCP Agent',
+          expiresAt: '',
+          source: 'mcp',
+        };
         return true;
       }
 
