@@ -22,13 +22,14 @@ import {
   CREATE_ARCHITECTURE_EDGE_TOOL,
   CREATE_ARCHITECTURE_LINK_TOOL,
   CREATE_ARCHITECTURE_ANNOTATION_TOOL,
+  INGEST_ARCHITECTURE_TOOL,
 } from './tools';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 22 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(22);
+  it('exports exactly 23 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(23);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -179,5 +180,10 @@ describe('codeflow tools', () => {
   it('create_architecture_annotation requires projectId, nodeId, content', () => {
     expect(CREATE_ARCHITECTURE_ANNOTATION_TOOL.name).toBe('create_architecture_annotation');
     expect(CREATE_ARCHITECTURE_ANNOTATION_TOOL.inputSchema.required).toEqual(['projectId', 'nodeId', 'content']);
+  });
+
+  it('ingest_architecture requires projectId, repository, nodes', () => {
+    expect(INGEST_ARCHITECTURE_TOOL.name).toBe('ingest_architecture');
+    expect(INGEST_ARCHITECTURE_TOOL.inputSchema.required).toEqual(['projectId', 'repository', 'nodes']);
   });
 });
