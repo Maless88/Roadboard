@@ -423,6 +423,22 @@ export class CoreApiClient {
   }
 
 
+  async resetArchitecture(projectId: string): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/projects/${projectId}/codeflow/graph/reset`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${this.token}` },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`core-api resetArchitecture failed: ${res.status} ${body}`);
+    }
+
+    return res.json();
+  }
+
+
   async createArchitectureRepository(projectId: string, data: {
     name: string;
     repoUrl?: string;

@@ -515,11 +515,12 @@ const TOOLS = [
   },
   {
     name: "ingest_architecture",
-    description: "One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally. Much faster than dozens of create_architecture_* calls.",
+    description: "One-shot orchestrator for agent-driven onboarding (B.2 flow). The agent scans the repository locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Server fans out atomic writes, resolves node keys to IDs internally. Much faster than dozens of create_architecture_* calls. Use `replaceExisting: true` to re-scan an already-onboarded project idempotently.",
     inputSchema: {
       type: "object" as const,
       properties: {
         projectId: { type: "string", description: "Target project ID" },
+        replaceExisting: { type: "boolean", description: "Wipe previous CodeFlow data for this project before ingesting. Makes the call idempotent." },
         repository: {
           type: "object",
           description: "Single CodeRepository to create",
@@ -1300,12 +1301,20 @@ async function handleToolCall(
 
     case "ingest_architecture": {
       const projectId = args.projectId as string;
+      const replaceExisting = args.replaceExisting === true;
       const repositoryPayload = args.repository as {
         name: string;
         repoUrl?: string;
         provider?: string;
         defaultBranch?: string;
       };
+
+      let reset: { deletedNodes: number; deletedEdges: number } | null = null;
+
+      if (replaceExisting) {
+        reset = await client.resetArchitecture(projectId) as { deletedNodes: number; deletedEdges: number };
+      }
+
       const nodesPayload = (args.nodes ?? []) as Array<{
         key: string;
         type: string;
@@ -1380,6 +1389,7 @@ async function handleToolCall(
         edgeCount,
         annotationCount,
         skippedEdges,
+        reset,
         nodesByKey: keyToId,
       });
     }

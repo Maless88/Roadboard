@@ -20,6 +20,22 @@ export class GraphService {
 
   // ── Graph ────────────────────────────────────────────
 
+  async resetProject(projectId: string): Promise<{ deletedNodes: number; deletedEdges: number }> {
+
+    // Delete in FK order: edges → links → annotations → nodes → snapshots → repositories
+    const edgeRes = await this.prisma.architectureEdge.deleteMany({ where: { projectId } });
+    await this.prisma.architectureLink.deleteMany({ where: { projectId } });
+    await this.prisma.architectureAnnotation.deleteMany({ where: { projectId } });
+    const nodeRes = await this.prisma.architectureNode.deleteMany({ where: { projectId } });
+    await this.prisma.architectureSnapshot.deleteMany({ where: { projectId } });
+    await this.prisma.codeRepository.deleteMany({ where: { projectId } });
+
+    await this.sync.resetProject?.(projectId);
+
+    return { deletedNodes: nodeRes.count, deletedEdges: edgeRes.count };
+  }
+
+
   async getGraph(projectId: string): Promise<unknown> {
 
     const [nodes, edges, latestSnapshot] = await Promise.all([
