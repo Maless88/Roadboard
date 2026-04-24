@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch for Roadboard deploy triggers
+
+[Path]
+# When core-api writes this file, systemd fires roadboard-deploy.service.
+PathExists=/opt/roadboard/.deploy-requested
+Unit=roadboard-deploy.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=Roadboard self-hosted deploy (triggered by .deploy-requested)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Must run as a user that can talk to the docker socket AND own the repo
+# for git pull. On this host that's root (member of docker group).
+User=root
+WorkingDirectory=/opt/roadboard
+Environment=ROADBOARD_REPO_PATH=/opt/roadboard
+Environment=ROADBOARD_COMPOSE_FILE=infra/docker/docker-compose.yml
+Environment=ROADBOARD_DEPLOY_BRANCH=main
+ExecStart=/opt/roadboard/scripts/deploy.sh
+# Always clear the trigger file, even on failure, so a retry click works.
+ExecStopPost=/usr/bin/rm -f /opt/roadboard/.deploy-requested
+TimeoutStartSec=900
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

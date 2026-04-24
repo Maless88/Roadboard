@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { spawn } from "node:child_process";
-import { EventEmitter } from "node:events";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { optionalEnv } from "@roadboard/config";
 
 
@@ -29,8 +29,6 @@ export class ReleaseService {
 
   private readonly logger = new Logger(ReleaseService.name);
   private latestMain: LatestMainCache | null = null;
-  private deploying = false;
-  private lastDeployError: string | null = null;
 
   invalidateLatestMainCache(): void {
     this.latestMain = null;
@@ -44,84 +42,59 @@ export class ReleaseService {
     const latestMainAt = this.latestMain?.at ?? null;
     const hasPending = latestMainSha !== null && latestMainSha !== currentSha;
 
+    const { deploying, lastDeployError } = await this.readDeployState();
+
     return {
       currentSha,
       latestMainSha,
       latestMainAt,
       hasPending,
-      deploying: this.deploying,
-      lastDeployError: this.lastDeployError,
+      deploying,
+      lastDeployError,
     };
   }
 
-  isDeploying(): boolean {
-    return this.deploying;
-  }
+  /**
+   * Signal the host-side systemd.path unit to start a deploy by writing a
+   * trigger file. The actual git pull + docker compose up runs on the host
+   * under roadboard-deploy.service, so it survives the core-api container
+   * replacement (the previous in-container approach was killed by docker
+   * with exit 137 mid-flight).
+   */
+  async startDeploy(): Promise<{ accepted: boolean; reason?: string }> {
 
-  startDeploy(): { accepted: boolean; reason?: string } {
+    const state = await this.readDeployState();
 
-    if (this.deploying) {
+    if (state.deploying) {
       return { accepted: false, reason: "deploy already in progress" };
     }
 
     const repoPath = optionalEnv("ROADBOARD_REPO_PATH", "/opt/roadboard");
-    const composeFile = optionalEnv(
-      "ROADBOARD_COMPOSE_FILE",
-      "infra/docker/docker-compose.yml",
-    );
-    const branch = optionalEnv("ROADBOARD_DEPLOY_BRANCH", "main");
+    const triggerPath = join(repoPath, ".deploy-requested");
 
-    this.deploying = true;
-    this.lastDeployError = null;
+    try {
+      await writeFile(triggerPath, `${new Date().toISOString()}\n`, { flag: "w" });
+      this.logger.log(`deploy trigger written at ${triggerPath}`);
+      return { accepted: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.error(`failed to write deploy trigger: ${message}`);
+      return { accepted: false, reason: `cannot write trigger file: ${message}` };
+    }
+  }
 
-    // safe.directory=* disables git's ownership check: the repo on host is
-    // owned by the non-root user while this container runs as root.
-    const gitSafe = `-c safe.directory=${repoPath}`;
-    // Export GIT_SHA + BUILD_TIME so the freshly built images embed the
-    // correct BUILD_SHA env (otherwise release-status keeps reporting
-    // currentSha="unknown" after every deploy).
-    const cmd = `cd ${repoPath} && git ${gitSafe} fetch --all --prune && git ${gitSafe} checkout ${branch} && git ${gitSafe} pull --ff-only origin ${branch} && export GIT_SHA=$(git ${gitSafe} rev-parse HEAD) && export BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && docker compose -f ${composeFile} up -d --build`;
+  private async readDeployState(): Promise<{ deploying: boolean; lastDeployError: string | null }> {
 
-    this.logger.log(`starting deploy: ${cmd}`);
+    const repoPath = optionalEnv("ROADBOARD_REPO_PATH", "/opt/roadboard");
+    const triggerPath = join(repoPath, ".deploy-requested");
+    const errorPath = join(repoPath, ".deploy-error");
 
-    const child = spawn("bash", ["-lc", cmd], {
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    const [triggered, lastDeployError] = await Promise.all([
+      readFile(triggerPath, "utf8").then(() => true).catch(() => false),
+      readFile(errorPath, "utf8").then((c) => c.trim() || null).catch(() => null),
+    ]);
 
-    const emitter = child as unknown as EventEmitter;
-    let stderr = "";
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      this.logger.log(`[deploy stdout] ${chunk.toString().trim()}`);
-    });
-
-    child.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr += text;
-      this.logger.warn(`[deploy stderr] ${text.trim()}`);
-    });
-
-    emitter.on("exit", (code: number | null) => {
-
-      if (code === 0) {
-        this.logger.log("deploy completed; container will be replaced shortly");
-      } else {
-        this.deploying = false;
-        this.lastDeployError = stderr.trim().slice(-500) || `exit code ${code}`;
-        this.logger.error(`deploy failed with code ${code}`);
-      }
-    });
-
-    emitter.on("error", (err: Error) => {
-      this.deploying = false;
-      this.lastDeployError = err.message;
-      this.logger.error(`deploy spawn error: ${err.message}`);
-    });
-
-    child.unref();
-
-    return { accepted: true };
+    return { deploying: triggered, lastDeployError };
   }
 
   private async fetchLatestMainSha(): Promise<string | null> {

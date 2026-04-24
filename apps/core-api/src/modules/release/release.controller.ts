@@ -39,9 +39,9 @@ export class ReleaseController {
   }
 
   @Post("deploy")
-  triggerDeploy(): TriggerDeployResponse {
+  async triggerDeploy(): Promise<TriggerDeployResponse> {
 
-    const result = this.release.startDeploy();
+    const result = await this.release.startDeploy();
 
     if (!result.accepted) {
       throw new HttpException(
