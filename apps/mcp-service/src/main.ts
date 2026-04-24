@@ -892,6 +892,10 @@ async function handleToolCall(
         },
         recommended_workflow: [
           {
+            step: 0,
+            action: "FIRST-TIME ONBOARDING ONLY — skip if the project already has phases/tasks. When create_project has just been called for a brand-new project that maps a real codebase, you MUST bootstrap it with exactly three initial tasks under a 'Discovery & Baseline' phase (create_phase with status=in_progress). The three tasks, each created via create_task with priority=high: (a) 'Discovery del progetto' — explore the repo, identify stack/architecture/domain; (b) 'Baseline del prodotto' — write a create_memory_entry of type=architecture capturing current state, components, entrypoints, external deps; (c) 'Caricare Atlas' — run ingest_architecture with the manifest extracted during discovery (repository + nodes + edges). Never skip these three tasks — they are the contract of a correct onboarding. Only after they exist, proceed with the rest of the workflow.",
+          },
+          {
             step: 1,
             action: "Call get_project_changelog(projectId) or prepare_project_summary(projectId) to load full project context including active roadmap phases.",
           },
@@ -926,6 +930,8 @@ async function handleToolCall(
         ],
         operating_rules: [
           "Always call initial_instructions once at session start.",
+          "On first-time project onboarding (right after create_project, when the project has no phases yet), you MUST create the 'Discovery & Baseline' phase and its three mandatory tasks (Discovery del progetto, Baseline del prodotto, Caricare Atlas) before doing anything else. Proposing just an empty phase is insufficient — the three tasks are the onboarding contract.",
+          "The 'Caricare Atlas' task is not optional: complete it by calling ingest_architecture with a manifest (repository + nodes + edges) derived from the local repo scan. Atlas MUST NOT remain empty after onboarding.",
           "Always open or identify a task before starting work. Every task MUST have a phaseId.",
           "When planning any activity: call list_phases first, assign the task to an existing phase if one fits, otherwise create a new phase first. Never skip phase assignment.",
           "Right after create_task, if the task modifies code, call link_task_to_node for EVERY ArchitectureNode the task touches. This is not optional — it is how Roadboard builds the graph that powers future context retrieval. If the architecture graph is empty, first run ingest_architecture or create_architecture_node.",
