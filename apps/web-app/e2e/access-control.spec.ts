@@ -3,8 +3,8 @@
  *
  * Tests the ownership and member management flows through the browser:
  *   1. Owner creates a project and lands on the project board
- *   2. Owner opens Settings → Membri tab → is shown as Proprietario
- *   3. Owner adds dev3 as developer via Membri tab
+ *   2. Owner opens the Contributors tab of the project → is shown as Proprietario
+ *   3. Owner adds dev3 as developer via the Contributors tab
  *   4. dev3 logs in and can navigate to the project and create a task
  *   5. dev3 cannot delete the project (the delete button/action is owner-only)
  *   6. Owner can delete the project from the project page
@@ -133,50 +133,33 @@ test.describe.serial('Access Control GUI', () => {
   });
 
 
-  // ── 2. Owner is shown as Proprietario in Membri tab ───────────────────────
+  // ── 2. Owner is shown as Proprietario in the Contributors tab ─────────────
 
-  test('2. Owner sees themselves as Proprietario in settings', async ({ page }) => {
+  test('2. Owner sees themselves as Proprietario in contributors tab', async ({ page }) => {
 
     await login(page, 'admin', '***REDACTED***');
-    await page.goto('/settings');
+    await page.goto(projectUrl + '?tab=contributors');
     await page.waitForLoadState('networkidle');
 
-    // Click the Membri tab
-    await page.getByRole('button', { name: 'Membri' }).click();
-
-    // Select the test project in the dropdown
-    const projectSelect = page.locator('select').first();
-    await projectSelect.selectOption({ label: PROJECT_NAME });
-    await page.waitForTimeout(300);
-
-    // Owner section
-    await expect(page.getByText('Proprietario').first()).toBeVisible();
+    // Owner section visible with Proprietario label
+    await expect(page.getByText('Proprietario').first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByText('Admin').first()).toBeVisible();
   });
 
 
   // ── 3. Owner adds dev3 as developer ───────────────────────────────────────
 
-  test('3. Owner adds dev3 as developer via Membri tab', async ({ page }) => {
+  test('3. Owner adds dev3 as developer via Contributors tab', async ({ page }) => {
 
     await login(page, 'admin', '***REDACTED***');
-    await page.goto('/settings');
+    await page.goto(projectUrl + '?tab=contributors');
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: 'Membri' }).click();
-
-    // Wait for the project select to be rendered (MembriTab has conditional rendering)
-    await page.waitForSelector('select', { state: 'visible', timeout: 10000 });
-
-    const projectSelect = page.locator('select').first();
-    await projectSelect.selectOption({ label: PROJECT_NAME });
-    await page.waitForTimeout(500);
-
     // Sviluppatori section
-    await expect(page.getByText('Sviluppatori')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Sviluppatori')).toBeVisible({ timeout: 10000 });
 
-    // Add dev3 via the dropdown — option label is "Developer 3 (@dev3)"
-    const addSelect = page.locator('select').nth(1);
+    // Add dev3 via the dropdown — option label is "E2E Dev <RUN_ID> (@e2edev<RUN_ID>)"
+    const addSelect = page.locator('select').first();
     await addSelect.waitFor({ state: 'visible', timeout: 10000 });
     await addSelect.selectOption({ label: `${DEV_DISPLAY} (@${DEV_USERNAME})` });
 
@@ -186,14 +169,9 @@ test.describe.serial('Access Control GUI', () => {
     await addBtn.click();
     await page.waitForTimeout(1000);
 
-    // Navigate fresh to settings to pick up server-side revalidation
-    await page.goto('/settings');
+    // Reload to pick up server-side revalidation
+    await page.goto(projectUrl + '?tab=contributors');
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: 'Membri' }).click();
-    await page.waitForSelector('select', { state: 'visible', timeout: 10000 });
-    const ps = page.locator('select').first();
-    await ps.selectOption({ label: PROJECT_NAME });
-    await page.waitForTimeout(300);
 
     // dev3 should now appear in the developer list
     await expect(page.locator('p').filter({ hasText: `@${DEV_USERNAME}` })).toBeVisible({ timeout: 5000 });

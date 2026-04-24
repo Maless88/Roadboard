@@ -1,10 +1,14 @@
 import {
+  Body,
   Controller,
+  ForbiddenException,
   Get,
+  Headers,
   HttpException,
   HttpStatus,
   Post,
 } from "@nestjs/common";
+import { optionalEnv } from "@roadboard/config";
 
 import { ReleaseService } from "./release.service";
 
@@ -45,6 +49,23 @@ export class ReleaseController {
       );
     }
 
+    return { ok: true };
+  }
+
+
+  @Post("internal/release-pending")
+  releasePending(
+    @Headers("x-release-secret") providedSecret: string | undefined,
+    @Body() _body: { sha?: string },
+  ): { ok: true } {
+
+    const expected = optionalEnv("RELEASE_WEBHOOK_SECRET", "");
+
+    if (expected === "" || providedSecret !== expected) {
+      throw new ForbiddenException("invalid release secret");
+    }
+
+    this.release.invalidateLatestMainCache();
     return { ok: true };
   }
 }

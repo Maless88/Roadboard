@@ -30,6 +30,10 @@ export class ReleaseService {
   private deploying = false;
   private lastDeployError: string | null = null;
 
+  invalidateLatestMainCache(): void {
+    this.latestMain = null;
+  }
+
   async getStatus(): Promise<ReleaseStatus> {
 
     const currentSha = optionalEnv("BUILD_SHA", "unknown");
