@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
-import { formatBuildLabel } from '@/lib/build-label';
 
 
 const POLL_INTERVAL_MS = 60_000;
 
 
 interface ReleaseStatus {
-  current: string;
-  pending: { sha: string; at: string } | null;
+  currentSha: string;
+  latestMainSha: string | null;
   hasPending: boolean;
-  deployUrl: string;
+  deploying: boolean;
+  lastDeployError: string | null;
 }
 
 
@@ -21,9 +21,7 @@ async function fetchReleaseStatus(): Promise<ReleaseStatus | null> {
   try {
     const res = await fetch('/api/release-status', { cache: 'no-store' });
 
-    if (!res.ok) {
-      return null;
-    }
+    if (!res.ok) return null;
 
     return (await res.json()) as ReleaseStatus;
   } catch {
@@ -37,7 +35,6 @@ export function ReleaseBanner() {
   const dict = useDict();
   const [status, setStatus] = useState<ReleaseStatus | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,21 +43,13 @@ export function ReleaseBanner() {
 
     async function check() {
 
-      if (document.visibilityState !== 'visible') {
-        return;
-      }
+      if (document.visibilityState !== 'visible') return;
 
       const payload = await fetchReleaseStatus();
 
-      if (cancelled || !payload) {
-        return;
-      }
+      if (cancelled || !payload) return;
 
       setStatus(payload);
-
-      if (!payload.hasPending) {
-        setDeploying(false);
-      }
     }
 
     void check();
@@ -77,7 +66,6 @@ export function ReleaseBanner() {
   async function onDeploy() {
 
     setError(null);
-    setDeploying(true);
 
     try {
       const res = await fetch('/api/deploy', { method: 'POST' });
@@ -85,24 +73,24 @@ export function ReleaseBanner() {
       if (!res.ok) {
         const text = await res.text();
         setError(text || 'deploy failed');
-        setDeploying(false);
+        return;
       }
+
+      const fresh = await fetchReleaseStatus();
+
+      if (fresh) setStatus(fresh);
     } catch {
       setError('network error');
-      setDeploying(false);
     }
   }
 
-  if (!status?.hasPending || !status.pending) {
-    return null;
-  }
+  if (!status?.hasPending || !status.latestMainSha) return null;
 
-  if (dismissed === status.pending.sha) {
-    return null;
-  }
+  if (dismissed === status.latestMainSha) return null;
 
-  const fullSha = status.pending.sha;
-  const versionLabel = formatBuildLabel(status.pending.at);
+  const fullSha = status.latestMainSha;
+  const versionLabel = fullSha.slice(0, 7);
+  const { deploying } = status;
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-600/90 px-4 py-3 text-sm text-white shadow-lg backdrop-blur">
@@ -117,12 +105,15 @@ export function ReleaseBanner() {
       >
         {deploying ? dict.release.deploying : dict.release.deploy}
       </button>
-      {error !== null ? (
+      {error !== null && (
         <span className="text-xs text-red-100" title={error}>⚠</span>
-      ) : null}
+      )}
+      {status.lastDeployError !== null && !deploying && (
+        <span className="text-xs text-red-100" title={status.lastDeployError}>⚠ last error</span>
+      )}
       <button
         type="button"
-        onClick={() => setDismissed(status.pending!.sha)}
+        onClick={() => setDismissed(status.latestMainSha)}
         aria-label={dict.release.dismiss}
         className="text-white/70 hover:text-white"
       >
