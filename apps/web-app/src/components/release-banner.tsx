@@ -105,7 +105,7 @@ export function ReleaseBanner() {
   const versionLabel = formatBuildLabel(status.pending.at);
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-600/90 px-4 py-3 text-sm text-white shadow-lg backdrop-blur">
+    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-600/90 px-4 py-3 text-sm text-white shadow-lg backdrop-blur">
       <span title={fullSha}>
         {dict.release.pending} <code className="font-mono text-xs opacity-80">{versionLabel}</code>
       </span>
