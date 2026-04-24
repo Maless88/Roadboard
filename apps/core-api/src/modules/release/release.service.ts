@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { optionalEnv } from "@roadboard/config";
 
 
@@ -68,11 +69,12 @@ export class ReleaseService {
 
     this.logger.log(`starting deploy: ${cmd}`);
 
-    const child: ChildProcess = spawn("bash", ["-lc", cmd], {
+    const child = spawn("bash", ["-lc", cmd], {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
+    const emitter = child as unknown as EventEmitter;
     let stderr = "";
 
     child.stdout?.on("data", (chunk: Buffer) => {
@@ -85,7 +87,7 @@ export class ReleaseService {
       this.logger.warn(`[deploy stderr] ${text.trim()}`);
     });
 
-    child.on("exit", (code: number | null) => {
+    emitter.on("exit", (code: number | null) => {
 
       if (code === 0) {
         this.logger.log("deploy completed; container will be replaced shortly");
@@ -96,7 +98,7 @@ export class ReleaseService {
       }
     });
 
-    child.on("error", (err: Error) => {
+    emitter.on("error", (err: Error) => {
       this.deploying = false;
       this.lastDeployError = err.message;
       this.logger.error(`deploy spawn error: ${err.message}`);
