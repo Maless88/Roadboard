@@ -12,8 +12,21 @@ jobs:
         env:
           RELEASE_WEBHOOK_SECRET: ${{ secrets.RELEASE_WEBHOOK_SECRET }}
           SHA: ${{ github.sha }}
+        # Push-invalidation is an optimization. If the running core-api is a
+        # prior build that doesn't know the route, log the 404 and exit 0 —
+        # the service polls GitHub every 60s anyway.
         run: |
-          curl -fsS -X POST http://localhost:3001/internal/release-pending \
+          set +e
+          http_code=$(curl -s -o /tmp/notify.out -w "%{http_code}" \
+            -X POST http://localhost:3001/internal/release-pending \
             -H "Content-Type: application/json" \
             -H "X-Release-Secret: ${RELEASE_WEBHOOK_SECRET}" \
-            -d "{\"sha\":\"${SHA}\"}"
+            -d "{\"sha\":\"${SHA}\"}")
+          echo "HTTP ${http_code}"
+          cat /tmp/notify.out || true
+          echo
+          case "${http_code}" in
+            200|201|204) exit 0 ;;
+            404) echo "::warning::release-pending endpoint not available on running core-api — relying on polling"; exit 0 ;;
+            *) echo "::error::unexpected status ${http_code}"; exit 1 ;;
+          esac
