@@ -286,8 +286,9 @@ export const enDict: Dictionary = {
   },
   release: {
     pending: 'Update available',
+    newVersion: 'New version',
     deploy: 'Deploy',
-    deploying: 'Deploying…',
+    deploying: 'Updating…',
     dismiss: 'Dismiss',
   },
   teamPage: {

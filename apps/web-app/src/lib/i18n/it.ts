@@ -284,8 +284,9 @@ export const itDict = {
   },
   release: {
     pending: 'Aggiornamento disponibile',
+    newVersion: 'Nuova versione',
     deploy: 'Deploya',
-    deploying: 'Deploy in corso…',
+    deploying: 'Aggiornamento…',
     dismiss: 'Ignora',
   },
   teamPage: {

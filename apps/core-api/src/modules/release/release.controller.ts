@@ -16,6 +16,7 @@ import { ReleaseService } from "./release.service";
 interface ReleaseStatusResponse {
   currentSha: string;
   latestMainSha: string | null;
+  latestMainAt: string | null;
   hasPending: boolean;
   deploying: boolean;
   lastDeployError: string | null;

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
+import { formatBuildLabel } from '@/lib/build-label';
 
 
 const POLL_INTERVAL_MS = 60_000;
@@ -10,6 +11,7 @@ const POLL_INTERVAL_MS = 60_000;
 interface ReleaseStatus {
   currentSha: string;
   latestMainSha: string | null;
+  latestMainAt: string | null;
   hasPending: boolean;
   deploying: boolean;
   lastDeployError: string | null;
@@ -65,6 +67,8 @@ export function ReleaseBanner() {
 
   async function onDeploy() {
 
+    if (status?.deploying) return;
+
     setError(null);
 
     try {
@@ -89,33 +93,29 @@ export function ReleaseBanner() {
   if (dismissed === status.latestMainSha) return null;
 
   const fullSha = status.latestMainSha;
-  const versionLabel = fullSha.slice(0, 7);
+  const versionLabel = formatBuildLabel(status.latestMainAt, fullSha);
   const { deploying } = status;
+  const errorMsg = error ?? status.lastDeployError;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-amber-500/50 bg-amber-600/90 px-4 py-3 text-sm text-white shadow-lg backdrop-blur">
-      <span title={fullSha}>
-        {dict.release.pending} <code className="font-mono text-xs opacity-80">{versionLabel}</code>
-      </span>
+    <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1">
       <button
         type="button"
         onClick={onDeploy}
         disabled={deploying}
-        className="rounded-md bg-white px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-60"
+        title={deploying ? undefined : errorMsg ?? fullSha}
+        className="flex items-center gap-2 rounded-full border border-amber-500/60 bg-amber-600/95 px-4 py-1.5 text-xs font-semibold text-white shadow-lg backdrop-blur transition hover:bg-amber-500 disabled:cursor-wait disabled:opacity-80"
       >
-        {deploying ? dict.release.deploying : dict.release.deploy}
+        {errorMsg !== null && !deploying && (
+          <span className="text-red-100" aria-hidden>⚠</span>
+        )}
+        {deploying ? dict.release.deploying : `${dict.release.newVersion} ${versionLabel}`}
       </button>
-      {error !== null && (
-        <span className="text-xs text-red-100" title={error}>⚠</span>
-      )}
-      {status.lastDeployError !== null && !deploying && (
-        <span className="text-xs text-red-100" title={status.lastDeployError}>⚠ last error</span>
-      )}
       <button
         type="button"
         onClick={() => setDismissed(status.latestMainSha)}
         aria-label={dict.release.dismiss}
-        className="text-white/70 hover:text-white"
+        className="rounded-full w-6 h-6 flex items-center justify-center text-white/70 hover:text-white hover:bg-amber-600/40"
       >
         ×
       </button>

@@ -6,6 +6,7 @@ import { optionalEnv } from "@roadboard/config";
 
 interface LatestMainCache {
   sha: string;
+  at: string | null;
   fetchedAt: number;
 }
 
@@ -13,6 +14,7 @@ interface LatestMainCache {
 interface ReleaseStatus {
   currentSha: string;
   latestMainSha: string | null;
+  latestMainAt: string | null;
   hasPending: boolean;
   deploying: boolean;
   lastDeployError: string | null;
@@ -37,12 +39,15 @@ export class ReleaseService {
   async getStatus(): Promise<ReleaseStatus> {
 
     const currentSha = optionalEnv("BUILD_SHA", "unknown");
-    const latestMainSha = await this.fetchLatestMainSha();
+    await this.fetchLatestMainSha();
+    const latestMainSha = this.latestMain?.sha ?? null;
+    const latestMainAt = this.latestMain?.at ?? null;
     const hasPending = latestMainSha !== null && latestMainSha !== currentSha;
 
     return {
       currentSha,
       latestMainSha,
+      latestMainAt,
       hasPending,
       deploying: this.deploying,
       lastDeployError: this.lastDeployError,
@@ -146,11 +151,15 @@ export class ReleaseService {
         return this.latestMain?.sha ?? null;
       }
 
-      const data = (await res.json()) as { sha?: string };
+      const data = (await res.json()) as { sha?: string; commit?: { author?: { date?: string } } };
 
       if (!data.sha) return this.latestMain?.sha ?? null;
 
-      this.latestMain = { sha: data.sha, fetchedAt: now };
+      this.latestMain = {
+        sha: data.sha,
+        at: data.commit?.author?.date ?? null,
+        fetchedAt: now,
+      };
       return data.sha;
     } catch (err) {
       this.logger.warn(`GitHub sha fetch error: ${(err as Error).message}`);
