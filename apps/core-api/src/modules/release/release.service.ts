@@ -65,7 +65,10 @@ export class ReleaseService {
     this.deploying = true;
     this.lastDeployError = null;
 
-    const cmd = `cd ${repoPath} && git fetch --all --prune && git checkout ${branch} && git pull --ff-only origin ${branch} && docker compose -f ${composeFile} up -d --build`;
+    // safe.directory=* disables git's ownership check: the repo on host is
+    // owned by the non-root user while this container runs as root.
+    const gitSafe = `-c safe.directory=${repoPath}`;
+    const cmd = `cd ${repoPath} && git ${gitSafe} fetch --all --prune && git ${gitSafe} checkout ${branch} && git ${gitSafe} pull --ff-only origin ${branch} && docker compose -f ${composeFile} up -d --build`;
 
     this.logger.log(`starting deploy: ${cmd}`);
 
