@@ -77,7 +77,10 @@ export class ReleaseService {
     // safe.directory=* disables git's ownership check: the repo on host is
     // owned by the non-root user while this container runs as root.
     const gitSafe = `-c safe.directory=${repoPath}`;
-    const cmd = `cd ${repoPath} && git ${gitSafe} fetch --all --prune && git ${gitSafe} checkout ${branch} && git ${gitSafe} pull --ff-only origin ${branch} && docker compose -f ${composeFile} up -d --build`;
+    // Export GIT_SHA + BUILD_TIME so the freshly built images embed the
+    // correct BUILD_SHA env (otherwise release-status keeps reporting
+    // currentSha="unknown" after every deploy).
+    const cmd = `cd ${repoPath} && git ${gitSafe} fetch --all --prune && git ${gitSafe} checkout ${branch} && git ${gitSafe} pull --ff-only origin ${branch} && export GIT_SHA=$(git ${gitSafe} rev-parse HEAD) && export BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) && docker compose -f ${composeFile} up -d --build`;
 
     this.logger.log(`starting deploy: ${cmd}`);
 
