@@ -1,7 +1,7 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, TeamMembershipStatus } from '@roadboard/domain';
-import { hasPermission, EffectiveGrant } from '@roadboard/grants';
+import { hasPermission, filterGrantsByTeamRole, EffectiveGrant, TeamRole } from '@roadboard/grants';
 import { CreateGrantDto } from './create-grant.dto';
 import { CheckPermissionDto } from './check-permission.dto';
 
@@ -73,23 +73,32 @@ export class GrantsService {
           userId: dto.subjectId,
           status: TeamMembershipStatus.ACTIVE,
         },
+        select: { teamId: true, role: true },
       });
 
       if (memberships.length > 0) {
-        const teamIds = memberships.map((m) => m.teamId);
+        const roleByTeam = new Map<string, TeamRole>(
+          memberships.map((m) => [m.teamId, (m.role === 'admin' ? 'admin' : 'member') as TeamRole]),
+        );
         const teamGrants = await this.prisma.projectGrant.findMany({
           where: {
             projectId: dto.projectId,
             subjectType: GrantSubjectType.TEAM,
-            subjectId: { in: teamIds },
+            subjectId: { in: memberships.map((m) => m.teamId) },
           },
         });
 
+        const byTeam = new Map<string, EffectiveGrant[]>();
+
         for (const g of teamGrants) {
-          grants.push({
-            projectId: g.projectId,
-            grantType: g.grantType as GrantType,
-          });
+          const list = byTeam.get(g.subjectId) ?? [];
+          list.push({ projectId: g.projectId, grantType: g.grantType as GrantType });
+          byTeam.set(g.subjectId, list);
+        }
+
+        for (const [teamId, teamGrantList] of byTeam) {
+          const role = roleByTeam.get(teamId) ?? 'member';
+          grants.push(...filterGrantsByTeamRole(teamGrantList, role));
         }
       }
     } else {

@@ -9,6 +9,9 @@ import {
   listMemory,
   listPhases,
   listDecisions,
+  listUsers,
+  listGrants,
+  listMyMemberships,
   getDashboardSnapshot,
   validateSession,
 } from '@/lib/api';
@@ -29,6 +32,8 @@ import { DecisionAccordion } from './decision-accordion';
 import { TaskRow } from './task-row';
 import { ActivityTimeline } from './activity-timeline';
 import { AttributionLine } from './attribution-line';
+import { Markdown } from '@/components/markdown';
+import { ContributorsTab } from './contributors-tab';
 import { CodeflowSubNav } from './codeflow/sub-nav';
 import { ArchitectureMapView } from './codeflow/architecture-map-view';
 import { ChangeImpactView, DecisionGraphView, AgentContextView } from './codeflow/placeholder-views';
@@ -223,6 +228,9 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
             <ActivityTimeline token={token} projectId={id} dict={dict} />
           </div>
         )}
+        {tab === 'contributors' && (
+          <ContributorsTabLoader token={token} projectId={id} session={session} project={project} dict={dict} />
+        )}
       </main>
     </AppShell>
   );
@@ -386,7 +394,7 @@ async function MemoryTab({ token, projectId, q, dict }: { token: string; project
               <span className="text-xs font-medium text-white">{entry.title}</span>
             </div>
             {entry.body && (
-              <p className="text-xs text-gray-400 whitespace-pre-wrap">{entry.body}</p>
+              <Markdown className="text-xs text-gray-400">{entry.body}</Markdown>
             )}
             <AttributionLine
               createdBy={entry.createdBy}
@@ -435,6 +443,51 @@ function CodeflowTab({
       {activeView === 'impact' && <ChangeImpactView dict={dict} />}
       {activeView === 'decisionGraph' && <DecisionGraphView dict={dict} />}
       {activeView === 'agentContext' && <AgentContextView dict={dict} />}
+    </div>
+  );
+}
+
+
+async function ContributorsTabLoader({
+  token,
+  projectId,
+  session,
+  project,
+  dict,
+}: {
+  token: string;
+  projectId: string;
+  session: { userId: string; role: string };
+  project: { ownerUserId: string | null };
+  dict: Dictionary;
+}) {
+
+  const [users, grants, myMemberships] = await Promise.all([
+    listUsers(token).catch(() => []),
+    listGrants(token, projectId).catch(() => []),
+    listMyMemberships(token, session.userId).catch(() => []),
+  ]);
+
+  const isAdmin = session.role === 'admin';
+  const myTeamIds = new Set(myMemberships.map((m) => m.teamId));
+  const isProjectAdmin = grants.some((g) =>
+    g.grantType === 'project.admin' && (
+      (g.subjectType === 'user' && g.subjectId === session.userId)
+      || (g.subjectType === 'team' && myTeamIds.has(g.subjectId))
+    ),
+  );
+  const isOwner = isAdmin || project.ownerUserId === session.userId || isProjectAdmin;
+
+  return (
+    <div className="space-y-3">
+      <h2 className="text-sm font-semibold text-white">{dict.tabs.contributors}</h2>
+      <ContributorsTab
+        projectId={projectId}
+        currentUserId={session.userId}
+        isOwner={isOwner}
+        users={users}
+        initialGrants={grants}
+      />
     </div>
   );
 }

@@ -7,6 +7,8 @@ export const itDict = {
     completed: 'completato',
     settings: 'Impostazioni',
     signOut: 'Esci',
+    themeLight: 'Tema chiaro',
+    themeDark: 'Tema scuro',
   },
   tabs: {
     tasks: 'Task',
@@ -15,6 +17,7 @@ export const itDict = {
     memory: 'Memoria',
     codeflow: 'Atlas',
     activity: 'Attività',
+    contributors: 'Contributors',
   },
   attribution: {
     createdBy: (name: string) => `Creato da ${name}`,
@@ -156,6 +159,7 @@ export const itDict = {
       teams: 'Team',
       users: 'Utenti',
       members: 'Membri',
+      archived: 'Archiviati',
     },
     appearance: {
       title: 'Tema',
@@ -231,6 +235,14 @@ export const itDict = {
       resetting: 'Reimpostazione…',
       resetSuccess: 'Password reimpostata.',
     },
+    archived: {
+      title: 'Progetti archiviati',
+      description: 'Progetti archiviati: puoi disarchiviarli o eliminarli definitivamente.',
+      empty: 'Nessun progetto archiviato.',
+      unarchive: 'Disarchivia',
+      deletePermanent: 'Elimina definitivamente',
+      confirmDelete: (name: string) => `Eliminare definitivamente "${name}"? L'azione è irreversibile.`,
+    },
     members: {
       title: 'Gestione membri',
       selectProject: 'Seleziona progetto…',
@@ -242,6 +254,8 @@ export const itDict = {
       addButton: 'Aggiungi',
       adding: 'Aggiunta…',
       remove: 'Rimuovi',
+      leave: 'Esci dal progetto',
+      you: 'tu',
       noProjects: 'Nessun progetto disponibile.',
     },
   },

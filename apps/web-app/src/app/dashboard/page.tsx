@@ -27,8 +27,9 @@ export default async function DashboardPage() {
     listTeams(token).catch(() => []),
   ]);
 
-  const sorted = [...projects].sort((a, b) => {
-    const order: Record<string, number> = { active: 0, paused: 1, draft: 2, completed: 3, archived: 4 };
+  const visible = projects.filter((p) => p.status !== 'archived');
+  const sorted = [...visible].sort((a, b) => {
+    const order: Record<string, number> = { active: 0, paused: 1, draft: 2, completed: 3 };
     return (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.updatedAt.localeCompare(a.updatedAt);
   });
 

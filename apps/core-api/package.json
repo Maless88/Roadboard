@@ -21,6 +21,7 @@
     "@roadboard/config": "workspace:*",
     "@roadboard/database": "workspace:*",
     "@roadboard/domain": "workspace:*",
+    "@roadboard/grants": "workspace:*",
     "@roadboard/graph-db": "workspace:*",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",

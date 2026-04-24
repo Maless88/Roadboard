@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
-import { validateSession, listTokens, listUsers, listProjects, listGrants, listMyMemberships, listMemberships } from '@/lib/api';
+import { validateSession, listTokens, listUsers, listProjects, listMyMemberships, listMemberships } from '@/lib/api';
 import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { SettingsTabs } from './settings-tabs';
@@ -26,13 +26,6 @@ export default async function SettingsPage() {
     listMyMemberships(token, session.userId).catch(() => []),
   ]);
 
-  const grantsPerProject = await Promise.all(
-    projects.map(async (p) => ({
-      project: p,
-      grants: await listGrants(token, p.id),
-    })),
-  );
-
   const teams = await Promise.all(
     myMemberships.map(async (m) => ({
       team: m.team,
@@ -43,22 +36,6 @@ export default async function SettingsPage() {
 
   const isAdmin = session.role === 'admin';
   const isTeamLeader = session.role === 'team_leader';
-
-  const myTeamIds = new Set(myMemberships.map((m) => m.teamId));
-  const manageableGrantsPerProject = isAdmin
-    ? grantsPerProject
-    : grantsPerProject.filter(({ project, grants }) => {
-
-      if (project.ownerUserId === session.userId) return true;
-
-      return grants.some((g) =>
-        g.grantType === 'project.admin' && (
-          (g.subjectType === 'user' && g.subjectId === session.userId)
-          || (g.subjectType === 'team' && myTeamIds.has(g.subjectId))
-        ),
-      );
-    });
-  const canManageAnyProject = manageableGrantsPerProject.length > 0;
 
   return (
     <AppShell username={session.username} displayName={session.displayName} userProjects={[...projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map((p) => ({ id: p.id, name: p.name, status: p.status }))}>
@@ -74,11 +51,9 @@ export default async function SettingsPage() {
           tokens={tokens}
           users={users}
           projects={projects}
-          grantsPerProject={manageableGrantsPerProject}
           teams={teams}
           isAdmin={isAdmin}
           isTeamLeader={isTeamLeader}
-          canManageAnyProject={canManageAnyProject}
         />
       </main>
     </AppShell>

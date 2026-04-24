@@ -9,6 +9,8 @@ export const enDict: Dictionary = {
     completed: 'completed',
     settings: 'Settings',
     signOut: 'Sign out',
+    themeLight: 'Light theme',
+    themeDark: 'Dark theme',
   },
   tabs: {
     tasks: 'Tasks',
@@ -17,6 +19,7 @@ export const enDict: Dictionary = {
     memory: 'Memory',
     codeflow: 'Atlas',
     activity: 'Activity',
+    contributors: 'Contributors',
   },
   attribution: {
     createdBy: (name: string) => `Created by ${name}`,
@@ -158,6 +161,7 @@ export const enDict: Dictionary = {
       teams: 'Teams',
       users: 'Users',
       members: 'Members',
+      archived: 'Archived',
     },
     appearance: {
       title: 'Theme',
@@ -233,6 +237,14 @@ export const enDict: Dictionary = {
       resetting: 'Resetting…',
       resetSuccess: 'Password reset.',
     },
+    archived: {
+      title: 'Archived projects',
+      description: 'Archived projects: you can unarchive or permanently delete them.',
+      empty: 'No archived projects.',
+      unarchive: 'Unarchive',
+      deletePermanent: 'Delete permanently',
+      confirmDelete: (name: string) => `Permanently delete "${name}"? This cannot be undone.`,
+    },
     members: {
       title: 'Manage members',
       selectProject: 'Select project…',
@@ -244,6 +256,8 @@ export const enDict: Dictionary = {
       addButton: 'Add',
       adding: 'Adding…',
       remove: 'Remove',
+      leave: 'Leave project',
+      you: 'you',
       noProjects: 'No projects available.',
     },
   },

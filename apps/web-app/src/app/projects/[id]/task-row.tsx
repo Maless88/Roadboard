@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
 import { TaskStatusSelect } from './task-status';
 import { AttributionLine } from './attribution-line';
+import { Markdown } from '@/components/markdown';
 import type { Task } from '@/lib/api';
 
 
@@ -80,7 +81,7 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
           style={{ borderBottom: !isLast ? '1px solid rgba(255,255,255,0.05)' : undefined, background: 'rgba(255,255,255,0.01)' }}
         >
           {task.description && (
-            <p className="text-xs text-gray-400 leading-relaxed">{task.description}</p>
+            <Markdown className="text-xs text-gray-400">{task.description}</Markdown>
           )}
           <div className="flex flex-wrap gap-4">
             {task.dueDate && (

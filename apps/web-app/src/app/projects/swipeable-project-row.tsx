@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { deleteProjectAction } from '@/app/actions';
+import { archiveProjectAction } from '@/app/actions';
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -77,10 +77,11 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
     router.push(`/projects/${id}`);
   }
 
-  function handleDelete() {
+  function handleArchive() {
 
     startTransition(async () => {
-      await deleteProjectAction(id);
+      await archiveProjectAction(id);
+      router.refresh();
     });
   }
 
@@ -117,30 +118,29 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
         style={{
           width: revealWidth,
           transition: startX.current !== null ? 'none' : 'width 0.2s ease',
-          background: 'linear-gradient(135deg, #450a0a 0%, #7f1d1d 100%)',
+          background: 'linear-gradient(135deg, #451a03 0%, #78350f 100%)',
         }}
       >
         <button
-          onClick={handleDelete}
+          onClick={handleArchive}
           onPointerDown={(e) => e.stopPropagation()}
           disabled={isPending}
-          aria-label="Elimina progetto"
+          aria-label="Archivia progetto"
           style={{ width: SNAP_OPEN, opacity: revealWidth < 20 ? 0 : Math.min(1, (revealWidth - 20) / 30) }}
           className="flex flex-col items-center justify-center gap-1.5 h-full transition-opacity disabled:opacity-40 group"
         >
           {isPending ? (
-            <div className="w-5 h-5 rounded-full border-2 border-red-400 border-t-transparent animate-spin" />
+            <div className="w-5 h-5 rounded-full border-2 border-amber-300 border-t-transparent animate-spin" />
           ) : (
             <>
-              <div className="w-9 h-9 rounded-xl bg-red-900/60 border border-red-700/50 flex items-center justify-center group-hover:bg-red-800/80 group-hover:border-red-600 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" className="w-4.5 h-4.5 text-red-300" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14H6L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4h6v2" />
+              <div className="w-9 h-9 rounded-xl bg-amber-900/60 border border-amber-700/50 flex items-center justify-center group-hover:bg-amber-800/80 group-hover:border-amber-600 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-200">
+                  <rect x="3" y="4" width="18" height="4" rx="1" />
+                  <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+                  <path d="M10 12h4" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-red-400 group-hover:text-red-300 transition-colors">elimina</span>
+              <span className="text-xs font-medium text-amber-300 group-hover:text-amber-200 transition-colors">archivia</span>
             </>
           )}
         </button>

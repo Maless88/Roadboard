@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useState, useActionState, useEffect, useRef } from 'react';
-import type { SessionInfo, McpTokenInfo, User, Grant, Project, Team, TeamMembership } from '@/lib/api';
+import type { SessionInfo, McpTokenInfo, User, Project, Team, TeamMembership } from '@/lib/api';
+import { ArchivedProjectsTab } from './archived-projects-tab';
 import { useDict } from '@/lib/i18n/locale-context';
 import { useTheme } from '@/lib/theme-context';
 import {
@@ -12,8 +13,6 @@ import {
   createUserAction,
   deleteUserAction,
   resetUserPasswordAction,
-  addDeveloperAction,
-  removeDeveloperAction,
   createTeamAction,
   deleteTeamAction,
   addTeamMemberAction,
@@ -33,15 +32,13 @@ interface Props {
   tokens: McpTokenInfo[];
   users: User[];
   projects: Project[];
-  grantsPerProject: { project: Project; grants: Grant[] }[];
   teams: TeamWithMembers[];
   isAdmin: boolean;
   isTeamLeader: boolean;
-  canManageAnyProject: boolean;
 }
 
 
-type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'members' | 'appearance';
+type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'appearance' | 'archived';
 
 
 function AppearanceTab() {
@@ -513,172 +510,6 @@ function UsersTab({
 }
 
 
-function MembriTab({
-  users,
-  grantsPerProject,
-}: {
-  users: User[];
-  grantsPerProject: { project: Project; grants: Grant[] }[];
-}) {
-
-  const dict = useDict();
-  const [selectedId, setSelectedId] = useState(grantsPerProject[0]?.project.id ?? '');
-  const [localGrantsPerProject, setLocalGrantsPerProject] = useState(grantsPerProject);
-  const [addUserId, setAddUserId] = useState('');
-  const [addPending, setAddPending] = useState(false);
-  const [error, setError] = useState('');
-
-  const { project, grants } = localGrantsPerProject.find((pg) => pg.project.id === selectedId)
-    ?? { project: grantsPerProject[0]?.project, grants: [] };
-
-  const ownerGrant = grants.find((g) => g.subjectType === 'user' && g.grantType === 'project.admin');
-  const ownerUser = ownerGrant ? users.find((u) => u.id === ownerGrant.subjectId) : null;
-
-  const developerGrants = grants.filter((g) => g.subjectType === 'user' && g.grantType === 'project.write');
-  const developerIds = new Set(developerGrants.map((g) => g.subjectId));
-
-  const addableUsers = users.filter(
-    (u) => u.id !== ownerGrant?.subjectId && !developerIds.has(u.id),
-  );
-
-  function updateLocalGrants(projectId: string, updater: (g: Grant[]) => Grant[]) {
-
-    setLocalGrantsPerProject((prev) =>
-      prev.map((pg) =>
-        pg.project.id === projectId ? { ...pg, grants: updater(pg.grants) } : pg,
-      ),
-    );
-  }
-
-  async function handleAdd() {
-
-    if (!addUserId || !project) return;
-    setAddPending(true);
-    setError('');
-
-    const res = await addDeveloperAction(project.id, addUserId);
-
-    if (res.error) {
-      setError(res.error);
-    } else {
-      updateLocalGrants(project.id, (prev) => [
-        ...prev,
-        { id: `tmp-pw-${addUserId}`, projectId: project.id, subjectType: 'user', subjectId: addUserId, grantType: 'project.write', grantedByUserId: null, createdAt: new Date().toISOString() },
-        { id: `tmp-tw-${addUserId}`, projectId: project.id, subjectType: 'user', subjectId: addUserId, grantType: 'task.write', grantedByUserId: null, createdAt: new Date().toISOString() },
-      ]);
-      setAddUserId('');
-    }
-
-    setAddPending(false);
-  }
-
-  async function handleRemove(userId: string) {
-
-    if (!project) return;
-    const res = await removeDeveloperAction(project.id, userId);
-
-    if (res.error) {
-      setError(res.error);
-    } else {
-      updateLocalGrants(project.id, (prev) =>
-        prev.filter((g) => !(g.subjectType === 'user' && g.subjectId === userId && g.grantType !== 'project.admin')),
-      );
-    }
-  }
-
-  if (grantsPerProject.length === 0) {
-    return <Card><p className="text-sm text-gray-500">{dict.settings.members.noProjects}</p></Card>;
-  }
-
-  return (
-    <div className="space-y-5">
-
-      <div>
-        <label className="block text-sm font-medium text-gray-300 mb-1">{dict.settings.members.title}</label>
-        <select
-          value={selectedId}
-          onChange={(e) => { setSelectedId(e.target.value); setError(''); }}
-          className="rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-          style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
-        >
-          {grantsPerProject.map(({ project: p }) => (
-            <option key={p.id} value={p.id} style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{p.name}</option>
-          ))}
-        </select>
-      </div>
-
-      {error && <Alert type="error" msg={error} />}
-
-      <Card title={dict.settings.members.owner}>
-        {ownerUser ? (
-          <div className="flex items-center gap-3">
-            <div>
-              <p className="text-sm text-white font-medium">{ownerUser.displayName}</p>
-              <p className="text-xs text-gray-500 mt-0.5">@{ownerUser.username}</p>
-            </div>
-            <span className="text-xs px-2 py-0.5 rounded border text-yellow-400 bg-yellow-500/10 border-yellow-500/20">
-              {dict.settings.members.owner}
-            </span>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-500">{dict.settings.members.noOwner}</p>
-        )}
-      </Card>
-
-      <Card title={dict.settings.members.developers}>
-        {developerGrants.length === 0 ? (
-          <p className="text-sm text-gray-500 mb-4">{dict.settings.members.noDevelopers}</p>
-        ) : (
-          <div className="divide-y divide-white/[0.06] mb-4">
-            {developerGrants.map((g) => {
-              const dev = users.find((u) => u.id === g.subjectId);
-              if (!dev) return null;
-              return (
-                <div key={g.id} className="flex items-center justify-between py-3 first:pt-0">
-                  <div>
-                    <p className="text-sm text-white font-medium">{dev.displayName}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">@{dev.username}</p>
-                  </div>
-                  <button
-                    onClick={() => void handleRemove(dev.id)}
-                    className="text-xs text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    {dict.settings.members.remove}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {addableUsers.length > 0 && (
-          <div className="flex gap-2 items-center">
-            <select
-              value={addUserId}
-              onChange={(e) => setAddUserId(e.target.value)}
-              className="flex-1 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-              style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
-            >
-              <option value="" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.settings.members.selectUser}</option>
-              {addableUsers.map((u) => (
-                <option key={u.id} value={u.id} style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{u.displayName} (@{u.username})</option>
-              ))}
-            </select>
-            <button
-              onClick={() => void handleAdd()}
-              disabled={addPending || !addUserId}
-              className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-            >
-              {addPending ? '…' : dict.settings.members.addButton}
-            </button>
-          </div>
-        )}
-      </Card>
-    </div>
-  );
-}
-
-
 function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: TeamWithMembers[]; users: User[] }) {
 
   const dict = useDict();
@@ -870,16 +701,16 @@ export function SettingsTabs({
   tokens,
   users,
   projects,
-  grantsPerProject,
   teams,
   isAdmin,
   isTeamLeader,
-  canManageAnyProject,
 }: Props) {
 
   const dict = useDict();
   const canManageUsers = isAdmin || isTeamLeader;
-  const canSeeMembers = isAdmin || canManageAnyProject;
+
+  const archivedProjects = projects.filter((p) => p.status === 'archived');
+  const hasArchived = archivedProjects.length > 0;
 
   const visibleTabs: { key: TabKey; label: string }[] = [
     { key: 'security', label: dict.settings.tabs.security },
@@ -887,7 +718,7 @@ export function SettingsTabs({
     { key: 'tokens', label: dict.settings.tabs.tokens },
     { key: 'teams', label: dict.settings.tabs.teams },
     ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
-    ...(canSeeMembers ? [{ key: 'members' as TabKey, label: dict.settings.tabs.members }] : []),
+    ...(hasArchived ? [{ key: 'archived' as TabKey, label: dict.settings.tabs.archived }] : []),
   ];
 
   const [active, setActive] = useState<TabKey>('security');
@@ -917,8 +748,8 @@ export function SettingsTabs({
       {active === 'users' && canManageUsers && (
         <UsersTab currentUserId={session.userId} initialUsers={users} isAdmin={isAdmin} />
       )}
-      {active === 'members' && canSeeMembers && (
-        <MembriTab users={users} grantsPerProject={grantsPerProject} />
+      {active === 'archived' && hasArchived && (
+        <ArchivedProjectsTab projects={archivedProjects} />
       )}
     </div>
   );

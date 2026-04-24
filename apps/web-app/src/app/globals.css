@@ -117,6 +117,51 @@ html.light .text-gray-600 { color: var(--text-faint); }
 html.light .bg-gray-950,
 html.light .bg-gray-900 { background-color: var(--bg) !important; }
 
+/* Markdown rendering (memorie, decisioni, task) */
+.rb-markdown { font-size: 0.75rem; line-height: 1.55; color: inherit; }
+.rb-markdown > :first-child { margin-top: 0; }
+.rb-markdown > :last-child { margin-bottom: 0; }
+.rb-markdown p { margin: 0.4em 0; }
+.rb-markdown h1, .rb-markdown h2, .rb-markdown h3, .rb-markdown h4 {
+  font-weight: 600; color: var(--text); margin: 0.8em 0 0.4em; line-height: 1.3;
+}
+.rb-markdown h1 { font-size: 1.1em; }
+.rb-markdown h2 { font-size: 1.05em; }
+.rb-markdown h3, .rb-markdown h4 { font-size: 1em; }
+.rb-markdown strong { font-weight: 600; color: var(--text); }
+.rb-markdown em { font-style: italic; }
+.rb-markdown a { color: #818cf8; text-decoration: underline; text-underline-offset: 2px; }
+html.light .rb-markdown a { color: #4338ca; }
+.rb-markdown ul, .rb-markdown ol { margin: 0.4em 0; padding-left: 1.25em; }
+.rb-markdown ul { list-style: disc; }
+.rb-markdown ol { list-style: decimal; }
+.rb-markdown li { margin: 0.15em 0; }
+.rb-markdown li > p { margin: 0.15em 0; }
+.rb-markdown blockquote {
+  margin: 0.5em 0; padding: 0.25em 0.75em;
+  border-left: 2px solid var(--border); color: var(--text-muted);
+}
+.rb-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em; padding: 0.1em 0.35em; border-radius: 0.25rem;
+  background: rgba(255,255,255,0.08); color: var(--text);
+}
+html.light .rb-markdown code { background: rgba(17,24,39,0.06); }
+.rb-markdown pre {
+  margin: 0.5em 0; padding: 0.6em 0.8em; border-radius: 0.5rem;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--border-soft);
+  overflow-x: auto;
+}
+html.light .rb-markdown pre { background: rgba(17,24,39,0.04); }
+.rb-markdown pre code { background: transparent; padding: 0; font-size: 0.8em; }
+.rb-markdown hr { border: 0; border-top: 1px solid var(--border-soft); margin: 0.8em 0; }
+.rb-markdown table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; }
+.rb-markdown th, .rb-markdown td {
+  border: 1px solid var(--border-soft); padding: 0.3em 0.6em;
+}
+.rb-markdown th { background: rgba(255,255,255,0.04); font-weight: 600; }
+html.light .rb-markdown th { background: rgba(17,24,39,0.04); }
+
 html.light [class*="bg-indigo-"] .text-white,
 html.light [class*="bg-indigo-"].text-white,
 html.light [class*="bg-green-"] .text-white,

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
 import { AttributionLine } from './attribution-line';
+import { Markdown } from '@/components/markdown';
 import type { Decision, Phase } from '@/lib/api';
 
 
@@ -86,14 +87,20 @@ export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) 
 
       {open && (
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.01)' }}>
+          {decision.summary && (
+            <div className="px-4 pt-3">
+              <Markdown className="text-xs text-gray-300">{decision.summary}</Markdown>
+            </div>
+          )}
           {decision.rationale && (
             <div className="px-4 pt-3">
-              <p className="text-xs text-gray-500 italic">{decision.rationale}</p>
+              <Markdown className="text-xs text-gray-500 italic">{decision.rationale}</Markdown>
             </div>
           )}
           {decision.outcome && (
             <div className="px-4 pt-2">
-              <p className="text-xs text-green-400">Outcome: {decision.outcome}</p>
+              <p className="text-xs text-green-400 mb-1">Outcome:</p>
+              <Markdown className="text-xs text-green-400">{decision.outcome}</Markdown>
             </div>
           )}
 

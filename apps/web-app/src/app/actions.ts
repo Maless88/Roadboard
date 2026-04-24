@@ -5,7 +5,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   login, logout, register, updateTaskStatus,
-  createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
+  createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject, updateProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
 import { LOCALE_COOKIE, SUPPORTED_LOCALES, type Locale } from '@/lib/i18n';
@@ -230,4 +230,61 @@ export async function deleteProjectAction(projectId: string): Promise<{ error?: 
   revalidatePath('/dashboard');
   revalidatePath('/projects');
   redirect('/dashboard');
+}
+
+
+export async function archiveProjectAction(projectId: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Not authenticated' };
+
+  try {
+    await updateProject(token, projectId, { status: 'archived' });
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/projects');
+  revalidatePath('/settings');
+  return {};
+}
+
+
+export async function unarchiveProjectAction(projectId: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Not authenticated' };
+
+  try {
+    await updateProject(token, projectId, { status: 'active' });
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/projects');
+  revalidatePath('/settings');
+  return {};
+}
+
+
+export async function deleteArchivedProjectAction(projectId: string): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Not authenticated' };
+
+  try {
+    await deleteProject(token, projectId);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath('/projects');
+  revalidatePath('/settings');
+  return {};
 }

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
+import { isInheritableByTeamMember } from '@roadboard/grants';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
 
@@ -79,34 +80,62 @@ export class ProjectsService {
       return this.prisma.project.findMany({ where });
     }
 
-    // Collect team IDs the user belongs to
+    // Collect team memberships (teamId + role) the user belongs to
     const memberships = await this.prisma.teamMembership.findMany({
       where: { userId, status: 'active' },
-      select: { teamId: true },
+      select: { teamId: true, role: true },
     });
 
     const teamIds = memberships.map((m) => m.teamId);
 
-    // Find projects where the user has a direct grant OR a team grant
-    const grants = await this.prisma.projectGrant.findMany({
-      where: {
-        OR: [
-          { subjectType: 'user', subjectId: userId },
-          ...(teamIds.length ? [{ subjectType: 'team', subjectId: { in: teamIds } }] : []),
-        ],
-      },
+    // Find projects where the user has a direct grant
+    const directGrants = await this.prisma.projectGrant.findMany({
+      where: { subjectType: 'user', subjectId: userId },
       select: { projectId: true },
       distinct: ['projectId'],
     });
 
-    const projectIds = grants.map((g) => g.projectId);
+    const projectIdSet = new Set<string>(directGrants.map((g) => g.projectId));
 
-    if (projectIds.length === 0) {
+    // For team grants, honor the team_role gating: a member-only team with a
+    // project.admin grant still grants visibility (downgraded to read+write),
+    // but a team grant of only token.manage / codeflow.scan on a project does
+    // not make the project visible to a plain member.
+    if (teamIds.length > 0) {
+      const teamGrants = await this.prisma.projectGrant.findMany({
+        where: { subjectType: 'team', subjectId: { in: teamIds } },
+        select: { projectId: true, subjectId: true, grantType: true },
+      });
+
+      const roleByTeam = new Map<string, 'admin' | 'member'>(
+        memberships.map((m) => [m.teamId, m.role === 'admin' ? 'admin' : 'member']),
+      );
+
+      for (const g of teamGrants) {
+
+        const role = roleByTeam.get(g.subjectId) ?? 'member';
+
+        if (role === 'admin') {
+          projectIdSet.add(g.projectId);
+          continue;
+        }
+
+        // Member: inherits only if downgraded grant set is non-empty.
+        // project.admin → downgrades to read+write+… so visibility is granted.
+        const inherits =
+          g.grantType === 'project.admin'
+          || isInheritableByTeamMember(g.grantType as GrantType);
+
+        if (inherits) projectIdSet.add(g.projectId);
+      }
+    }
+
+    if (projectIdSet.size === 0) {
       return [];
     }
 
     const where = {
-      id: { in: projectIds },
+      id: { in: Array.from(projectIdSet) },
       ...(status ? { status } : {}),
     };
 

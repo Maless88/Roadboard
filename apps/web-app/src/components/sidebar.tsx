@@ -5,6 +5,7 @@ import { useRef, useState, useEffect } from 'react';
 import { logoutAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
 import { LanguageSwitcher } from './language-switcher';
+import { ThemeToggle } from './theme-toggle';
 import { formatBuildLabel } from '@/lib/build-label';
 import type { Locale } from '@/lib/i18n';
 
@@ -44,7 +45,9 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
 
   const dict = useDict();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const switcherRef = useRef<HTMLDivElement>(null);
 
   const pct = activeProject && activeProject.taskTotal > 0
     ? Math.round((activeProject.taskDone / activeProject.taskTotal) * 100)
@@ -63,6 +66,31 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [menuOpen]);
+
+  useEffect(() => {
+
+    function handleClickOutside(e: MouseEvent) {
+
+      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
+        setProjectSwitcherOpen(false);
+      }
+    }
+
+    function handleKey(e: KeyboardEvent) {
+
+      if (e.key === 'Escape') setProjectSwitcherOpen(false);
+    }
+
+    if (projectSwitcherOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKey);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [projectSwitcherOpen]);
 
   return (
     <aside
@@ -97,30 +125,91 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       {/* Nav principale */}
       <nav className="flex-1 px-2 py-4 flex flex-col gap-0.5 overflow-y-auto">
 
-        {/* Progetto attivo */}
+        {/* Progetto attivo + switcher */}
         {activeProject && (
-          <div
-            className="mt-2 mx-1 rounded-xl p-3"
-            style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)' }}
-          >
-            <Link
-              href={`/projects/${activeProject.id}`}
-              className="block text-xs font-semibold text-indigo-300 truncate mb-2.5 hover:text-indigo-200 transition-colors"
+          <div ref={switcherRef} className="relative mt-2 mx-1">
+            <button
+              type="button"
+              onClick={() => setProjectSwitcherOpen((o) => !o)}
+              className="w-full rounded-xl p-3 text-left transition-colors hover:bg-indigo-500/10"
+              style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)' }}
             >
-              {activeProject.name}
-            </Link>
+              <div className="flex items-center justify-between gap-2 mb-2.5">
+                <span className="text-xs font-semibold text-indigo-300 truncate">
+                  {activeProject.name}
+                </span>
+                <svg
+                  className="w-3 h-3 text-indigo-300/70 shrink-0 transition-transform"
+                  style={{ transform: projectSwitcherOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
 
-            <div className="h-1 rounded-full overflow-hidden mb-1.5" style={{ background: 'rgba(255,255,255,0.07)' }}>
+              <div className="h-1 rounded-full overflow-hidden mb-1.5" style={{ background: 'rgba(255,255,255,0.07)' }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#6366f1,#818cf8)', transition: 'width 0.7s ease' }}
+                />
+              </div>
+
+              <div className="flex justify-between text-[10px] text-gray-600">
+                <span>{pct}% {dict.nav.completed}</span>
+                <span>{activeProject.taskDone}/{activeProject.taskTotal}</span>
+              </div>
+            </button>
+
+            {projectSwitcherOpen && (
               <div
-                className="h-full rounded-full"
-                style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#6366f1,#818cf8)', transition: 'width 0.7s ease' }}
-              />
-            </div>
+                className="absolute top-full mt-1.5 left-0 right-0 rounded-xl overflow-hidden z-50 max-h-80 overflow-y-auto"
+                style={{
+                  background: 'var(--surface-overlay)',
+                  border: '1px solid var(--border)',
+                  backdropFilter: 'blur(20px)',
+                  WebkitBackdropFilter: 'blur(20px)',
+                  boxShadow: 'var(--shadow-card), 0 8px 32px rgba(0,0,0,0.18)',
+                }}
+              >
+                <div className="px-3 pt-2.5 pb-1.5">
+                  <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-1.5">
+                    {dict.nav.myProjects}
+                  </p>
+                  {userProjects.length === 0 ? (
+                    <p className="text-xs text-gray-600 py-1">{dict.nav.noProjects}</p>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {userProjects.map((p) => {
 
-            <div className="flex justify-between text-[10px] text-gray-600">
-              <span>{pct}% {dict.nav.completed}</span>
-              <span>{activeProject.taskDone}/{activeProject.taskTotal}</span>
-            </div>
+                        const isCurrent = p.id === activeProject.id;
+
+                        return (
+                          <li key={p.id}>
+                            <Link
+                              href={`/projects/${p.id}`}
+                              onClick={() => setProjectSwitcherOpen(false)}
+                              className={`flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                                isCurrent
+                                  ? 'bg-indigo-500/15 text-indigo-200'
+                                  : 'text-gray-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[p.status] ?? 'bg-gray-500'}`} />
+                              <span className="truncate flex-1">{p.name}</span>
+                              {isCurrent && (
+                                <svg className="w-3 h-3 text-indigo-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              )}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </nav>
@@ -164,51 +253,9 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
                 boxShadow: 'var(--shadow-card), 0 -8px 32px rgba(0,0,0,0.18)',
               }}
             >
-              {/* Projects */}
-              <div className="px-3 pt-3 pb-1.5">
-                <p className="text-[10px] font-mono text-gray-600 uppercase tracking-wider mb-1.5">
-                  {dict.nav.myProjects}
-                </p>
-
-                {userProjects.length === 0 ? (
-                  <p className="text-xs text-gray-600 py-1">{dict.nav.noProjects}</p>
-                ) : (
-                  <>
-                    <ul className="space-y-0.5">
-                      {userProjects.slice(0, 5).map((p) => (
-                        <li key={p.id}>
-                          <Link
-                            href={`/projects/${p.id}`}
-                            onClick={() => setMenuOpen(false)}
-                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[p.status] ?? 'bg-gray-500'}`}
-                            />
-                            <span className="truncate">{p.name}</span>
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-
-                    {userProjects.length > 5 && (
-                      <Link
-                        href="/dashboard"
-                        onClick={() => setMenuOpen(false)}
-                        className="flex items-center gap-1.5 px-2 py-1.5 mt-0.5 text-[11px] text-indigo-400 hover:text-indigo-300 transition-colors"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                        </svg>
-                        {dict.nav.showMore(userProjects.length - 5)}
-                      </Link>
-                    )}
-                  </>
-                )}
-              </div>
-
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} className="px-2 py-1.5 space-y-0.5">
+              <div className="px-2 py-1.5 space-y-0.5">
                 <LanguageSwitcher currentLocale={locale} />
+                <ThemeToggle />
 
                 <Link
                   href="/settings"

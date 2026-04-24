@@ -561,6 +561,27 @@ export async function createProject(
 }
 
 
+export async function updateProject(
+  token: string,
+  projectId: string,
+  data: { name?: string; slug?: string; description?: string; ownerTeamId?: string; status?: string },
+): Promise<Project> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to update project');
+  }
+
+  return res.json() as Promise<Project>;
+}
+
+
 export async function deleteProject(token: string, projectId: string): Promise<void> {
 
   const res = await fetch(`${CORE_API}/projects/${projectId}`, {
