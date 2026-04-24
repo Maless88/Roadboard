@@ -58,6 +58,12 @@ ENV NODE_ENV=production
 ENV APP_NAME=${APP_NAME}
 ENV BUILD_SHA=${GIT_SHA}
 ENV BUILD_TIME=${BUILD_TIME}
+
+# core-api needs git + docker CLI (+ compose plugin) to run self-hosted deploy.
+# Installing unconditionally adds ~40 MB to every image; acceptable for now,
+# can be scoped to APP_NAME=core-api later with a conditional stage.
+RUN apk add --no-cache bash git docker-cli docker-cli-compose
+
 COPY --from=packager /runtime .
 WORKDIR /app/apps/${APP_NAME}
 CMD ["node", "dist/main.js"]

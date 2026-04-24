@@ -106,14 +106,19 @@ services:
       <<: *common-env
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
-      RELEASE_WEBHOOK_SECRET: ${RELEASE_WEBHOOK_SECRET:-}
-      DEPLOY_WORKFLOW_URL: ${DEPLOY_WORKFLOW_URL:-https://github.com/Maless88/Roadboard/actions/workflows/deploy.yml}
-      GITHUB_DISPATCH_TOKEN: ${GITHUB_DISPATCH_TOKEN:-}
       GITHUB_REPO: ${GITHUB_REPO:-Maless88/Roadboard}
-      GITHUB_DEPLOY_WORKFLOW: ${GITHUB_DEPLOY_WORKFLOW:-deploy.yml}
-      GITHUB_DEPLOY_REF: ${GITHUB_DEPLOY_REF:-main}
+      GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
+      ROADBOARD_REPO_PATH: /opt/roadboard
+      ROADBOARD_COMPOSE_FILE: infra/docker/docker-compose.yml
+      ROADBOARD_DEPLOY_BRANCH: ${ROADBOARD_DEPLOY_BRANCH:-main}
     ports:
       - "3001:3001"
+    volumes:
+      # Self-hosted deploy: container must be able to run
+      # `git pull` on the host repo and `docker compose up -d --build`
+      # on the host engine. Both mounts are REQUIRED for POST /deploy.
+      - ${ROADBOARD_HOST_REPO_PATH:-../..}:/opt/roadboard
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
