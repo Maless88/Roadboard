@@ -111,6 +111,10 @@ services:
       ROADBOARD_REPO_PATH: /opt/roadboard
       ROADBOARD_COMPOSE_FILE: infra/docker/docker-compose.yml
       ROADBOARD_DEPLOY_BRANCH: ${ROADBOARD_DEPLOY_BRANCH:-main}
+      # Shared secret with the GitHub Actions notify-release workflow.
+      # Used to invalidate the latestMain SHA cache on push for immediate
+      # banner surfacing (otherwise polling catches it within 60s).
+      RELEASE_WEBHOOK_SECRET: ${RELEASE_WEBHOOK_SECRET:-}
     ports:
       - "3001:3001"
     volumes:
