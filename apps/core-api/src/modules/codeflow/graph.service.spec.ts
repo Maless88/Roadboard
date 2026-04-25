@@ -35,7 +35,11 @@ interface PrismaMock {
     deleteMany: ReturnType<typeof vi.fn>;
   };
   codeRepository: { deleteMany: ReturnType<typeof vi.fn> };
-  graphSyncEvent: { create: ReturnType<typeof vi.fn> };
+  graphSyncEvent: {
+    create: ReturnType<typeof vi.fn>;
+    count: ReturnType<typeof vi.fn>;
+    findFirst: ReturnType<typeof vi.fn>;
+  };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -68,7 +72,11 @@ function makePrisma(): PrismaMock {
     },
     architectureAnnotation: { create: vi.fn(), deleteMany: vi.fn() },
     codeRepository: { deleteMany: vi.fn() },
-    graphSyncEvent: { create: vi.fn().mockResolvedValue({ id: 'evt' }) },
+    graphSyncEvent: {
+      create: vi.fn().mockResolvedValue({ id: 'evt' }),
+      count: vi.fn().mockResolvedValue(0),
+      findFirst: vi.fn().mockResolvedValue(null),
+    },
     // Support both forms: array of PrismaPromise and interactive callback.
     $transaction: vi.fn(async (arg: unknown) => {
       if (typeof arg === 'function') {
@@ -375,6 +383,34 @@ describe('GraphService', () => {
       });
       expect(result).toEqual({ deletedNodes: 1, deletedEdges: 2 });
       expect(sync.resetProject).not.toHaveBeenCalled();
+    });
+  });
+
+
+  describe('getOutboxStats (CF-GDB-03b-8)', () => {
+
+    it('aggregates pending/in_progress/dead counts plus oldest pending and done windows', async () => {
+
+      const oldestDate = new Date('2026-04-25T19:00:00.000Z');
+      prisma.graphSyncEvent.count
+        .mockResolvedValueOnce(7)   // pending
+        .mockResolvedValueOnce(1)   // in_progress
+        .mockResolvedValueOnce(2)   // dead
+        .mockResolvedValueOnce(40)  // doneLast1h
+        .mockResolvedValueOnce(120); // doneLast24h
+      prisma.graphSyncEvent.findFirst.mockResolvedValueOnce({ createdAt: oldestDate });
+
+      const stats = await service.getOutboxStats();
+
+      expect(stats).toEqual({
+        enabled: false,
+        pending: 7,
+        inProgress: 1,
+        dead: 2,
+        pendingOldestAt: '2026-04-25T19:00:00.000Z',
+        doneLast1h: 40,
+        doneLast24h: 120,
+      });
     });
   });
 

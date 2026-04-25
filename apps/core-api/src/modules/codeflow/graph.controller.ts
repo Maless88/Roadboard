@@ -57,6 +57,17 @@ export class GraphController {
   }
 
 
+  @RequireGrant(GrantType.CODEFLOW_READ)
+  @Get('outbox-stats')
+  getOutboxStats() {
+
+    // Project-scoped controller, but the outbox is cross-project: stats
+    // are global. Gate on codeflow.read since the same scope already
+    // governs the rest of this controller.
+    return this.graphService.getOutboxStats();
+  }
+
+
   // ── Nodes ──────────────────────────────────────────
 
   @RequireGrant(GrantType.CODEFLOW_WRITE)
