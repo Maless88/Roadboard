@@ -21,8 +21,8 @@ model User {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  manager      User?   @relation("UserManager", fields: [managerId], references: [id])
-  managedUsers User[]  @relation("UserManager")
+  manager      User?  @relation("UserManager", fields: [managerId], references: [id])
+  managedUsers User[] @relation("UserManager")
 
   teamMemberships TeamMembership[]
   projectGrants   ProjectGrant[]   @relation("GrantedByUser")
@@ -30,15 +30,15 @@ model User {
   mcpTokens       McpToken[]
   ownedProjects   Project[]        @relation("ProjectOwner")
 
-  createdTasks    Task[]          @relation("TaskCreator")
-  updatedTasks    Task[]          @relation("TaskLastEditor")
-  createdPhases   Phase[]         @relation("PhaseCreator")
-  updatedPhases   Phase[]         @relation("PhaseLastEditor")
-  createdDecisions Decision[]     @relation("DecisionCreator")
-  updatedDecisions Decision[]     @relation("DecisionLastEditor")
-  createdMemories MemoryEntry[]   @relation("MemoryCreator")
-  updatedMemories MemoryEntry[]   @relation("MemoryLastEditor")
-  activityEvents  ActivityEvent[] @relation("ActivityActor")
+  createdTasks     Task[]          @relation("TaskCreator")
+  updatedTasks     Task[]          @relation("TaskLastEditor")
+  createdPhases    Phase[]         @relation("PhaseCreator")
+  updatedPhases    Phase[]         @relation("PhaseLastEditor")
+  createdDecisions Decision[]      @relation("DecisionCreator")
+  updatedDecisions Decision[]      @relation("DecisionLastEditor")
+  createdMemories  MemoryEntry[]   @relation("MemoryCreator")
+  updatedMemories  MemoryEntry[]   @relation("MemoryLastEditor")
+  activityEvents   ActivityEvent[] @relation("ActivityActor")
 
   @@map("users")
 }
@@ -51,8 +51,8 @@ model Team {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  memberships   TeamMembership[]
-  projects      Project[]
+  memberships TeamMembership[]
+  projects    Project[]
 
   @@map("teams")
 }
@@ -99,14 +99,14 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  ownerTeam        Team               @relation(fields: [ownerTeamId], references: [id])
-  ownerUser        User?              @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
-  phases           Phase[]
-  tasks            Task[]
-  memoryEntries    MemoryEntry[]
-  decisions        Decision[]
-  projectGrants    ProjectGrant[]
-  codeRepositories CodeRepository[]
+  ownerTeam         Team               @relation(fields: [ownerTeamId], references: [id])
+  ownerUser         User?              @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  phases            Phase[]
+  tasks             Task[]
+  memoryEntries     MemoryEntry[]
+  decisions         Decision[]
+  projectGrants     ProjectGrant[]
+  codeRepositories  CodeRepository[]
   architectureNodes ArchitectureNode[]
 
   @@map("projects")
@@ -127,31 +127,31 @@ model Phase {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  project    Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  decision   Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
-  createdBy  User?     @relation("PhaseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  updatedBy  User?     @relation("PhaseLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  tasks      Task[]
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  decision  Decision? @relation(fields: [decisionId], references: [id], onDelete: SetNull)
+  createdBy User?     @relation("PhaseCreator", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy User?     @relation("PhaseLastEditor", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  tasks     Task[]
 
   @@map("phases")
 }
 
 model Task {
-  id               String    @id @default(cuid())
-  projectId        String    @map("project_id")
-  phaseId          String    @map("phase_id")
-  title            String
-  description      String?
-  status           String    @default("todo")
-  priority         String    @default("medium")
-  assigneeId       String?   @map("assignee_id")
-  dueDate          DateTime? @map("due_date")
-  completionNotes  String?   @map("completion_notes")
-  completedAt      DateTime? @map("completed_at")
-  createdByUserId  String?   @map("created_by_user_id")
-  updatedByUserId  String?   @map("updated_by_user_id")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  projectId       String    @map("project_id")
+  phaseId         String    @map("phase_id")
+  title           String
+  description     String?
+  status          String    @default("todo")
+  priority        String    @default("medium")
+  assigneeId      String?   @map("assignee_id")
+  dueDate         DateTime? @map("due_date")
+  completionNotes String?   @map("completion_notes")
+  completedAt     DateTime? @map("completed_at")
+  createdByUserId String?   @map("created_by_user_id")
+  updatedByUserId String?   @map("updated_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   phase     Phase   @relation(fields: [phaseId], references: [id], onDelete: Restrict)
@@ -189,17 +189,17 @@ model Decision {
 // ── Activity Events ──────────────────────────────────
 
 model ActivityEvent {
-  id            String   @id @default(cuid())
-  projectId     String?  @map("project_id")
-  actorType     String   @map("actor_type")
-  actorId       String   @map("actor_id")
-  actorUserId   String?  @map("actor_user_id")
-  source        String   @default("web")
-  eventType     String   @map("event_type")
-  targetType    String   @map("target_type")
-  targetId      String   @map("target_id")
-  metadata      Json?
-  createdAt     DateTime @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  projectId   String?  @map("project_id")
+  actorType   String   @map("actor_type")
+  actorId     String   @map("actor_id")
+  actorUserId String?  @map("actor_user_id")
+  source      String   @default("web")
+  eventType   String   @map("event_type")
+  targetType  String   @map("target_type")
+  targetId    String   @map("target_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
 
   actor User? @relation("ActivityActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
@@ -233,13 +233,13 @@ model MemoryEntry {
 // ── Grants ───────────────────────────────────────────
 
 model ProjectGrant {
-  id            String   @id @default(cuid())
-  projectId     String   @map("project_id")
-  subjectType   String   @map("subject_type")
-  subjectId     String   @map("subject_id")
-  grantType     String   @map("grant_type")
-  grantedByUserId String? @map("granted_by_user_id")
-  createdAt     DateTime @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  projectId       String   @map("project_id")
+  subjectType     String   @map("subject_type")
+  subjectId       String   @map("subject_id")
+  grantType       String   @map("grant_type")
+  grantedByUserId String?  @map("granted_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   grantedBy User?   @relation("GrantedByUser", fields: [grantedByUserId], references: [id])
@@ -268,17 +268,17 @@ model McpToken {
 // ── CodeFlow ─────────────────────────────────────────
 
 model CodeRepository {
-  id             String    @id @default(cuid())
-  projectId      String    @map("project_id")
-  name           String
-  repoUrl        String?   @map("repo_url")
-  provider       String    @default("manual")
-  defaultBranch  String    @default("main") @map("default_branch")
-  scanIntervalH  Int?      @map("scan_interval_h")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  name          String
+  repoUrl       String?  @map("repo_url")
+  provider      String   @default("manual")
+  defaultBranch String   @default("main") @map("default_branch")
+  scanIntervalH Int?     @map("scan_interval_h")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  project   Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
   snapshots ArchitectureSnapshot[]
   nodes     ArchitectureNode[]
 
@@ -327,14 +327,14 @@ model ArchitectureNode {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  project       Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  repository    CodeRepository        @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
-  snapshot      ArchitectureSnapshot? @relation(fields: [snapshotId], references: [id])
-  outgoingEdges ArchitectureEdge[]    @relation("EdgeFrom")
-  incomingEdges ArchitectureEdge[]    @relation("EdgeTo")
+  project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repository    CodeRepository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  snapshot      ArchitectureSnapshot?    @relation(fields: [snapshotId], references: [id])
+  outgoingEdges ArchitectureEdge[]       @relation("EdgeFrom")
+  incomingEdges ArchitectureEdge[]       @relation("EdgeTo")
   annotations   ArchitectureAnnotation[]
   links         ArchitectureLink[]
-  impactSources ImpactAnalysis[]      @relation("ImpactSource")
+  impactSources ImpactAnalysis[]         @relation("ImpactSource")
 
   @@index([projectId, isCurrent])
   @@index([projectId, type])
@@ -343,17 +343,17 @@ model ArchitectureNode {
 }
 
 model ArchitectureEdge {
-  id           String   @id @default(cuid())
-  projectId    String   @map("project_id")
-  snapshotId   String?  @map("snapshot_id")
-  fromNodeId   String   @map("from_node_id")
-  toNodeId     String   @map("to_node_id")
-  edgeType     String   @map("edge_type")
-  weight       Float    @default(1.0)
-  isManual     Boolean  @default(false) @map("is_manual")
-  isCurrent    Boolean  @default(true) @map("is_current")
-  metadata     Json     @default("{}")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id         String   @id @default(cuid())
+  projectId  String   @map("project_id")
+  snapshotId String?  @map("snapshot_id")
+  fromNodeId String   @map("from_node_id")
+  toNodeId   String   @map("to_node_id")
+  edgeType   String   @map("edge_type")
+  weight     Float    @default(1.0)
+  isManual   Boolean  @default(false) @map("is_manual")
+  isCurrent  Boolean  @default(true) @map("is_current")
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   snapshot ArchitectureSnapshot? @relation(fields: [snapshotId], references: [id])
   fromNode ArchitectureNode      @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
@@ -416,3 +416,22 @@ model ImpactAnalysis {
   @@map("impact_analyses")
 }
 
+model GraphSyncEvent {
+  id            String    @id @default(cuid())
+  projectId     String    @map("project_id")
+  entityType    String    @map("entity_type")
+  entityId      String    @map("entity_id")
+  op            String
+  payload       Json
+  attempts      Int       @default(0)
+  status        String    @default("pending")
+  lastError     String?   @map("last_error")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  processedAt   DateTime? @map("processed_at")
+  nextAttemptAt DateTime? @map("next_attempt_at")
+
+  @@index([status, nextAttemptAt])
+  @@index([projectId, status])
+  @@index([entityType, entityId])
+  @@map("graph_sync_events")
+}
