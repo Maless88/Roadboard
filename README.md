@@ -24,7 +24,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
 - **Operational memory** — persistent memory entries, decision records, and session handoffs
 - **Team collaboration** — users, teams, project grants, role-based access control
-- **MCP agent access** — 23 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
+- **MCP agent access** — 31 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
 - **Web dashboard** — project status, task management, and memory entries via browser
 - **Async job layer** — background refresh, summary generation, and cleanup via BullMQ
 - **Local sync bridge** — offline-first SQLite journal with sync engine to the central database
@@ -35,10 +35,10 @@ RoadBoard is designed to be the operational control plane for complex project wo
 
 ```
 apps/
-  core-api          NestJS — projects, phases, tasks, memory (port 3001)
+  core-api          NestJS — projects, phases, tasks, memory, decisions, codeflow, release (port 3001)
   auth-access       NestJS — users, teams, sessions, MCP tokens (port 3002)
-  mcp-service       MCP stdio server — 23 tools for agent integration
-  web-app           Next.js 15 — dashboard, project detail, task management (port 3000)
+  mcp-service       MCP server (stdio + HTTP) — 31 tools for agent integration (port 3005)
+  web-app           Next.js 15 — dashboard, project detail, task management, Atlas (port 3000)
   worker-jobs       NestJS + BullMQ — async jobs: refresh, summary, cleanup (port 3003)
   local-sync-bridge NestJS + SQLite — offline-first journal with sync engine (port 3004)
 
@@ -48,10 +48,16 @@ packages/
   auth              password hashing, token utilities
   grants            permission logic
   mcp-contracts     MCP tool schemas
+  api-contracts     shared REST API types
+  graph-db          Memgraph (Neo4j-compat) client + Cypher schema for CodeFlow
+  demo-seed         seed content for "Tour Roadboard" demo project on signup
+  local-storage     SQLite local-storage abstraction
+  observability     logging/tracing setup
   config            env helpers
 
 infra/
-  docker/           docker-compose (PostgreSQL 16, Redis 7)
+  docker/           docker-compose (PostgreSQL 16, Redis 7, Memgraph 2.18)
+  systemd/          systemd .service + .path units for self-hosted deploy
 ```
 
 ## Stack
@@ -189,6 +195,7 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 |------|---------------|-------------|
 | `initial_instructions` | — | Operational protocol bootstrap (call once per session) |
 | `list_projects` | `project.read` | List accessible projects |
+| `list_teams` | `project.read` | List teams the caller belongs to (slug + role) |
 | `get_project` | `project.read` | Get project details with phases |
 | `list_active_tasks` | `project.read` | List tasks, optionally filtered by status |
 | `list_phases` | `project.read` | List phases for a project |
@@ -210,6 +217,13 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 | `create_project` | `project.admin` | Create a new project; auto-logs to vault |
 | `get_architecture_map` | `codeflow.read` | Get the architecture graph (nodes + edges) |
 | `get_node_context` | `codeflow.read` | Full context for an architecture node |
+| `create_architecture_repository` | `codeflow.write` | Register a CodeRepository for the project (one per onboarding) |
+| `create_architecture_node` | `codeflow.write` | Add a workspace/module/service ArchitectureNode |
+| `create_architecture_edge` | `codeflow.write` | Add a depends_on / imports edge between two nodes |
+| `create_architecture_link` | `codeflow.write` | Tie a Task / Decision / Memory entry to an ArchitectureNode |
+| `link_task_to_node` | `codeflow.write` | Semantic wrapper of create_architecture_link for tasks (call right after create_task) |
+| `create_architecture_annotation` | `codeflow.write` | Attach a free-text note to an ArchitectureNode |
+| `ingest_architecture` | `codeflow.write` | One-shot orchestrator: repository + nodes + edges + annotations in a single manifest call |
 
 ---
 
@@ -238,13 +252,16 @@ pnpm -r build        # build all packages and apps
 
 ## Current status
 
-Waves 1–3 are complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, and local sync bridge are all implemented.
+Waves 1–5 are complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, local sync bridge, dual-write graph DB (Postgres + Memgraph), and self-hosted deploy are all implemented.
 
-Wave 3 delivered: semantic memory search, agent-readable project changelog, richer decision model, and memory summarization background jobs.
+- **Wave 3** — semantic memory search, agent-readable project changelog, richer decision model, memory summarization background jobs ✓
+- **Wave 4** — fine-grained MCP token scopes, project ownership model, per-project member management, MCP auto-vault, Phase–Decision linking, interactive Roadmap and Decisions accordions, 4 new MCP write tools ✓
+- **Wave 5.1** — Atlas (CodeFlow) manual MVP: ArchitectureNode/Edge/Link/Annotation, MCP atomic write tools, Architecture Map canvas in web-app, node detail drawer ✓
+- **Wave 5.2** — graph DB foundation: Memgraph 2.18 added to compose, `@roadboard/graph-db` Neo4j-compat client, dual-write `GraphSyncService` for nodes/edges, schema constraints + indexes ✓
+- **Wave 5.3** — agent-driven onboarding: `ingest_architecture` one-shot orchestrator, `link_task_to_node` semantic wrapper, enriched `prepare_task_context` with architecture nodes & decisions ✓
+- **Deploy UX** — light/dark theme, single-pill release banner, self-hosted per-host deploy via systemd.path + systemd.service (no GitHub Actions workflow_dispatch needed) ✓
 
-Wave 4 delivered: fine-grained MCP token scopes ✓, project ownership model ✓, per-project member management ✓, MCP auto-vault ✓, Phase–Decision linking ✓, interactive Roadmap and Decisions accordions ✓, expandable task detail rows ✓, 4 new MCP write tools (update_task, create_phase, update_phase, update_decision) ✓.
-
-Active work: **Wave 5 — Agent autonomy and UX polish**.
+Active planning: **Wave 6 — Deep Code Map** (file + symbol graph via ts-morph + tree-sitter, blast-radius queries on Memgraph) and **CF-GDB-03b** (cut over Atlas reads from Postgres to Memgraph and retire the architecture_* Prisma tables).
 
 > The project is pre-beta. No stable release has been published yet. Breaking changes may occur on `main`.
 
