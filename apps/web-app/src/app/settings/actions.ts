@@ -18,6 +18,9 @@ import {
   createMembership,
   deleteMembership,
   listUsers,
+  listMyMemberships,
+  getProject,
+  recordContributorEvent,
 } from '@/lib/api';
 
 
@@ -205,6 +208,31 @@ export async function deleteGrantAction(grantId: string): Promise<void> {
 }
 
 
+async function isProjectOwner(
+  token: string,
+  projectId: string,
+  session: { userId: string; role: string },
+): Promise<boolean> {
+
+  if (session.role === 'admin') return true;
+
+  const project = await getProject(token, projectId).catch(() => null);
+
+  if (project && project.ownerUserId === session.userId) return true;
+
+  const grants = await listGrants(token, projectId).catch(() => []);
+  const myMemberships = await listMyMemberships(token, session.userId).catch(() => []);
+  const myTeamIds = new Set(myMemberships.map((m) => m.teamId));
+
+  return grants.some((g) =>
+    g.grantType === 'project.admin' && (
+      (g.subjectType === 'user' && g.subjectId === session.userId)
+      || (g.subjectType === 'team' && myTeamIds.has(g.subjectId))
+    ),
+  );
+}
+
+
 export async function addDeveloperAction(
   projectId: string,
   userId: string,
@@ -218,6 +246,10 @@ export async function addDeveloperAction(
 
   if (!session) return { error: 'Sessione non valida' };
 
+  const owner = await isProjectOwner(token, projectId, session);
+
+  if (!owner) return { error: 'Solo il proprietario del progetto può aggiungere contributors' };
+
   try {
     await Promise.all([
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'project.read', grantedByUserId: session.userId }),
@@ -228,6 +260,15 @@ export async function addDeveloperAction(
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'codeflow.read', grantedByUserId: session.userId }),
       createGrant(token, { projectId, subjectType: 'user', subjectId: userId, grantType: 'codeflow.write', grantedByUserId: session.userId }),
     ]);
+
+    const target = await listUsers(token).catch(() => []).then((users) => users.find((u) => u.id === userId));
+    await recordContributorEvent(token, projectId, {
+      eventType: 'contributor.added',
+      targetUserId: userId,
+      targetUsername: target?.username,
+      targetDisplayName: target?.displayName,
+    }).catch(() => undefined);
+
     revalidatePath('/settings');
     return {};
   } catch (e) {
@@ -245,10 +286,30 @@ export async function removeDeveloperAction(
 
   if (!token) return { error: 'Non autenticato' };
 
+  const session = await validateSession(token);
+
+  if (!session) return { error: 'Sessione non valida' };
+
+  const isSelf = userId === session.userId;
+  const owner = isSelf ? false : await isProjectOwner(token, projectId, session);
+
+  if (!isSelf && !owner) {
+    return { error: 'Solo il proprietario può rimuovere altri contributors' };
+  }
+
   try {
     const grants = await listGrants(token, projectId);
     const userGrants = grants.filter((g) => g.subjectType === 'user' && g.subjectId === userId);
     await Promise.all(userGrants.map((g) => deleteGrant(token, g.id)));
+
+    const target = await listUsers(token).catch(() => []).then((users) => users.find((u) => u.id === userId));
+    await recordContributorEvent(token, projectId, {
+      eventType: isSelf ? 'contributor.left' : 'contributor.removed',
+      targetUserId: userId,
+      targetUsername: target?.username,
+      targetDisplayName: target?.displayName,
+    }).catch(() => undefined);
+
     revalidatePath('/settings');
     return {};
   } catch (e) {

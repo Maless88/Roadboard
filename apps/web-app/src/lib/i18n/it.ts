@@ -48,6 +48,9 @@ export const itDict = {
       'memory.created': 'ha scritto la memory',
       'memory.updated': 'ha aggiornato la memory',
       'memory.deleted': 'ha eliminato la memory',
+      'contributor.added': 'ha aggiunto un contributor',
+      'contributor.removed': 'ha rimosso un contributor',
+      'contributor.left': 'è uscito dal progetto',
     } as Record<string, string>,
   },
   project: {

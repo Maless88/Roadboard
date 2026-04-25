@@ -7,6 +7,7 @@ const TARGET_BADGE: Record<string, string> = {
   phase: 'bg-purple-500/10 text-purple-400',
   decision: 'bg-yellow-500/10 text-yellow-400',
   memory_entry: 'bg-teal-500/10 text-teal-400',
+  user: 'bg-emerald-500/10 text-emerald-400',
 };
 
 

@@ -507,6 +507,33 @@ export async function listActivity(
 }
 
 
+export type ContributorEventType = 'contributor.added' | 'contributor.removed' | 'contributor.left';
+
+
+export async function recordContributorEvent(
+  token: string,
+  projectId: string,
+  body: {
+    eventType: ContributorEventType;
+    targetUserId: string;
+    targetUsername?: string;
+    targetDisplayName?: string;
+  },
+): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/contributor-events`, {
+    method: 'POST',
+    headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`contributor-events failed: ${res.status} ${text}`);
+  }
+}
+
+
 export interface DashboardSnapshot {
   projectId: string;
   tasks: Record<string, number>;

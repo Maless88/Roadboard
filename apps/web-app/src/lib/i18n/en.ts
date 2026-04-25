@@ -50,6 +50,9 @@ export const enDict: Dictionary = {
       'memory.created': 'wrote the memory',
       'memory.updated': 'updated the memory',
       'memory.deleted': 'deleted the memory',
+      'contributor.added': 'added a contributor',
+      'contributor.removed': 'removed a contributor',
+      'contributor.left': 'left the project',
     } as Record<string, string>,
   },
   project: {
