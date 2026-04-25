@@ -1,5 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
+import { optionalEnv } from '@roadboard/config';
 
 import { CreateNodeDto } from './dto/create-node.dto';
 import { UpdateNodeDto } from './dto/update-node.dto';
@@ -9,13 +10,36 @@ import { CreateAnnotationDto } from './dto/create-annotation.dto';
 import { GraphSyncService } from './graph-sync.service';
 
 
+/**
+ * Internal helper type for outbox events emitted alongside a Postgres write.
+ * The actual `graphSyncEvent` Prisma model is the persistent counterpart.
+ */
+interface OutboxEventInput {
+  projectId: string;
+  entityType: 'node' | 'edge' | 'link' | 'annotation' | 'repository' | 'project';
+  entityId: string;
+  op: 'upsert' | 'delete' | 'reset';
+  payload: Record<string, unknown>;
+}
+
+
 @Injectable()
 export class GraphService {
+
+  private readonly useOutbox: boolean;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     @Inject(GraphSyncService) private readonly sync: GraphSyncService,
-  ) {}
+  ) {
+
+    this.useOutbox = optionalEnv('GRAPH_SYNC_USE_OUTBOX', 'false') === 'true';
+  }
+
+
+  isOutboxMode(): boolean {
+    return this.useOutbox;
+  }
 
 
   // ── Graph ────────────────────────────────────────────
@@ -65,8 +89,29 @@ export class GraphService {
   async resetProject(projectId: string): Promise<{ deletedNodes: number; deletedEdges: number }> {
 
     // FK-safe order: edges → links → annotations → nodes → snapshots → repositories.
-    // Wrap in $transaction so a crash midway leaves Postgres consistent
-    // instead of partially deleted (CF-GDB-03a-2).
+    // Wrap in $transaction so a crash midway leaves Postgres consistent (CF-GDB-03a-2).
+    if (this.useOutbox) {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const edgeRes = await tx.architectureEdge.deleteMany({ where: { projectId } });
+        await tx.architectureLink.deleteMany({ where: { projectId } });
+        await tx.architectureAnnotation.deleteMany({ where: { projectId } });
+        const nodeRes = await tx.architectureNode.deleteMany({ where: { projectId } });
+        await tx.architectureSnapshot.deleteMany({ where: { projectId } });
+        await tx.codeRepository.deleteMany({ where: { projectId } });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId,
+            entityType: 'project',
+            entityId: projectId,
+            op: 'reset',
+            payload: { projectId },
+          },
+        });
+        return { deletedNodes: nodeRes.count, deletedEdges: edgeRes.count };
+      });
+      return result;
+    }
+
     const [edgeRes, , , nodeRes] = await this.prisma.$transaction([
       this.prisma.architectureEdge.deleteMany({ where: { projectId } }),
       this.prisma.architectureLink.deleteMany({ where: { projectId } }),
@@ -76,7 +121,6 @@ export class GraphService {
       this.prisma.codeRepository.deleteMany({ where: { projectId } }),
     ]);
 
-    // Memgraph mirror only after the Postgres tx committed. Best-effort.
     await this.sync.resetProject?.(projectId);
 
     return { deletedNodes: nodeRes.count, deletedEdges: edgeRes.count };
@@ -158,21 +202,36 @@ export class GraphService {
 
   async createNode(projectId: string, dto: CreateNodeDto, createdByUserId: string): Promise<unknown> {
 
-    const node = await this.prisma.architectureNode.create({
-      data: {
-        projectId,
-        repositoryId: dto.repositoryId,
-        type: dto.type,
-        name: dto.name,
-        path: dto.path,
-        description: dto.description,
-        domainGroup: dto.domainGroup,
-        isManual: dto.isManual ?? true,
-        ownerUserId: dto.ownerUserId,
-        ownerTeamId: dto.ownerTeamId,
-      },
-    });
+    const data = {
+      projectId,
+      repositoryId: dto.repositoryId,
+      type: dto.type,
+      name: dto.name,
+      path: dto.path,
+      description: dto.description,
+      domainGroup: dto.domainGroup,
+      isManual: dto.isManual ?? true,
+      ownerUserId: dto.ownerUserId,
+      ownerTeamId: dto.ownerTeamId,
+    };
 
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const node = await tx.architectureNode.create({ data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: node.projectId,
+            entityType: 'node',
+            entityId: node.id,
+            op: 'upsert',
+            payload: this.nodeProjection(node),
+          },
+        });
+        return node;
+      });
+    }
+
+    const node = await this.prisma.architectureNode.create({ data });
     await this.sync.upsertNode({
       id: node.id,
       projectId: node.projectId,
@@ -181,8 +240,29 @@ export class GraphService {
       path: node.path,
       domainGroup: node.domainGroup,
     });
-
     return node;
+  }
+
+
+  private nodeProjection(node: {
+    id: string; projectId: string; type: string; name: string;
+    path: string | null; domainGroup: string | null;
+  }) {
+    return {
+      id: node.id, projectId: node.projectId, type: node.type, name: node.name,
+      path: node.path, domainGroup: node.domainGroup,
+    } as const;
+  }
+
+
+  private edgeProjection(edge: {
+    id: string; projectId: string; fromNodeId: string; toNodeId: string;
+    edgeType: string; weight: number;
+  }) {
+    return {
+      id: edge.id, projectId: edge.projectId, fromNodeId: edge.fromNodeId,
+      toNodeId: edge.toNodeId, edgeType: edge.edgeType, weight: edge.weight,
+    } as const;
   }
 
 
@@ -208,28 +288,32 @@ export class GraphService {
 
     await this.getNode(id);
 
-    const updated = await this.prisma.architectureNode.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        description: dto.description,
-        domainGroup: dto.domainGroup,
-        ownerUserId: dto.ownerUserId,
-        ownerTeamId: dto.ownerTeamId,
-      },
-    });
+    const data = {
+      name: dto.name,
+      description: dto.description,
+      domainGroup: dto.domainGroup,
+      ownerUserId: dto.ownerUserId,
+      ownerTeamId: dto.ownerTeamId,
+    };
 
-    // Mirror updated state into Memgraph (CF-GDB-03a-1). Best-effort:
-    // a sync failure here must not fail the user PATCH.
-    await this.sync.upsertNode({
-      id: updated.id,
-      projectId: updated.projectId,
-      type: updated.type,
-      name: updated.name,
-      path: updated.path,
-      domainGroup: updated.domainGroup,
-    });
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const updated = await tx.architectureNode.update({ where: { id }, data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: updated.projectId,
+            entityType: 'node',
+            entityId: updated.id,
+            op: 'upsert',
+            payload: this.nodeProjection(updated),
+          },
+        });
+        return updated;
+      });
+    }
 
+    const updated = await this.prisma.architectureNode.update({ where: { id }, data });
+    await this.sync.upsertNode(this.nodeProjection(updated) as Parameters<typeof this.sync.upsertNode>[0]);
     return updated;
   }
 
@@ -242,8 +326,23 @@ export class GraphService {
       throw new Error('Cannot delete auto-generated nodes; set isCurrent=false via rescan');
     }
 
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const deleted = await tx.architectureNode.delete({ where: { id } });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: node.projectId,
+            entityType: 'node',
+            entityId: id,
+            op: 'delete',
+            payload: { id, projectId: node.projectId },
+          },
+        });
+        return deleted;
+      });
+    }
+
     const deleted = await this.prisma.architectureNode.delete({ where: { id } });
-    // Pass projectId so the Memgraph delete is multi-tenant scoped (CF-GDB-03a-3).
     await this.sync.deleteNode(id, node.projectId);
     return deleted;
   }
@@ -253,26 +352,33 @@ export class GraphService {
 
   async createEdge(projectId: string, dto: CreateEdgeDto): Promise<unknown> {
 
-    const edge = await this.prisma.architectureEdge.create({
-      data: {
-        projectId,
-        fromNodeId: dto.fromNodeId,
-        toNodeId: dto.toNodeId,
-        edgeType: dto.edgeType,
-        weight: dto.weight ?? 1.0,
-        isManual: dto.isManual ?? true,
-      },
-    });
+    const data = {
+      projectId,
+      fromNodeId: dto.fromNodeId,
+      toNodeId: dto.toNodeId,
+      edgeType: dto.edgeType,
+      weight: dto.weight ?? 1.0,
+      isManual: dto.isManual ?? true,
+    };
 
-    await this.sync.upsertEdge({
-      id: edge.id,
-      projectId: edge.projectId,
-      fromNodeId: edge.fromNodeId,
-      toNodeId: edge.toNodeId,
-      edgeType: edge.edgeType,
-      weight: edge.weight,
-    });
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const edge = await tx.architectureEdge.create({ data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: edge.projectId,
+            entityType: 'edge',
+            entityId: edge.id,
+            op: 'upsert',
+            payload: this.edgeProjection(edge),
+          },
+        });
+        return edge;
+      });
+    }
 
+    const edge = await this.prisma.architectureEdge.create({ data });
+    await this.sync.upsertEdge(this.edgeProjection(edge) as Parameters<typeof this.sync.upsertEdge>[0]);
     return edge;
   }
 
@@ -289,8 +395,23 @@ export class GraphService {
       throw new Error('Cannot delete auto-generated edges; they are replaced on rescan');
     }
 
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const deleted = await tx.architectureEdge.delete({ where: { id } });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: edge.projectId,
+            entityType: 'edge',
+            entityId: id,
+            op: 'delete',
+            payload: { id, projectId: edge.projectId },
+          },
+        });
+        return deleted;
+      });
+    }
+
     const deleted = await this.prisma.architectureEdge.delete({ where: { id } });
-    // Pass projectId so the Memgraph delete is multi-tenant scoped (CF-GDB-03a-3).
     await this.sync.deleteEdge(id, edge.projectId);
     return deleted;
   }
@@ -302,17 +423,37 @@ export class GraphService {
 
     await this.getNode(nodeId);
 
-    return this.prisma.architectureLink.create({
-      data: {
-        nodeId,
-        projectId,
-        entityType: dto.entityType,
-        entityId: dto.entityId,
-        linkType: dto.linkType,
-        createdByUserId,
-        note: dto.note,
-      },
-    });
+    const data = {
+      nodeId,
+      projectId,
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+      linkType: dto.linkType,
+      createdByUserId,
+      note: dto.note,
+    };
+
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const link = await tx.architectureLink.create({ data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: link.projectId,
+            entityType: 'link',
+            entityId: link.id,
+            op: 'upsert',
+            payload: {
+              id: link.id, projectId: link.projectId, nodeId: link.nodeId,
+              entityType: link.entityType, entityId: link.entityId,
+              linkType: link.linkType, note: link.note,
+            },
+          },
+        });
+        return link;
+      });
+    }
+
+    return this.prisma.architectureLink.create({ data });
   }
 
 
@@ -335,6 +476,22 @@ export class GraphService {
       throw new NotFoundException(`ArchitectureLink ${id} not found`);
     }
 
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const deleted = await tx.architectureLink.delete({ where: { id } });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: link.projectId,
+            entityType: 'link',
+            entityId: id,
+            op: 'delete',
+            payload: { id, projectId: link.projectId },
+          },
+        });
+        return deleted;
+      });
+    }
+
     return this.prisma.architectureLink.delete({ where: { id } });
   }
 
@@ -345,14 +502,32 @@ export class GraphService {
 
     await this.getNode(nodeId);
 
-    return this.prisma.architectureAnnotation.create({
-      data: {
-        nodeId,
-        projectId,
-        content: dto.content,
-        createdByUserId,
-      },
-    });
+    const data = {
+      nodeId,
+      projectId,
+      content: dto.content,
+      createdByUserId,
+    };
+
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const ann = await tx.architectureAnnotation.create({ data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: ann.projectId,
+            entityType: 'annotation',
+            entityId: ann.id,
+            op: 'upsert',
+            payload: {
+              id: ann.id, projectId: ann.projectId, nodeId: ann.nodeId, content: ann.content,
+            },
+          },
+        });
+        return ann;
+      });
+    }
+
+    return this.prisma.architectureAnnotation.create({ data });
   }
 
 

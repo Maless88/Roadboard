@@ -1,5 +1,6 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
+import { optionalEnv } from '@roadboard/config';
 
 import { CreateRepositoryDto } from './dto/create-repository.dto';
 import { UpdateRepositoryDto } from './dto/update-repository.dto';
@@ -8,21 +9,44 @@ import { UpdateRepositoryDto } from './dto/update-repository.dto';
 @Injectable()
 export class CodeflowService {
 
-  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
+  private readonly useOutbox: boolean;
+
+  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {
+    this.useOutbox = optionalEnv('GRAPH_SYNC_USE_OUTBOX', 'false') === 'true';
+  }
 
 
   async createRepository(dto: CreateRepositoryDto) {
 
-    return this.prisma.codeRepository.create({
-      data: {
-        projectId: dto.projectId,
-        name: dto.name,
-        repoUrl: dto.repoUrl,
-        provider: dto.provider ?? 'manual',
-        defaultBranch: dto.defaultBranch ?? 'main',
-        scanIntervalH: dto.scanIntervalH,
-      },
-    });
+    const data = {
+      projectId: dto.projectId,
+      name: dto.name,
+      repoUrl: dto.repoUrl,
+      provider: dto.provider ?? 'manual',
+      defaultBranch: dto.defaultBranch ?? 'main',
+      scanIntervalH: dto.scanIntervalH,
+    };
+
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const repo = await tx.codeRepository.create({ data });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: repo.projectId,
+            entityType: 'repository',
+            entityId: repo.id,
+            op: 'upsert',
+            payload: {
+              id: repo.id, projectId: repo.projectId, name: repo.name,
+              repoUrl: repo.repoUrl, provider: repo.provider, defaultBranch: repo.defaultBranch,
+            },
+          },
+        });
+        return repo;
+      });
+    }
+
+    return this.prisma.codeRepository.create({ data });
   }
 
 
@@ -66,7 +90,23 @@ export class CodeflowService {
 
   async deleteRepository(id: string) {
 
-    await this.getRepository(id);
+    const repo = await this.getRepository(id);
+
+    if (this.useOutbox) {
+      return this.prisma.$transaction(async (tx) => {
+        const deleted = await tx.codeRepository.delete({ where: { id } });
+        await tx.graphSyncEvent.create({
+          data: {
+            projectId: repo.projectId,
+            entityType: 'repository',
+            entityId: id,
+            op: 'delete',
+            payload: { id, projectId: repo.projectId },
+          },
+        });
+        return deleted;
+      });
+    }
 
     return this.prisma.codeRepository.delete({ where: { id } });
   }

@@ -35,6 +35,7 @@ interface PrismaMock {
     deleteMany: ReturnType<typeof vi.fn>;
   };
   codeRepository: { deleteMany: ReturnType<typeof vi.fn> };
+  graphSyncEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -67,7 +68,17 @@ function makePrisma(): PrismaMock {
     },
     architectureAnnotation: { create: vi.fn(), deleteMany: vi.fn() },
     codeRepository: { deleteMany: vi.fn() },
-    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
+    graphSyncEvent: { create: vi.fn().mockResolvedValue({ id: 'evt' }) },
+    // Support both forms: array of PrismaPromise and interactive callback.
+    $transaction: vi.fn(async (arg: unknown) => {
+      if (typeof arg === 'function') {
+        // Interactive callback: pass `mock` itself as tx (the methods are jest fns).
+        // The closure captures `prisma`, but we re-resolve via `this` indirection
+        // by using the global `__currentPrisma` set in beforeEach.
+        return (arg as (tx: unknown) => Promise<unknown>)((globalThis as { __currentPrisma?: unknown }).__currentPrisma);
+      }
+      return Promise.all(arg as Promise<unknown>[]);
+    }),
   };
 }
 
@@ -86,6 +97,7 @@ describe('GraphService', () => {
 
   beforeEach(() => {
     prisma = makePrisma();
+    (globalThis as { __currentPrisma?: unknown }).__currentPrisma = prisma;
     sync = {
       upsertNode: vi.fn(),
       deleteNode: vi.fn(),
@@ -93,7 +105,13 @@ describe('GraphService', () => {
       deleteEdge: vi.fn(),
       resetProject: vi.fn(),
     };
+    delete process.env.GRAPH_SYNC_USE_OUTBOX;
     service = new GraphService(prisma as never, sync as never);
+  });
+
+
+  afterEach(() => {
+    delete process.env.GRAPH_SYNC_USE_OUTBOX;
   });
 
 
@@ -242,6 +260,121 @@ describe('GraphService', () => {
 
       // sync.resetProject runs only after the Postgres tx commits
       expect(sync.resetProject).toHaveBeenCalledWith('p1');
+    });
+  });
+
+
+  describe('outbox mode (GRAPH_SYNC_USE_OUTBOX=true)', () => {
+
+    function makeOutboxService(): GraphService {
+      process.env.GRAPH_SYNC_USE_OUTBOX = 'true';
+      return new GraphService(prisma as never, sync as never);
+    }
+
+
+    it('createNode emits a graphSyncEvent and skips inline sync', async () => {
+
+      prisma.architectureNode.create.mockResolvedValue({
+        id: 'n1', projectId: 'p1', type: 'package', name: 'x', path: null, domainGroup: null,
+      });
+
+      const svc = makeOutboxService();
+      await svc.createNode('p1', { type: 'package', name: 'x' } as never, 'u1');
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          projectId: 'p1', entityType: 'node', entityId: 'n1', op: 'upsert',
+          payload: expect.objectContaining({ id: 'n1', name: 'x', type: 'package' }),
+        }),
+      });
+      // Inline sync mirror is bypassed in outbox mode
+      expect(sync.upsertNode).not.toHaveBeenCalled();
+    });
+
+
+    it('deleteNode emits a delete event and skips inline sync', async () => {
+
+      prisma.architectureNode.findUnique.mockResolvedValue({ id: 'n1', projectId: 'p1', isManual: true, annotations: [], links: [] });
+      prisma.architectureNode.delete.mockResolvedValue({ id: 'n1' });
+
+      const svc = makeOutboxService();
+      await svc.deleteNode('n1');
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          entityType: 'node', entityId: 'n1', op: 'delete',
+        }),
+      });
+      expect(sync.deleteNode).not.toHaveBeenCalled();
+    });
+
+
+    it('createEdge emits an upsert event', async () => {
+
+      prisma.architectureEdge.create.mockResolvedValue({
+        id: 'e1', projectId: 'p1', fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on', weight: 1, isManual: true,
+      });
+
+      const svc = makeOutboxService();
+      await svc.createEdge('p1', { fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on' } as never);
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ entityType: 'edge', entityId: 'e1', op: 'upsert' }),
+      });
+      expect(sync.upsertEdge).not.toHaveBeenCalled();
+    });
+
+
+    it('createLink emits an upsert event (NUOVO — non era mirrorato in legacy)', async () => {
+
+      prisma.architectureNode.findUnique.mockResolvedValue({ id: 'n1', isManual: true, annotations: [], links: [] });
+      prisma.architectureLink.create.mockResolvedValue({
+        id: 'l1', projectId: 'p1', nodeId: 'n1', entityType: 'task', entityId: 't1',
+        linkType: 'modifies', note: null,
+      });
+
+      const svc = makeOutboxService();
+      await svc.createLink('n1', 'p1', { entityType: 'task', entityId: 't1', linkType: 'modifies' } as never, 'u1');
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ entityType: 'link', entityId: 'l1', op: 'upsert' }),
+      });
+    });
+
+
+    it('createAnnotation emits an upsert event (NUOVO)', async () => {
+
+      prisma.architectureNode.findUnique.mockResolvedValue({ id: 'n1', isManual: true, annotations: [], links: [] });
+      prisma.architectureAnnotation.create.mockResolvedValue({
+        id: 'a1', projectId: 'p1', nodeId: 'n1', content: 'hello',
+      });
+
+      const svc = makeOutboxService();
+      await svc.createAnnotation('n1', 'p1', { content: 'hello' } as never, 'u1');
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ entityType: 'annotation', entityId: 'a1', op: 'upsert' }),
+      });
+    });
+
+
+    it('resetProject emits a project:reset event in the same transaction and skips inline sync', async () => {
+
+      prisma.architectureEdge.deleteMany.mockResolvedValue({ count: 2 });
+      prisma.architectureLink.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.architectureAnnotation.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.architectureNode.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.architectureSnapshot.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.codeRepository.deleteMany.mockResolvedValue({ count: 0 });
+
+      const svc = makeOutboxService();
+      const result = await svc.resetProject('p1') as { deletedNodes: number; deletedEdges: number };
+
+      expect(prisma.graphSyncEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ entityType: 'project', entityId: 'p1', op: 'reset' }),
+      });
+      expect(result).toEqual({ deletedNodes: 1, deletedEdges: 2 });
+      expect(sync.resetProject).not.toHaveBeenCalled();
     });
   });
 
