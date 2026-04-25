@@ -14,6 +14,7 @@
     "db:backfill-personal-teams": "tsx src/backfill-personal-teams.ts",
     "db:seed-codeflow": "tsx src/seed-codeflow.ts",
     "db:migrate-to-memgraph": "tsx src/migrate-to-memgraph.ts",
+    "db:backfill-outbox": "tsx src/backfill-outbox.ts",
     "db:studio": "prisma studio"
   },
   "dependencies": {

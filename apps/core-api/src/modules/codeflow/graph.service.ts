@@ -42,6 +42,54 @@ export class GraphService {
   }
 
 
+  /**
+   * Outbox health snapshot for the admin dashboard (CF-GDB-03b-8).
+   * Returns aggregate counts of graph_sync_events plus the timestamp of
+   * the oldest pending event (most recent issue indicator).
+   */
+  async getOutboxStats(): Promise<{
+    enabled: boolean;
+    pending: number;
+    inProgress: number;
+    dead: number;
+    pendingOldestAt: string | null;
+    doneLast1h: number;
+    doneLast24h: number;
+  }> {
+
+    const now = Date.now();
+    const oneHourAgo = new Date(now - 60 * 60 * 1000);
+    const oneDayAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+    const [pending, inProgress, dead, oldest, doneLast1h, doneLast24h] = await Promise.all([
+      this.prisma.graphSyncEvent.count({ where: { status: 'pending' } }),
+      this.prisma.graphSyncEvent.count({ where: { status: 'in_progress' } }),
+      this.prisma.graphSyncEvent.count({ where: { status: 'dead' } }),
+      this.prisma.graphSyncEvent.findFirst({
+        where: { status: 'pending' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      }),
+      this.prisma.graphSyncEvent.count({
+        where: { status: 'done', processedAt: { gte: oneHourAgo } },
+      }),
+      this.prisma.graphSyncEvent.count({
+        where: { status: 'done', processedAt: { gte: oneDayAgo } },
+      }),
+    ]);
+
+    return {
+      enabled: this.useOutbox,
+      pending,
+      inProgress,
+      dead,
+      pendingOldestAt: oldest?.createdAt.toISOString() ?? null,
+      doneLast1h,
+      doneLast24h,
+    };
+  }
+
+
   // ── Graph ────────────────────────────────────────────
 
   async listEntityLinks(projectId: string, entityType: string, entityId: string): Promise<unknown> {
