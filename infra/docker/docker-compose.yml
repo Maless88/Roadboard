@@ -19,6 +19,7 @@ x-common-env: &common-env
   GRAPH_DB_URL: bolt://memgraph:7687
   GRAPH_DB_USER: ""
   GRAPH_DB_PASSWORD: ""
+  GRAPH_SYNC_USE_OUTBOX: ${GRAPH_SYNC_USE_OUTBOX:-false}
   NODE_ENV: production
 
 
