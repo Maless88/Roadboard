@@ -11,6 +11,7 @@ interface FindAllFilters {
   projectId: string;
   phaseId?: string;
   status?: TaskStatus;
+  take?: number;
 }
 
 
@@ -75,7 +76,17 @@ export class TasksService {
       where,
       include: AUTHOR_INCLUDE,
       orderBy: { createdAt: 'desc' },
+      ...(filters.take ? { take: filters.take } : {}),
     });
+  }
+
+
+  async count(filters: { projectId: string; phaseId?: string; status?: TaskStatus }): Promise<number> {
+
+    const where: Record<string, unknown> = { projectId: filters.projectId };
+    if (filters.phaseId) where.phaseId = filters.phaseId;
+    if (filters.status) where.status = filters.status;
+    return this.prisma.task.count({ where });
   }
 
 

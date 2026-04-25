@@ -11,6 +11,7 @@ interface FindAllFilters {
   projectId: string;
   type?: MemoryEntryType;
   q?: string;
+  take?: number;
 }
 
 
@@ -69,6 +70,26 @@ export class MemoryService {
       },
       orderBy: { createdAt: 'desc' },
       include: AUTHOR_INCLUDE,
+      ...(filters.take ? { take: filters.take } : {}),
+    });
+  }
+
+
+  async count(filters: { projectId: string; type?: string; q?: string }): Promise<number> {
+
+    return this.prisma.memoryEntry.count({
+      where: {
+        projectId: filters.projectId,
+        ...(filters.type ? { type: filters.type } : {}),
+        ...(filters.q
+          ? {
+              OR: [
+                { title: { contains: filters.q, mode: 'insensitive' } },
+                { body: { contains: filters.q, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
     });
   }
 

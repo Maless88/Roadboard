@@ -45,7 +45,21 @@ export class MemoryController {
       projectId: query.projectId,
       type: query.type,
       q: query.q,
+      take: query.take,
     });
+  }
+
+
+  @RequireGrant(GrantType.PROJECT_READ)
+  @Get('count')
+  async getCount(@Query() query: FindMemoryQueryDto): Promise<{ count: number }> {
+
+    const count = await this.memoryService.count({
+      projectId: query.projectId,
+      type: query.type,
+      q: query.q,
+    });
+    return { count };
   }
 
 

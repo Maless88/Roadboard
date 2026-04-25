@@ -45,7 +45,21 @@ export class TasksController {
       projectId: query.projectId,
       phaseId: query.phaseId,
       status: query.status,
+      take: query.take,
     });
+  }
+
+
+  @RequireGrant(GrantType.PROJECT_READ)
+  @Get('count')
+  async getCount(@Query() query: FindTasksQueryDto): Promise<{ count: number }> {
+
+    const count = await this.tasksService.count({
+      projectId: query.projectId,
+      phaseId: query.phaseId,
+      status: query.status,
+    });
+    return { count };
   }
 
 

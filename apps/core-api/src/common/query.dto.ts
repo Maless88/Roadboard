@@ -38,6 +38,12 @@ export class FindTasksQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  take?: number;
 }
 
 
@@ -50,6 +56,12 @@ export class FindMemoryQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsString()
   q?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  take?: number;
 }
 
 

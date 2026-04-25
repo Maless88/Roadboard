@@ -245,13 +245,29 @@ export async function listPhases(token: string, projectId: string): Promise<Phas
 }
 
 
-export async function listTasks(token: string, projectId: string): Promise<Task[]> {
+export async function listTasks(token: string, projectId: string, opts: { take?: number } = {}): Promise<Task[]> {
 
-  const res = await fetch(`${CORE_API}/tasks?projectId=${projectId}`, { headers: authHeaders(token) });
+  const params = new URLSearchParams({ projectId });
+
+  if (opts.take) params.set('take', String(opts.take));
+
+  const res = await fetch(`${CORE_API}/tasks?${params.toString()}`, { headers: authHeaders(token) });
 
   if (!res.ok) throw new Error('Failed to fetch tasks');
 
   return res.json() as Promise<Task[]>;
+}
+
+
+export async function countTasks(token: string, projectId: string): Promise<number> {
+
+  const params = new URLSearchParams({ projectId });
+  const res = await fetch(`${CORE_API}/tasks/count?${params.toString()}`, { headers: authHeaders(token) });
+
+  if (!res.ok) return 0;
+
+  const json = (await res.json()) as { count: number };
+  return json.count;
 }
 
 
@@ -269,19 +285,37 @@ export async function updateTaskStatus(token: string, taskId: string, status: st
 }
 
 
-export async function listMemory(token: string, projectId: string, q?: string): Promise<MemoryEntry[]> {
+export async function listMemory(
+  token: string,
+  projectId: string,
+  q?: string,
+  opts: { take?: number } = {},
+): Promise<MemoryEntry[]> {
 
   const params = new URLSearchParams({ projectId });
 
-  if (q) {
-    params.set('q', q);
-  }
+  if (q) params.set('q', q);
+  if (opts.take) params.set('take', String(opts.take));
 
   const res = await fetch(`${CORE_API}/memory?${params}`, { headers: authHeaders(token) });
 
   if (!res.ok) throw new Error('Failed to fetch memory');
 
   return res.json() as Promise<MemoryEntry[]>;
+}
+
+
+export async function countMemory(token: string, projectId: string, q?: string): Promise<number> {
+
+  const params = new URLSearchParams({ projectId });
+  if (q) params.set('q', q);
+
+  const res = await fetch(`${CORE_API}/memory/count?${params}`, { headers: authHeaders(token) });
+
+  if (!res.ok) return 0;
+
+  const json = (await res.json()) as { count: number };
+  return json.count;
 }
 
 

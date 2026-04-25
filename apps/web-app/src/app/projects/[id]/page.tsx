@@ -6,7 +6,9 @@ import {
   getProject,
   listProjects,
   listTasks,
+  countTasks,
   listMemory,
+  countMemory,
   listPhases,
   listDecisions,
   listUsers,
@@ -239,8 +241,12 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
 async function TasksTab({ token, projectId, dict }: { token: string; projectId: string; dict: Dictionary }) {
 
-  const [tasks, phases] = await Promise.all([
-    listTasks(token, projectId),
+  // Cap SSR payload — full listing is rarely useful and pages with 100+
+  // tasks were rendering 400+ KB of HTML per tab navigation. Show the
+  // most recent 50; total count is shown in the header.
+  const [tasks, totalTasks, phases] = await Promise.all([
+    listTasks(token, projectId, { take: 50 }),
+    countTasks(token, projectId),
     listPhases(token, projectId),
   ]);
 
@@ -260,7 +266,10 @@ async function TasksTab({ token, projectId, dict }: { token: string; projectId: 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">{dict.project.totalTasks(tasks.length)}</p>
+        <p className="text-xs text-gray-500">
+          {dict.project.totalTasks(totalTasks)}
+          {totalTasks > tasks.length && ` (mostro ${tasks.length} più recenti)`}
+        </p>
         <CreateTaskForm projectId={projectId} phases={phases} />
       </div>
 
@@ -368,14 +377,22 @@ async function DecisionsTab({ token, projectId, dict }: { token: string; project
 
 async function MemoryTab({ token, projectId, q, dict }: { token: string; projectId: string; q?: string; dict: Dictionary }) {
 
-  const memory = await listMemory(token, projectId, q);
+  // Cap SSR payload — full listing was rendering 400+KB of HTML when the
+  // project has many memory entries, which made tab navigation feel
+  // sluggish. Show the most recent 50; the search bar is still available
+  // for older entries.
+  const [memory, totalMemory] = await Promise.all([
+    listMemory(token, projectId, q, { take: 50 }),
+    countMemory(token, projectId, q),
+  ]);
 
   return (
     <div className="space-y-4">
       <MemorySearch defaultValue={q ?? ''} />
       <div className="flex items-center justify-between">
         <p className="text-xs text-gray-500">
-          {q ? dict.project.totalResults(memory.length, q) : dict.project.totalEntries(memory.length)}
+          {q ? dict.project.totalResults(totalMemory, q) : dict.project.totalEntries(totalMemory)}
+          {totalMemory > memory.length && ` · mostro ${memory.length} più recenti`}
         </p>
         <CreateMemoryForm projectId={projectId} />
       </div>
