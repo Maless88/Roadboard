@@ -91,23 +91,36 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
         { mode: 'write' },
       );
     } catch (err) {
-      this.logger.warn(`upsertNode failed for ${node.id}: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn({
+        op: 'upsertNode',
+        projectId: node.projectId,
+        entityType: 'node',
+        entityId: node.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
 
-  async deleteNode(nodeId: string): Promise<void> {
+  async deleteNode(nodeId: string, projectId: string): Promise<void> {
 
     if (!this.enabled || !this.client) return;
 
     try {
+      // Multi-tenant safe: scope delete by id AND projectId (CF-GDB-03a-3).
       await this.client.run(
-        'MATCH (n {id: $id}) DETACH DELETE n',
-        { id: nodeId },
+        'MATCH (n {id: $id, projectId: $pid}) DETACH DELETE n',
+        { id: nodeId, pid: projectId },
         { mode: 'write' },
       );
     } catch (err) {
-      this.logger.warn(`deleteNode failed for ${nodeId}: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn({
+        op: 'deleteNode',
+        projectId,
+        entityType: 'node',
+        entityId: nodeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -143,23 +156,36 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
         { mode: 'write' },
       );
     } catch (err) {
-      this.logger.warn(`upsertEdge failed for ${edge.id}: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn({
+        op: 'upsertEdge',
+        projectId: edge.projectId,
+        entityType: 'edge',
+        entityId: edge.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
 
-  async deleteEdge(edgeId: string): Promise<void> {
+  async deleteEdge(edgeId: string, projectId: string): Promise<void> {
 
     if (!this.enabled || !this.client) return;
 
     try {
+      // Multi-tenant safe: scope delete by id AND projectId (CF-GDB-03a-3).
       await this.client.run(
-        'MATCH ()-[r {id: $id}]->() DELETE r',
-        { id: edgeId },
+        'MATCH ()-[r {id: $id, projectId: $pid}]->() DELETE r',
+        { id: edgeId, pid: projectId },
         { mode: 'write' },
       );
     } catch (err) {
-      this.logger.warn(`deleteEdge failed for ${edgeId}: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn({
+        op: 'deleteEdge',
+        projectId,
+        entityType: 'edge',
+        entityId: edgeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -175,7 +201,13 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
         { mode: 'write' },
       );
     } catch (err) {
-      this.logger.warn(`resetProject failed for ${projectId}: ${err instanceof Error ? err.message : err}`);
+      this.logger.warn({
+        op: 'resetProject',
+        projectId,
+        entityType: 'project',
+        entityId: projectId,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 }

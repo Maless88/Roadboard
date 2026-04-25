@@ -64,14 +64,19 @@ export class GraphService {
 
   async resetProject(projectId: string): Promise<{ deletedNodes: number; deletedEdges: number }> {
 
-    // Delete in FK order: edges → links → annotations → nodes → snapshots → repositories
-    const edgeRes = await this.prisma.architectureEdge.deleteMany({ where: { projectId } });
-    await this.prisma.architectureLink.deleteMany({ where: { projectId } });
-    await this.prisma.architectureAnnotation.deleteMany({ where: { projectId } });
-    const nodeRes = await this.prisma.architectureNode.deleteMany({ where: { projectId } });
-    await this.prisma.architectureSnapshot.deleteMany({ where: { projectId } });
-    await this.prisma.codeRepository.deleteMany({ where: { projectId } });
+    // FK-safe order: edges → links → annotations → nodes → snapshots → repositories.
+    // Wrap in $transaction so a crash midway leaves Postgres consistent
+    // instead of partially deleted (CF-GDB-03a-2).
+    const [edgeRes, , , nodeRes] = await this.prisma.$transaction([
+      this.prisma.architectureEdge.deleteMany({ where: { projectId } }),
+      this.prisma.architectureLink.deleteMany({ where: { projectId } }),
+      this.prisma.architectureAnnotation.deleteMany({ where: { projectId } }),
+      this.prisma.architectureNode.deleteMany({ where: { projectId } }),
+      this.prisma.architectureSnapshot.deleteMany({ where: { projectId } }),
+      this.prisma.codeRepository.deleteMany({ where: { projectId } }),
+    ]);
 
+    // Memgraph mirror only after the Postgres tx committed. Best-effort.
     await this.sync.resetProject?.(projectId);
 
     return { deletedNodes: nodeRes.count, deletedEdges: edgeRes.count };
@@ -203,7 +208,7 @@ export class GraphService {
 
     await this.getNode(id);
 
-    return this.prisma.architectureNode.update({
+    const updated = await this.prisma.architectureNode.update({
       where: { id },
       data: {
         name: dto.name,
@@ -213,19 +218,33 @@ export class GraphService {
         ownerTeamId: dto.ownerTeamId,
       },
     });
+
+    // Mirror updated state into Memgraph (CF-GDB-03a-1). Best-effort:
+    // a sync failure here must not fail the user PATCH.
+    await this.sync.upsertNode({
+      id: updated.id,
+      projectId: updated.projectId,
+      type: updated.type,
+      name: updated.name,
+      path: updated.path,
+      domainGroup: updated.domainGroup,
+    });
+
+    return updated;
   }
 
 
   async deleteNode(id: string): Promise<unknown> {
 
-    const node = await this.getNode(id) as { isManual: boolean };
+    const node = await this.getNode(id) as { isManual: boolean; projectId: string };
 
     if (!node.isManual) {
       throw new Error('Cannot delete auto-generated nodes; set isCurrent=false via rescan');
     }
 
     const deleted = await this.prisma.architectureNode.delete({ where: { id } });
-    await this.sync.deleteNode(id);
+    // Pass projectId so the Memgraph delete is multi-tenant scoped (CF-GDB-03a-3).
+    await this.sync.deleteNode(id, node.projectId);
     return deleted;
   }
 
@@ -271,7 +290,8 @@ export class GraphService {
     }
 
     const deleted = await this.prisma.architectureEdge.delete({ where: { id } });
-    await this.sync.deleteEdge(id);
+    // Pass projectId so the Memgraph delete is multi-tenant scoped (CF-GDB-03a-3).
+    await this.sync.deleteEdge(id, edge.projectId);
     return deleted;
   }
 
