@@ -52,8 +52,8 @@ export default async function DashboardPage() {
 
           <div className="mb-8 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-xl font-bold text-white">{dict.projects.title}</h1>
-              <p className="text-sm text-gray-500 mt-0.5 capitalize">{dateLabel}</p>
+              <h1 className="text-xl font-bold" style={{ color: 'var(--text)' }}>{dict.projects.title}</h1>
+              <p className="text-sm mt-0.5 capitalize" style={{ color: 'var(--text-faint)' }}>{dateLabel}</p>
             </div>
             <CreateProjectForm teams={teams} />
           </div>
@@ -61,9 +61,9 @@ export default async function DashboardPage() {
           {sorted.length === 0 ? (
             <div
               className="rounded-2xl p-12 text-center"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)' }}
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
             >
-              <p className="text-sm text-gray-500">{dict.projects.noProjects}</p>
+              <p className="text-sm" style={{ color: 'var(--text-faint)' }}>{dict.projects.noProjects}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

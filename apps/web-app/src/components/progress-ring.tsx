@@ -22,7 +22,7 @@ export function ProgressRing({ value, total, size = 80, stroke = 7, label }: Pro
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="rgba(255,255,255,0.06)"
+          stroke="var(--border-soft)"
           strokeWidth={stroke}
         />
         <circle
@@ -45,11 +45,11 @@ export function ProgressRing({ value, total, size = 80, stroke = 7, label }: Pro
         </defs>
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-bold text-white leading-none" style={{ fontSize: size * 0.2 }}>
+        <span className="font-bold leading-none" style={{ fontSize: size * 0.2, color: 'var(--text)' }}>
           {pct}%
         </span>
         {label && (
-          <span className="text-gray-600 mt-0.5" style={{ fontSize: size * 0.12 }}>
+          <span className="mt-0.5" style={{ fontSize: size * 0.12, color: 'var(--text-faint)' }}>
             {label}
           </span>
         )}

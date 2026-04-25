@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
+import { cookies } from 'next/headers';
 import './globals.css';
-import { ThemeProvider, THEME_INIT_SCRIPT } from '@/lib/theme-context';
+import { ThemeProvider, THEME_INIT_SCRIPT, THEME_COOKIE } from '@/lib/theme-context';
 
 
 export const metadata: Metadata = {
@@ -9,10 +10,13 @@ export const metadata: Metadata = {
 };
 
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+
+  const cookieStore = await cookies();
+  const initialTheme = cookieStore.get(THEME_COOKIE)?.value === 'light' ? 'light' : 'dark';
 
   return (
-    <html lang="en">
+    <html lang="en" className={initialTheme === 'light' ? 'light' : undefined}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
@@ -20,7 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className="min-h-screen antialiased"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider initialTheme={initialTheme}>{children}</ThemeProvider>
       </body>
     </html>
   );

@@ -178,15 +178,15 @@ export default function McpGuidePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100">
+    <div className="min-h-screen" style={{ background: 'var(--bg)', color: 'var(--text)' }}>
 
       {/* Header */}
-      <header className="border-b border-gray-800 bg-gray-900/60 backdrop-blur sticky top-0 z-10">
+      <header className="backdrop-blur sticky top-0 z-10" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-strong)' }}>
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="/projects" className="text-gray-400 hover:text-white text-sm transition-colors">← Dashboard</a>
-            <span className="text-gray-700">/</span>
-            <span className="text-white font-semibold">MCP Setup Guide</span>
+            <a href="/projects" className="text-sm transition-colors hover:opacity-80" style={{ color: 'var(--text-muted)' }}>← Dashboard</a>
+            <span style={{ color: 'var(--text-faint)' }}>/</span>
+            <span className="font-semibold" style={{ color: 'var(--text)' }}>MCP Setup Guide</span>
           </div>
           <div className="flex items-center gap-2">
             <Badge text="Streamable HTTP" color="green" />
@@ -557,7 +557,7 @@ export default function McpGuidePage() {
         </Section>
 
         {/* Footer */}
-        <footer className="border-t border-gray-800 pt-8 text-center text-gray-600 text-sm">
+        <footer className="pt-8 text-center text-sm" style={{ borderTop: '1px solid var(--border)', color: 'var(--text-faint)' }}>
           <p>RoadBoard 2.0 · MCP Streamable HTTP · {TOOL_COUNT} tool esposti</p>
           <p className="mt-1">
             Hai problemi?{' '}
