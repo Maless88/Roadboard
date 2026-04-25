@@ -280,6 +280,12 @@ importers:
       '@roadboard/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@roadboard/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@roadboard/graph-db':
+        specifier: workspace:*
+        version: link:../../packages/graph-db
       bullmq:
         specifier: ^5.0.0
         version: 5.73.0

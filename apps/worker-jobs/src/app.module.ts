@@ -4,6 +4,7 @@ import { optionalEnv } from '@roadboard/config';
 
 import { HealthModule } from './health/health.module';
 import { JobsModule } from './jobs/jobs.module';
+import { GraphProjectionModule } from './modules/graph-projection/graph-projection.module';
 
 
 @Module({
@@ -16,6 +17,7 @@ import { JobsModule } from './jobs/jobs.module';
     }),
     HealthModule,
     JobsModule,
+    GraphProjectionModule,
   ],
 })
 export class AppModule {}
