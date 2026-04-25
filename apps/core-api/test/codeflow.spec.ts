@@ -333,11 +333,7 @@ describe('CodeFlow Graph Integration', () => {
   });
 
 
-  // NOTE: DTO enum validation check skipped — a runtime validation bug
-  // (class-validator decorators are not enforced under tsx+watch in dev)
-  // surfaces here. Container/prod builds enforce @IsIn correctly. See the
-  // backlog task "core-api: ValidationPipe decorators not enforced in dev".
-  it.skip('rejects node creation with invalid type enum', async () => {
+  it('rejects node creation with invalid type enum', async () => {
     const res = await fetch(`${CORE_URL}/projects/${projectId}/codeflow/graph/nodes`, {
       method: 'POST',
       headers: authHeaders(token),
