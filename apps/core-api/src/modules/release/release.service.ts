@@ -30,10 +30,6 @@ export class ReleaseService {
   private readonly logger = new Logger(ReleaseService.name);
   private latestMain: LatestMainCache | null = null;
 
-  invalidateLatestMainCache(): void {
-    this.latestMain = null;
-  }
-
   async getStatus(): Promise<ReleaseStatus> {
 
     const currentSha = optionalEnv("BUILD_SHA", "unknown");
