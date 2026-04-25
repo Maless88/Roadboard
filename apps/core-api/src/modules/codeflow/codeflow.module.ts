@@ -4,6 +4,7 @@ import { GraphDbClient } from '@roadboard/graph-db';
 import { CodeflowService } from './codeflow.service';
 import { GraphService } from './graph.service';
 import { GraphSyncService } from './graph-sync.service';
+import { DriftService } from './drift.service';
 import { RepositoriesController } from './repositories.controller';
 import { GraphController } from './graph.controller';
 
@@ -14,11 +15,12 @@ import { GraphController } from './graph.controller';
     CodeflowService,
     GraphService,
     GraphSyncService,
+    DriftService,
     {
       provide: 'GRAPH_DB_CLIENT',
       useFactory: () => new GraphDbClient(),
     },
   ],
-  exports: [CodeflowService, GraphService],
+  exports: [CodeflowService, GraphService, DriftService],
 })
 export class CodeflowModule {}
