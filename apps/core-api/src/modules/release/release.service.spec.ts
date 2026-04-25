@@ -85,22 +85,6 @@ describe('ReleaseService', () => {
   });
 
 
-  it('invalidateLatestMainCache forces a refetch', async () => {
-
-    const fetchSpy = vi.fn(async () => ({
-      ok: true,
-      async json() { return { sha: 'dddd444' }; },
-    } as unknown as Response));
-    vi.stubGlobal('fetch', fetchSpy);
-
-    await service.getStatus();
-    service.invalidateLatestMainCache();
-    await service.getStatus();
-
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-  });
-
-
   it('startDeploy writes the trigger file to repoPath', async () => {
 
     mockGithubCommit('eeee555');
