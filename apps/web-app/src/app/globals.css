@@ -46,6 +46,9 @@ html.light .text-blue-400 { color: #1d4ed8; }
 html.light .text-purple-400 { color: #6d28d9; }
 html.light .text-red-400 { color: #b91c1c; }
 html.light .text-red-300 { color: #991b1b; }
+html.light .text-orange-400 { color: #c2410c; }
+html.light .text-teal-400 { color: #0f766e; }
+html.light .text-emerald-400 { color: #047857; }
 
 html.light .react-flow__controls-button {
   background: #ffffff !important;
