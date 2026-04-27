@@ -379,10 +379,11 @@ async function MemoryTab({ token, projectId, q, dict }: { token: string; project
 
   // Cap SSR payload — full listing was rendering 400+KB of HTML when the
   // project has many memory entries, which made tab navigation feel
-  // sluggish. Show the most recent 50; the search bar is still available
-  // for older entries.
+  // sluggish. Show the most recent 50 by default; lift the cap when the
+  // user is actively searching so the query hits the full history.
+  const take = q ? undefined : 50;
   const [memory, totalMemory] = await Promise.all([
-    listMemory(token, projectId, q, { take: 50 }),
+    listMemory(token, projectId, q, { take }),
     countMemory(token, projectId, q),
   ]);
 
