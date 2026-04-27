@@ -1,0 +1,19 @@
+[Unit]
+Description=Roadboard CodeFlow drift check (Postgres ↔ Memgraph)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/roadboard
+EnvironmentFile=/opt/roadboard/infra/docker/.env
+Environment=CORE_API_URL=http://localhost:3001
+Environment=DRIFT_CHECK_PROJECT_ID=cmnrj9our000eo343kksv2y8o
+ExecStart=/opt/roadboard/scripts/drift-check.sh
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target
