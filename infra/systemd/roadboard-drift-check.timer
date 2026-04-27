@@ -1,0 +1,14 @@
+[Unit]
+Description=Hourly Roadboard CodeFlow drift check trigger
+Requires=roadboard-drift-check.service
+
+[Timer]
+# Run shortly after boot (5min grace), then every hour.
+OnBootSec=5min
+OnUnitActiveSec=1h
+Unit=roadboard-drift-check.service
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
