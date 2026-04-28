@@ -87,6 +87,14 @@ pnpm db:migrate       # run pending Prisma migrations (ALWAYS use this, never db
 pnpm db:generate      # regenerate Prisma client after schema changes
 pnpm db:seed          # seed the database
 pnpm --filter @roadboard/database db:studio   # open Prisma Studio
+
+# Container rebuild after Nest source changes
+# Required when modifying DTOs, controllers, services, or shared packages used by
+# core-api / auth-access / worker-jobs / mcp-service. The Nest containers run the
+# compiled `dist/` baked at build time — source edits do NOT propagate live.
+# Symptom of skipping this: 400 "property X should not exist" (forbidNonWhitelisted).
+docker compose -f infra/docker/docker-compose.yml build <service>
+docker compose -f infra/docker/docker-compose.yml up -d --no-deps <service>
 ```
 
 Environment: copy `.env.example` to `.env` at repo root. Key vars:
