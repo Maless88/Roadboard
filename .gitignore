@@ -53,3 +53,6 @@ coverage/
 # Playwright test output
 test-results/
 playwright-report/
+
+# Deploy file-drop trigger (created at runtime by core-api, consumed by host systemd.path)
+.deploy-requested
