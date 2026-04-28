@@ -146,6 +146,7 @@ export interface SessionInfo {
   userId: string;
   username: string;
   displayName: string;
+  email: string;
   role: string;
   managerId: string | null;
   expiresAt: string;
@@ -839,6 +840,108 @@ export async function deleteMembership(token: string, id: string): Promise<void>
   });
 
   if (!res.ok) throw new Error(`Failed to delete membership: ${res.status}`);
+}
+
+
+export interface TeamInviteUserRef {
+  id: string;
+  username: string;
+  displayName: string;
+}
+
+
+export interface TeamInvite {
+  id: string;
+  teamId: string;
+  email: string;
+  role: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'revoked' | 'expired';
+  invitedByUserId: string;
+  expiresAt: string;
+  acceptedAt?: string | null;
+  acceptedByUserId?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  invitedBy?: TeamInviteUserRef;
+  acceptedBy?: TeamInviteUserRef | null;
+}
+
+
+export interface TeamInviteWithTeam extends TeamInvite {
+  team: { id: string; name: string; slug: string; description?: string | null };
+}
+
+
+export async function listTeamInvites(token: string, teamId: string): Promise<TeamInvite[]> {
+
+  const res = await fetch(`${AUTH_API}/teams/${teamId}/invites`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error(`Failed to fetch invites: ${res.status}`);
+
+  return res.json() as Promise<TeamInvite[]>;
+}
+
+
+export async function createTeamInvite(
+  token: string,
+  teamId: string,
+  data: { email: string; role?: string; expiresInDays?: number },
+): Promise<TeamInvite> {
+
+  const res = await fetch(`${AUTH_API}/teams/${teamId}/invites`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `Failed to create invite: ${res.status}`);
+  }
+
+  return res.json() as Promise<TeamInvite>;
+}
+
+
+export async function revokeTeamInvite(token: string, inviteId: string): Promise<void> {
+
+  const res = await fetch(`${AUTH_API}/invites/${inviteId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error(`Failed to revoke invite: ${res.status}`);
+}
+
+
+export async function getTeamInviteByToken(inviteToken: string): Promise<TeamInviteWithTeam> {
+
+  const res = await fetch(`${AUTH_API}/invites/by-token/${inviteToken}`);
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `Invite not found`);
+  }
+
+  return res.json() as Promise<TeamInviteWithTeam>;
+}
+
+
+export async function acceptTeamInvite(token: string, inviteToken: string): Promise<TeamInvite> {
+
+  const res = await fetch(`${AUTH_API}/invites/by-token/${inviteToken}/accept`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `Failed to accept invite: ${res.status}`);
+  }
+
+  return res.json() as Promise<TeamInvite>;
 }
 
 

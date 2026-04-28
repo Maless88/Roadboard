@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation';
+import { headers } from 'next/headers';
 import Link from 'next/link';
 import { getToken } from '@/lib/auth';
 import { getDict } from '@/lib/i18n';
@@ -7,8 +8,10 @@ import {
   getTeam,
   listMemberships,
   listProjects,
+  listTeamInvites,
 } from '@/lib/api';
 import { AppShell } from '@/components/app-shell';
+import { InvitesSection } from './invites-section';
 
 
 const PROJECT_STATUS_COLOR: Record<string, string> = {
@@ -50,12 +53,21 @@ export default async function TeamPage({ params }: Props) {
     notFound();
   }
 
-  const [memberships, allProjects] = await Promise.all([
+  const [memberships, allProjects, invites, hdrs] = await Promise.all([
     listMemberships(token, team.id).catch(() => []),
     listProjects(token).catch(() => []),
+    listTeamInvites(token, team.id).catch(() => []),
+    headers(),
   ]);
 
   const teamProjects = allProjects.filter((p) => p.ownerTeamId === team.id);
+
+  const myMembership = memberships.find((m) => m.userId === session.userId);
+  const isAdmin = myMembership?.role === 'admin' && myMembership?.status === 'active';
+
+  const proto = hdrs.get('x-forwarded-proto') ?? 'https';
+  const host = hdrs.get('host') ?? 'localhost:3000';
+  const origin = `${proto}://${host}`;
 
   return (
     <AppShell
@@ -123,6 +135,14 @@ export default async function TeamPage({ params }: Props) {
             </div>
           )}
         </section>
+
+        <InvitesSection
+          token={token}
+          teamId={team.id}
+          invites={invites}
+          isAdmin={isAdmin}
+          origin={origin}
+        />
 
         <section>
           <h2 className="text-sm font-semibold text-white mb-3">{dict.teamPage.projects}</h2>

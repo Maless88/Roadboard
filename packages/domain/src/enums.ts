@@ -69,6 +69,13 @@ export enum TeamMembershipStatus {
   INACTIVE = 'inactive',
 }
 
+export enum TeamInviteStatus {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REVOKED = 'revoked',
+  EXPIRED = 'expired',
+}
+
 export enum McpTokenStatus {
   ACTIVE = 'active',
   REVOKED = 'revoked',
