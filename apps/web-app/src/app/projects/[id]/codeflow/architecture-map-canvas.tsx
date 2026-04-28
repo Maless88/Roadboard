@@ -246,6 +246,25 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+
+    if (!isFullscreen) return;
+
+    const onKey = (e: KeyboardEvent) => {
+
+      if (e.key === 'Escape') setIsFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFullscreen]);
 
   const hierarchy = useMemo(() => buildHierarchy(archNodes), [archNodes]);
 
@@ -434,12 +453,38 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         >
           Comprimi tutto
         </button>
+        <button
+          type="button"
+          onClick={() => setIsFullscreen((v) => !v)}
+          aria-label={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
+          title={isFullscreen ? 'Esci da schermo intero (Esc)' : 'Schermo intero'}
+          className="px-2 py-1 text-[11px] rounded-md transition-colors ml-auto"
+          style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
+        >
+          {isFullscreen ? '⤓ Riduci' : '⤢ Schermo intero'}
+        </button>
       </div>
 
       <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: '1px solid var(--border-soft)', height: 560, background: palette.canvasBg }}
+        className={isFullscreen ? 'fixed inset-0 z-50' : 'rounded-xl overflow-hidden relative'}
+        style={
+          isFullscreen
+            ? { background: palette.canvasBg }
+            : { border: '1px solid var(--border-soft)', height: 560, background: palette.canvasBg }
+        }
       >
+        {isFullscreen && (
+          <button
+            type="button"
+            onClick={() => setIsFullscreen(false)}
+            aria-label="Esci da schermo intero"
+            title="Esci da schermo intero (Esc)"
+            className="absolute top-3 right-3 z-10 px-3 py-1.5 text-xs rounded-md transition-colors"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
+          >
+            ⤓ Riduci
+          </button>
+        )}
         {rfNodes.length === 0 ? (
           <div className="flex items-center justify-center h-full text-xs text-gray-500">
             {dict.noNodes}
