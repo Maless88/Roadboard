@@ -162,7 +162,7 @@ function SecurityTab() {
         {state.error && <Alert type="error" msg={state.error} />}
         {state.success && <Alert type="success" msg={dict.settings.security.success} />}
         <Field label={dict.settings.security.currentPassword} name="currentPassword" type="password" />
-        <Field label={dict.settings.security.newPassword} name="newPassword" type="password" placeholder="min. 8 caratteri" />
+        <Field label={dict.settings.security.newPassword} name="newPassword" type="password" placeholder={dict.auth.passwordMinShort} />
         <Field label={dict.settings.security.confirmPassword} name="confirmPassword" type="password" />
         <SubmitBtn pending={pending} label={dict.settings.security.updateButton} pendingLabel={dict.settings.security.updating} />
       </form>
@@ -308,9 +308,9 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
         <form ref={formRef} action={createAction} className="space-y-4 max-w-sm">
           {createState.error && <Alert type="error" msg={createState.error} />}
           <input type="hidden" name="userId" value={session.userId} />
-          <Field label="Nome" name="name" placeholder="es. claude-local" />
+          <Field label={dict.settings.tokens.nameLabel} name="name" placeholder={dict.settings.tokens.namePlaceholderExample} />
           <div className="space-y-2">
-            <p className="text-xs text-gray-400 font-medium">Scopes</p>
+            <p className="text-xs text-gray-400 font-medium">{dict.settings.tokens.scopesLabel}</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               {MCP_TOKEN_SCOPES.map((s) => (
                 <label key={s.value} className="flex items-center gap-2 text-xs text-gray-300 cursor-pointer">
@@ -332,9 +332,9 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
 
       <Card>
         <p className="text-xs text-gray-500 leading-relaxed">
-          Usa il token generato per configurare il tuo client MCP.{' '}
+          {dict.settings.tokens.helpText}{' '}
           <a href="/mcp-guide" className="text-indigo-400 hover:text-indigo-300 underline">
-            Guida alla configurazione →
+            {dict.settings.tokens.helpLink}
           </a>
         </p>
       </Card>
@@ -342,13 +342,6 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
   );
 }
 
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'Admin',
-  team_leader: 'Team Leader',
-  developer: 'Developer',
-  guest: 'Guest',
-};
 
 const ROLE_COLORS: Record<string, string> = {
   admin: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20',
@@ -360,7 +353,14 @@ const ROLE_COLORS: Record<string, string> = {
 
 function RoleBadge({ role }: { role: string }) {
 
+  const dict = useDict();
   const cls = ROLE_COLORS[role] ?? ROLE_COLORS.guest;
+  const ROLE_LABELS: Record<string, string> = {
+    admin: dict.roles.admin,
+    team_leader: dict.roles.teamLeader,
+    developer: dict.roles.developer,
+    guest: dict.roles.guest,
+  };
 
   return (
     <span className={`text-xs px-2 py-0.5 rounded border ${cls}`}>
@@ -389,13 +389,13 @@ function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void
       <div className="rounded-xl p-6 w-full max-w-sm mx-4 shadow-2xl" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', backdropFilter: 'blur(20px)' }}>
         <h3 className="text-sm font-semibold text-white mb-1">{dict.settings.users.resetTitle}</h3>
         <p className="text-xs text-gray-400 mb-4">
-          Imposta una nuova password per <strong className="text-white">{user.displayName}</strong>
+          {dict.settings.users.resetSubtitlePrefix}<strong>{user.displayName}</strong>{dict.settings.users.resetSubtitleSuffix}
         </p>
         <form ref={formRef} action={action} className="space-y-4">
           {state.error && <Alert type="error" msg={state.error} />}
           {state.success && <Alert type="success" msg={dict.settings.users.resetSuccess} />}
           <input type="hidden" name="userId" value={user.id} />
-          <Field label={dict.settings.users.newPasswordPlaceholder} name="newPassword" type="password" placeholder="min. 8 caratteri" />
+          <Field label={dict.settings.users.newPasswordPlaceholder} name="newPassword" type="password" placeholder={dict.auth.passwordMinShort} />
           <div className="flex gap-3">
             <SubmitBtn pending={pending} label={dict.settings.users.resetButton} pendingLabel={dict.settings.users.resetting} />
             <button
@@ -484,22 +484,22 @@ function UsersTab({
         <form ref={formRef} action={createAction} className="space-y-4 max-w-sm">
           {createState.error && <Alert type="error" msg={createState.error} />}
           {createState.success && <Alert type="success" msg={dict.settings.users.success} />}
-          <Field label="Username" name="username" placeholder="es. mario" />
-          <Field label={dict.settings.users.displayNamePlaceholder} name="displayName" placeholder="es. Mario Rossi" />
-          <Field label="Email" name="email" type="email" placeholder="mario@esempio.it" />
-          <Field label="Password iniziale" name="password" type="password" placeholder="min. 8 caratteri" />
+          <Field label={dict.settings.users.usernameLabel} name="username" placeholder={dict.settings.users.usernameExamplePlaceholder} />
+          <Field label={dict.settings.users.displayNamePlaceholder} name="displayName" placeholder={dict.settings.users.displayNameExamplePlaceholder} />
+          <Field label={dict.settings.users.emailLabel} name="email" type="email" placeholder={dict.settings.users.emailExamplePlaceholder} />
+          <Field label={dict.settings.users.initialPasswordLabel} name="password" type="password" placeholder={dict.auth.passwordMinShort} />
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Ruolo</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">{dict.settings.users.roleLabel}</label>
             <select
               name="role"
               defaultValue="developer"
               className="w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
               style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
             >
-              {isAdmin && <option value="admin" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Admin</option>}
-              {isAdmin && <option value="team_leader" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Team Leader</option>}
-              <option value="developer" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Developer</option>
-              <option value="guest" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>Guest</option>
+              {isAdmin && <option value="admin" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.roles.admin}</option>}
+              {isAdmin && <option value="team_leader" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.roles.teamLeader}</option>}
+              <option value="developer" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.roles.developer}</option>
+              <option value="guest" style={{ background: 'var(--surface-overlay)', color: 'var(--text)' }}>{dict.roles.guest}</option>
             </select>
           </div>
           <SubmitBtn pending={createPending} label={dict.settings.users.createButton} pendingLabel={dict.settings.users.creating} />

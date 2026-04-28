@@ -58,7 +58,7 @@ export function PhaseAccordion({ phase, tasks, projectId }: PhaseAccordionProps)
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0 ml-4">
-          <span className="text-xs text-gray-500">{tasks.length} task</span>
+          <span className="text-xs text-gray-500">{dict.phase.taskCounter(tasks.length)}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLOR[phase.status] ?? 'bg-gray-500/10 text-gray-400'}`}>
             {phase.status}
           </span>
@@ -75,7 +75,7 @@ export function PhaseAccordion({ phase, tasks, projectId }: PhaseAccordionProps)
 
       {open && tasks.length === 0 && (
         <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.01)' }}>
-          <p className="text-xs text-gray-500">Nessun task in questa fase.</p>
+          <p className="text-xs text-gray-500">{dict.phase.noTasks}</p>
         </div>
       )}
 

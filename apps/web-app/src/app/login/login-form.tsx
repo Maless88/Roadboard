@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import { useActionState } from 'react';
 import { loginAction, registerAction } from '@/app/actions';
+import { useDict } from '@/lib/i18n/locale-context';
+import type { Dictionary } from '@/lib/i18n/types';
 
 
-function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledEmail: string | null }) {
+function LoginFields({ pending, prefilledEmail, dict }: { pending: boolean; prefilledEmail: string | null; dict: Dictionary }) {
 
   // The login uses username, but if we received an email via invite link
   // we surface it as a hint via placeholder so the user knows which account to pick.
@@ -15,7 +17,7 @@ function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledE
     <>
       <div>
         <label htmlFor="username" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Username
+          {dict.auth.usernameLabel}
         </label>
         <input
           id="username"
@@ -24,13 +26,13 @@ function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledE
           required
           autoComplete="username"
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="username"
+          placeholder={dict.auth.usernamePlaceholder.toLowerCase()}
         />
       </div>
 
       <div>
         <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Password
+          {dict.auth.passwordLabel}
         </label>
         <input
           id="password"
@@ -39,7 +41,7 @@ function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledE
           required
           autoComplete="current-password"
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="••••••••"
+          placeholder={dict.auth.passwordDotsPlaceholder}
         />
       </div>
 
@@ -48,20 +50,20 @@ function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledE
         disabled={pending}
         className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {pending ? 'Accesso in corso…' : 'Accedi'}
+        {pending ? dict.auth.loggingIn : dict.auth.login}
       </button>
     </>
   );
 }
 
 
-function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefilledEmail: string | null }) {
+function RegisterFields({ pending, prefilledEmail, dict }: { pending: boolean; prefilledEmail: string | null; dict: Dictionary }) {
 
   return (
     <>
       <div>
         <label htmlFor="username" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Username
+          {dict.auth.usernameLabel}
         </label>
         <input
           id="username"
@@ -70,13 +72,13 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           required
           autoComplete="username"
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="mario.rossi"
+          placeholder={dict.auth.usernameRegisterPlaceholder}
         />
       </div>
 
       <div>
         <label htmlFor="displayName" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Nome completo
+          {dict.auth.fullNameLabel}
         </label>
         <input
           id="displayName"
@@ -85,13 +87,13 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           required
           autoComplete="name"
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="Mario Rossi"
+          placeholder={dict.auth.fullNamePlaceholder}
         />
       </div>
 
       <div>
         <label htmlFor="email" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Email
+          {dict.auth.emailLabel}
         </label>
         <input
           id="email"
@@ -102,13 +104,13 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           defaultValue={prefilledEmail ?? undefined}
           readOnly={!!prefilledEmail}
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="mario@esempio.it"
+          placeholder={dict.auth.emailExamplePlaceholder}
         />
       </div>
 
       <div>
         <label htmlFor="password" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Password
+          {dict.auth.passwordLabel}
         </label>
         <input
           id="password"
@@ -118,13 +120,13 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           autoComplete="new-password"
           minLength={8}
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="Minimo 8 caratteri"
+          placeholder={dict.auth.passwordMinPlaceholder}
         />
       </div>
 
       <div>
         <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
-          Conferma password
+          {dict.auth.confirmPasswordLabel}
         </label>
         <input
           id="confirmPassword"
@@ -133,7 +135,7 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           required
           autoComplete="new-password"
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
-          placeholder="••••••••"
+          placeholder={dict.auth.passwordDotsPlaceholder}
         />
       </div>
 
@@ -146,8 +148,8 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
           style={{ background: 'var(--surface-overlay)', borderColor: 'var(--border)' }}
         />
         <span>
-          Crea un progetto di esempio
-          <span className="block text-xs" style={{ color: 'var(--text-faint)' }}>Per esplorare subito task, decisioni, memoria e Atlas.</span>
+          {dict.auth.seedDemoTitle}
+          <span className="block text-xs" style={{ color: 'var(--text-faint)' }}>{dict.auth.seedDemoHint}</span>
         </span>
       </label>
 
@@ -156,7 +158,7 @@ function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefill
         disabled={pending}
         className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {pending ? 'Registrazione in corso…' : 'Crea account'}
+        {pending ? dict.auth.registering : dict.auth.createAccountButton}
       </button>
     </>
   );
@@ -171,6 +173,7 @@ export function LoginForm({
   prefilledEmail?: string | null;
 } = {}) {
 
+  const dict = useDict();
   const [mode, setMode] = useState<'login' | 'register'>(inviteToken ? 'register' : 'login');
 
   const [loginState, loginDispatch, loginPending] = useActionState(loginAction, {});
@@ -191,7 +194,7 @@ export function LoginForm({
             ? { background: 'var(--surface-hover)', color: 'var(--text)' }
             : { color: 'var(--text-muted)' }}
         >
-          Accedi
+          {dict.auth.login}
         </button>
         <button
           type="button"
@@ -201,7 +204,7 @@ export function LoginForm({
             ? { background: 'var(--surface-hover)', color: 'var(--text)' }
             : { color: 'var(--text-muted)' }}
         >
-          Registrati
+          {dict.auth.register}
         </button>
       </div>
 
@@ -218,8 +221,8 @@ export function LoginForm({
         )}
 
         {mode === 'login'
-          ? <LoginFields pending={pending} prefilledEmail={prefilledEmail} />
-          : <RegisterFields pending={pending} prefilledEmail={prefilledEmail} />
+          ? <LoginFields pending={pending} prefilledEmail={prefilledEmail} dict={dict} />
+          : <RegisterFields pending={pending} prefilledEmail={prefilledEmail} dict={dict} />
         }
 
       </form>

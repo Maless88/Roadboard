@@ -82,7 +82,7 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
           <div className="flex flex-wrap gap-4">
             {task.dueDate && (
               <div>
-                <span className="text-xs text-gray-600 uppercase tracking-wider">Scadenza</span>
+                <span className="text-xs text-gray-600 uppercase tracking-wider">{dict.task.dueDate}</span>
                 <p className="text-xs text-gray-300 mt-0.5">
                   {new Date(task.dueDate).toLocaleDateString('it-IT')}
                 </p>
@@ -90,7 +90,7 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
             )}
             {task.completedAt && (
               <div>
-                <span className="text-xs text-gray-600 uppercase tracking-wider">Completato</span>
+                <span className="text-xs text-gray-600 uppercase tracking-wider">{dict.task.completedDate}</span>
                 <p className="text-xs text-green-400 mt-0.5">
                   {new Date(task.completedAt).toLocaleDateString('it-IT')}
                 </p>
@@ -99,7 +99,7 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
           </div>
           {task.completionNotes && (
             <div>
-              <span className="text-xs text-gray-600 uppercase tracking-wider">Note</span>
+              <span className="text-xs text-gray-600 uppercase tracking-wider">{dict.task.notes}</span>
               <p className="text-xs text-gray-400 mt-0.5 italic">{task.completionNotes}</p>
             </div>
           )}

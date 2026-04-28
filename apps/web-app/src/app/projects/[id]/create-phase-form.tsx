@@ -83,7 +83,7 @@ export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormPr
           onChange={(e) => setDecisionId(e.target.value)}
           className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
-          <option value="">Nessuna decision collegata</option>
+          <option value="">{dict.forms.noDecisionLinked}</option>
           {decisions.map((d) => (
             <option key={d.id} value={d.id}>{d.title}</option>
           ))}

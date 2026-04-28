@@ -76,7 +76,7 @@ export function ReleaseBanner() {
 
       if (!res.ok) {
         const text = await res.text();
-        setError(text || 'deploy failed');
+        setError(text || dict.release.deployFailed);
         return;
       }
 
@@ -84,7 +84,7 @@ export function ReleaseBanner() {
 
       if (fresh) setStatus(fresh);
     } catch {
-      setError('network error');
+      setError(dict.release.networkError);
     }
   }
 

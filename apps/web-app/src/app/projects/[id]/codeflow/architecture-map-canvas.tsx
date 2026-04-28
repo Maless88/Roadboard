@@ -18,6 +18,7 @@ import dagre from 'dagre';
 import type { ArchitectureNode, ArchitectureEdge } from '@/lib/api';
 import { NodeDrawer } from './node-drawer';
 import { useTheme } from '@/lib/theme-context';
+import { useDict } from '@/lib/i18n/locale-context';
 
 import '@xyflow/react/dist/style.css';
 
@@ -239,6 +240,7 @@ function layoutGraph(
 
 export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: archEdges, dict }: Props) {
 
+  const fullDict = useDict();
   const { theme } = useTheme();
   const searchParams = useSearchParams();
   const focusPath = searchParams?.get('file') ?? null;
@@ -453,12 +455,12 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         <button
           type="button"
           onClick={() => setIsFullscreen((v) => !v)}
-          aria-label={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
-          title={isFullscreen ? 'Esci da schermo intero (Esc)' : 'Schermo intero'}
+          aria-label={isFullscreen ? fullDict.codeflow.exitFullscreenLabel : fullDict.codeflow.fullscreenLabel}
+          title={isFullscreen ? fullDict.codeflow.exitFullscreenTooltip : fullDict.codeflow.fullscreenTooltip}
           className="px-2 py-1 text-[11px] rounded-md transition-colors ml-auto"
           style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
         >
-          {isFullscreen ? '⤓ Riduci' : '⤢ Schermo intero'}
+          {isFullscreen ? fullDict.codeflow.exitFullscreen : fullDict.codeflow.fullscreen}
         </button>
       </div>
 
@@ -474,12 +476,12 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
           <button
             type="button"
             onClick={() => setIsFullscreen(false)}
-            aria-label="Esci da schermo intero"
-            title="Esci da schermo intero (Esc)"
+            aria-label={fullDict.codeflow.exitFullscreenLabel}
+            title={fullDict.codeflow.exitFullscreenTooltip}
             className="absolute top-3 right-3 z-10 px-3 py-1.5 text-xs rounded-md transition-colors"
             style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
           >
-            ⤓ Riduci
+            {fullDict.codeflow.exitFullscreen}
           </button>
         )}
         {rfNodes.length === 0 ? (

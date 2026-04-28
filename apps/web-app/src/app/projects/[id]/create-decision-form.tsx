@@ -91,7 +91,7 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
         className="glass-input w-full text-sm rounded-lg px-3 py-1.5 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
       />
       <textarea
-        placeholder="Outcome (opzionale)"
+        placeholder={dict.forms.outcomeOptional}
         value={outcome}
         onChange={(e) => setOutcome(e.target.value)}
         rows={2}
@@ -104,9 +104,9 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
           onChange={(e) => setImpactLevel(e.target.value)}
           className="glass-input flex-1 text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
-          <option value="low">Impatto: low</option>
-          <option value="medium">Impatto: medium</option>
-          <option value="high">Impatto: high</option>
+          <option value="low">{dict.forms.impactLow}</option>
+          <option value="medium">{dict.forms.impactMedium}</option>
+          <option value="high">{dict.forms.impactHigh}</option>
         </select>
 
         <select
@@ -114,10 +114,10 @@ export function CreateDecisionForm({ projectId }: CreateDecisionFormProps) {
           onChange={(e) => setStatus(e.target.value)}
           className="glass-input flex-1 text-xs rounded-lg px-2 py-1.5 text-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         >
-          <option value="open">open</option>
-          <option value="accepted">accepted</option>
-          <option value="rejected">rejected</option>
-          <option value="superseded">superseded</option>
+          <option value="open">{dict.forms.statusOpen}</option>
+          <option value="accepted">{dict.forms.statusAccepted}</option>
+          <option value="rejected">{dict.forms.statusRejected}</option>
+          <option value="superseded">{dict.forms.statusSuperseded}</option>
         </select>
       </div>
 

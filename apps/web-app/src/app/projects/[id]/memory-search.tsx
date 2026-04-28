@@ -2,10 +2,12 @@
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTransition } from 'react';
+import { useDict } from '@/lib/i18n/locale-context';
 
 
 export function MemorySearch({ defaultValue = '' }: { defaultValue?: string }) {
 
+  const dict = useDict();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -30,7 +32,7 @@ export function MemorySearch({ defaultValue = '' }: { defaultValue?: string }) {
   return (
     <input
       type="search"
-      placeholder="Cerca nel memory log…"
+      placeholder={dict.forms.memorySearchPlaceholder}
       defaultValue={defaultValue}
       onChange={handleChange}
       className={[

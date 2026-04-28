@@ -72,7 +72,7 @@ export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) 
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-4">
           {phases.length > 0 && (
-            <span className="text-xs text-gray-500">{phases.length} {phases.length === 1 ? 'fase' : 'fasi'}</span>
+            <span className="text-xs text-gray-500">{dict.decision.phaseCounter(phases.length)}</span>
           )}
           {decision.impactLevel && (
             <span className={`text-xs font-medium ${IMPACT_COLOR[decision.impactLevel] ?? 'text-gray-400'}`}>
@@ -99,15 +99,15 @@ export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) 
           )}
           {decision.outcome && (
             <div className="px-4 pt-2">
-              <p className="text-xs text-green-400 mb-1">Outcome:</p>
+              <p className="text-xs text-green-400 mb-1">{dict.decision.outcome}</p>
               <Markdown className="text-xs text-green-400">{decision.outcome}</Markdown>
             </div>
           )}
 
           <div className="px-4 pt-3 pb-1">
-            <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Fasi risolutive</p>
+            <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">{dict.decision.resolvingPhases}</p>
             {phases.length === 0 ? (
-              <p className="text-xs text-gray-500 pb-3">Nessuna fase collegata a questa decision.</p>
+              <p className="text-xs text-gray-500 pb-3">{dict.decision.noPhasesLinked}</p>
             ) : (
               <div className="space-y-1.5 pb-3">
                 {phases.map((phase) => (
@@ -133,7 +133,7 @@ export function DecisionAccordion({ decision, phases }: DecisionAccordionProps) 
 
           {decision.resolvedAt && (
             <div className="px-4 pb-3">
-              <p className="text-xs text-gray-600">Risolto: {new Date(decision.resolvedAt).toLocaleDateString('it-IT')}</p>
+              <p className="text-xs text-gray-600">{dict.decision.resolvedAt(new Date(decision.resolvedAt).toLocaleDateString('it-IT'))}</p>
             </div>
           )}
 

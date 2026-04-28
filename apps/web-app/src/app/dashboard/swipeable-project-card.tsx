@@ -205,7 +205,7 @@ export function SwipeableProjectCard({ project, snap }: Props) {
           onClick={handleArchive}
           onPointerDown={(e) => e.stopPropagation()}
           disabled={isPending}
-          aria-label="Archivia progetto"
+          aria-label={dict.project.archiveLabel}
           style={{ width: SNAP_OPEN, opacity: revealWidth < 20 ? 0 : Math.min(1, (revealWidth - 20) / 30) }}
           className="flex flex-col items-center justify-center gap-1.5 h-full transition-opacity disabled:opacity-40 group"
         >
@@ -220,7 +220,7 @@ export function SwipeableProjectCard({ project, snap }: Props) {
                   <path d="M10 12h4" />
                 </svg>
               </div>
-              <span className="text-xs font-medium text-amber-300 group-hover:text-amber-200 transition-colors">archivia</span>
+              <span className="text-xs font-medium text-amber-300 group-hover:text-amber-200 transition-colors">{dict.project.archive}</span>
             </>
           )}
         </button>
