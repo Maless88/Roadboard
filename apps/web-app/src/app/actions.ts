@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
-  login, logout, register, updateTaskStatus,
+  login, logout, register, updateTaskStatus, deleteTask,
   createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject, updateProject,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
@@ -99,6 +99,28 @@ export async function updateTaskStatusAction(
 
   await updateTaskStatus(token, taskId, status);
   revalidatePath(`/projects/${projectId}`);
+}
+
+
+export async function deleteTaskAction(
+  taskId: string,
+  projectId: string,
+): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    await deleteTask(token, taskId);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  return {};
 }
 
 

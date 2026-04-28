@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
 import { TaskStatusSelect } from './task-status';
+import { TaskDeleteButton } from './task-delete-button';
 import { AttributionLine } from './attribution-line';
 import { Markdown } from '@/components/markdown';
 import type { Task } from '@/lib/api';
@@ -35,8 +36,6 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
   const [open, setOpen] = useState(false);
   const dict = useDict();
 
-  const hasDetails = task.description || task.dueDate || task.completionNotes || task.completedAt || task.createdBy || task.updatedBy;
-
   return (
     <>
       <div
@@ -48,18 +47,15 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
         onClick={() => setOpen((v) => !v)}
       >
         <div className="flex items-center gap-3 min-w-0">
-          {hasDetails && (
-            <svg
-              className={`shrink-0 w-3 h-3 text-gray-600 transition-transform ${open ? 'rotate-90' : ''}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          )}
-          {!hasDetails && <span className="w-3 shrink-0" />}
+          <svg
+            className={`shrink-0 w-3 h-3 text-gray-600 transition-transform ${open ? 'rotate-90' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
           <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TASK_STATUS_COLOR[task.status] ?? 'bg-gray-700 text-gray-300'}`}>
             {task.status.replace('_', ' ')}
           </span>
@@ -75,7 +71,7 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
         </div>
       </div>
 
-      {open && hasDetails && (
+      {open && (
         <div
           className="px-4 py-3 space-y-2"
           style={{ borderBottom: !isLast ? '1px solid rgba(255,255,255,0.05)' : undefined, background: 'rgba(255,255,255,0.01)' }}
@@ -114,6 +110,9 @@ export function TaskRow({ task, projectId, isLast }: TaskRowProps) {
             dict={dict}
             className="pt-1"
           />
+          <div className="flex justify-end pt-2" onClick={(e) => e.stopPropagation()}>
+            <TaskDeleteButton taskId={task.id} taskTitle={task.title} projectId={projectId} />
+          </div>
         </div>
       )}
     </>

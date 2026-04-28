@@ -235,6 +235,21 @@ export class CoreApiClient {
   }
 
 
+  async deleteTask(taskId: string): Promise<{ ok: true; taskId: string }> {
+
+    const res = await fetch(`${BASE_URL}/tasks/${taskId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api deleteTask failed: ${res.status}`);
+    }
+
+    return { ok: true, taskId };
+  }
+
+
   async listMemory(projectId: string, type?: string): Promise<unknown[]> {
 
     const params = new URLSearchParams({ projectId });
