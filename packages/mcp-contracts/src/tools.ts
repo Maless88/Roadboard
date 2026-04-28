@@ -57,7 +57,8 @@ export const GET_PROJECT_TOOL: McpToolDefinition = {
 
 export const LIST_ACTIVE_TASKS_TOOL: McpToolDefinition = {
   name: 'list_active_tasks',
-  description: 'List tasks for a project, optionally filtered by status',
+  description:
+    'List tasks for a project. Recommended for large projects: pass `compact: true` to drop verbose fields (description, completionNotes), and `limit` for cursor-based pagination — without it the response can exceed MCP token limits. Without parameters returns the full list (back-compat).',
   inputSchema: {
     type: 'object',
     properties: {
@@ -68,6 +69,26 @@ export const LIST_ACTIVE_TASKS_TOOL: McpToolDefinition = {
       status: {
         type: 'string',
         description: 'Filter by task status',
+      },
+      limit: {
+        type: 'number',
+        description:
+          'Page size (1-200). When provided, response is `{ items, nextCursor }`. Pass nextCursor back as `cursor` for the next page. Omit for legacy flat-array response.',
+      },
+      cursor: {
+        type: 'string',
+        description: "Task id from a previous response's `nextCursor`. Requires `limit`.",
+      },
+      compact: {
+        type: 'boolean',
+        description:
+          'If true, returns only id, title, status, priority, phaseId, dueDate, createdAt — dropping description and other verbose fields. Recommended default for agents browsing a project.',
+      },
+      fields: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Whitelist of fields to return (alternative to `compact`). Allowed: id, title, description, status, priority, phaseId, projectId, assigneeId, dueDate, completionNotes, completedAt, createdAt, updatedAt, createdByUserId, updatedByUserId. id is always included.',
       },
     },
     required: ['projectId'],

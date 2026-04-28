@@ -1,6 +1,48 @@
-import { Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { MemoryEntryType, ProjectStatus, TaskStatus } from '@roadboard/domain';
+
+
+export const TASK_FIELD_WHITELIST = [
+  'id',
+  'title',
+  'description',
+  'status',
+  'priority',
+  'phaseId',
+  'projectId',
+  'assigneeId',
+  'dueDate',
+  'completionNotes',
+  'completedAt',
+  'createdAt',
+  'updatedAt',
+  'createdByUserId',
+  'updatedByUserId',
+] as const;
+export type TaskField = (typeof TASK_FIELD_WHITELIST)[number];
+
+export const TASK_COMPACT_FIELDS: ReadonlyArray<TaskField> = [
+  'id',
+  'title',
+  'status',
+  'priority',
+  'phaseId',
+  'dueDate',
+  'createdAt',
+];
 
 
 export class FindProjectsQueryDto {
@@ -44,6 +86,30 @@ export class FindTasksQueryDto extends ProjectScopedQueryDto {
   @IsInt()
   @Min(1)
   take?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cursor?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  compact?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',').map((s) => s.trim()).filter(Boolean) : value))
+  @IsArray()
+  @ArrayUnique()
+  @IsIn(TASK_FIELD_WHITELIST as unknown as readonly string[], { each: true })
+  fields?: TaskField[];
 }
 
 

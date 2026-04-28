@@ -46,6 +46,10 @@ export class TasksController {
       phaseId: query.phaseId,
       status: query.status,
       take: query.take,
+      limit: query.limit,
+      cursor: query.cursor,
+      compact: query.compact,
+      fields: query.fields,
     });
   }
 

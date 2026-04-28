@@ -78,12 +78,25 @@ export class CoreApiClient {
   }
 
 
-  async listTasks(projectId: string, status?: string): Promise<unknown[]> {
+  async listTasks(
+    projectId: string,
+    options: {
+      status?: string;
+      limit?: number;
+      cursor?: string;
+      compact?: boolean;
+      fields?: string[];
+    } = {},
+  ): Promise<unknown> {
 
     const params = new URLSearchParams({ projectId });
 
-    if (status) {
-      params.set("status", status);
+    if (options.status) params.set("status", options.status);
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
+    if (options.compact) params.set("compact", "true");
+    if (options.fields && options.fields.length > 0) {
+      params.set("fields", options.fields.join(","));
     }
 
     const res = await fetch(`${BASE_URL}/tasks?${params.toString()}`, {
@@ -94,7 +107,7 @@ export class CoreApiClient {
       throw new Error(`core-api listTasks failed: ${res.status}`);
     }
 
-    return res.json() as Promise<unknown[]>;
+    return res.json() as Promise<unknown>;
   }
 
 

@@ -5,6 +5,7 @@ import type { AuthUser } from '../../common/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { CreateTaskDto } from './create-task.dto';
 import { UpdateTaskDto } from './update-task.dto';
+import { TASK_COMPACT_FIELDS, type TaskField } from '../../common/query.dto';
 
 
 interface FindAllFilters {
@@ -12,6 +13,16 @@ interface FindAllFilters {
   phaseId?: string;
   status?: TaskStatus;
   take?: number;
+  limit?: number;
+  cursor?: string;
+  compact?: boolean;
+  fields?: TaskField[];
+}
+
+
+export interface PaginatedTasks<T> {
+  items: T[];
+  nextCursor: string | null;
 }
 
 
@@ -72,12 +83,44 @@ export class TasksService {
       where.status = filters.status;
     }
 
-    return this.prisma.task.findMany({
-      where,
-      include: AUTHOR_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      ...(filters.take ? { take: filters.take } : {}),
-    });
+    const orderBy = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+    const explicit = filters.fields && filters.fields.length > 0 ? filters.fields : null;
+    const useSelect = filters.compact === true || explicit !== null;
+    const isPaginated = filters.limit !== undefined;
+
+    const baseArgs: Record<string, unknown> = { where, orderBy };
+
+    if (useSelect) {
+      const chosen = explicit ?? TASK_COMPACT_FIELDS;
+      const select: Record<string, true> = { id: true };
+
+      for (const f of chosen) {
+        select[f] = true;
+      }
+      baseArgs.select = select;
+    } else {
+      baseArgs.include = AUTHOR_INCLUDE;
+    }
+
+    if (isPaginated) {
+      const limit = filters.limit!;
+      const args = {
+        ...baseArgs,
+        take: limit + 1,
+        ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+      };
+
+      const items = (await this.prisma.task.findMany(args as never)) as Array<{ id: string }>;
+      const hasMore = items.length > limit;
+      const page = hasMore ? items.slice(0, limit) : items;
+      const nextCursor = hasMore ? page[page.length - 1].id : null;
+      return { items: page, nextCursor } satisfies PaginatedTasks<unknown>;
+    }
+
+    if (filters.take) {
+      baseArgs.take = filters.take;
+    }
+    return this.prisma.task.findMany(baseArgs as never);
   }
 
 
