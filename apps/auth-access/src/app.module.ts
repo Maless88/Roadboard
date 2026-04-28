@@ -5,6 +5,7 @@ import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { TeamsModule } from './modules/teams/teams.module';
 import { MembershipsModule } from './modules/memberships/memberships.module';
+import { TeamInvitesModule } from './modules/team-invites/team-invites.module';
 import { GrantsModule } from './modules/grants/grants.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { SessionsModule } from './modules/sessions/sessions.module';
@@ -19,6 +20,7 @@ import { TokensModule } from './modules/tokens/tokens.module';
     UsersModule,
     TeamsModule,
     MembershipsModule,
+    TeamInvitesModule,
     GrantsModule,
     AuthModule,
     SessionsModule,

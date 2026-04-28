@@ -5,7 +5,11 @@ import { useActionState } from 'react';
 import { loginAction, registerAction } from '@/app/actions';
 
 
-function LoginFields({ pending }: { pending: boolean }) {
+function LoginFields({ pending, prefilledEmail }: { pending: boolean; prefilledEmail: string | null }) {
+
+  // The login uses username, but if we received an email via invite link
+  // we surface it as a hint via placeholder so the user knows which account to pick.
+  void prefilledEmail;
 
   return (
     <>
@@ -51,7 +55,7 @@ function LoginFields({ pending }: { pending: boolean }) {
 }
 
 
-function RegisterFields({ pending }: { pending: boolean }) {
+function RegisterFields({ pending, prefilledEmail }: { pending: boolean; prefilledEmail: string | null }) {
 
   return (
     <>
@@ -95,6 +99,8 @@ function RegisterFields({ pending }: { pending: boolean }) {
           type="email"
           required
           autoComplete="email"
+          defaultValue={prefilledEmail ?? undefined}
+          readOnly={!!prefilledEmail}
           className="w-full rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)', color: 'var(--text)' }}
           placeholder="mario@esempio.it"
         />
@@ -157,9 +163,15 @@ function RegisterFields({ pending }: { pending: boolean }) {
 }
 
 
-export function LoginForm() {
+export function LoginForm({
+  inviteToken = null,
+  prefilledEmail = null,
+}: {
+  inviteToken?: string | null;
+  prefilledEmail?: string | null;
+} = {}) {
 
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>(inviteToken ? 'register' : 'login');
 
   const [loginState, loginDispatch, loginPending] = useActionState(loginAction, {});
   const [registerState, registerDispatch, registerPending] = useActionState(registerAction, {});
@@ -195,6 +207,10 @@ export function LoginForm() {
 
       <form action={action} className="space-y-4">
 
+        {inviteToken && (
+          <input type="hidden" name="inviteToken" value={inviteToken} />
+        )}
+
         {error && (
           <div className="rounded-md px-4 py-3 text-sm text-red-400" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}>
             {error}
@@ -202,8 +218,8 @@ export function LoginForm() {
         )}
 
         {mode === 'login'
-          ? <LoginFields pending={pending} />
-          : <RegisterFields pending={pending} />
+          ? <LoginFields pending={pending} prefilledEmail={prefilledEmail} />
+          : <RegisterFields pending={pending} prefilledEmail={prefilledEmail} />
         }
 
       </form>

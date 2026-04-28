@@ -40,6 +40,7 @@ export class SessionsService {
       userId: session.userId,
       username: session.user.username,
       displayName: session.user.displayName,
+      email: session.user.email,
       role: session.user.role,
       managerId: session.user.managerId,
       expiresAt: session.expiresAt,

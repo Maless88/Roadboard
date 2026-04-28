@@ -3,12 +3,18 @@ import { getToken } from '@/lib/auth';
 import { LoginForm } from './login-form';
 
 
-export default async function LoginPage() {
+interface Props {
+  searchParams: Promise<{ invite?: string; email?: string }>;
+}
 
+
+export default async function LoginPage({ searchParams }: Props) {
+
+  const { invite, email } = await searchParams;
   const token = await getToken();
 
   if (token) {
-    redirect('/dashboard');
+    redirect(invite ? `/invite/${invite}` : '/dashboard');
   }
 
   return (
@@ -18,7 +24,7 @@ export default async function LoginPage() {
           <h1 className="text-2xl font-semibold tracking-tight" style={{ color: 'var(--text)' }}>RoadBoard</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Sign in to continue</p>
         </div>
-        <LoginForm />
+        <LoginForm inviteToken={invite ?? null} prefilledEmail={email ?? null} />
       </div>
     </div>
   );

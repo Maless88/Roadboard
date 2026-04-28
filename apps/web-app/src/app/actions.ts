@@ -11,6 +11,15 @@ import { setToken, clearToken, getToken } from '@/lib/auth';
 import { LOCALE_COOKIE, SUPPORTED_LOCALES, type Locale } from '@/lib/i18n';
 
 
+function safePostLoginRedirect(inviteToken: string | null | undefined): string {
+
+  if (inviteToken && /^[A-Za-z0-9_-]+$/.test(inviteToken)) {
+    return `/invite/${inviteToken}`;
+  }
+  return '/dashboard';
+}
+
+
 export async function loginAction(
   _prev: { error?: string },
   formData: FormData,
@@ -18,6 +27,7 @@ export async function loginAction(
 
   const username = formData.get('username') as string;
   const password = formData.get('password') as string;
+  const inviteToken = (formData.get('inviteToken') as string | null) ?? null;
 
   try {
     const { token } = await login(username, password);
@@ -26,7 +36,7 @@ export async function loginAction(
     return { error: 'Username o password non corretti.' };
   }
 
-  redirect('/dashboard');
+  redirect(safePostLoginRedirect(inviteToken));
 }
 
 
@@ -41,6 +51,7 @@ export async function registerAction(
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirmPassword') as string;
   const seedDemoProject = formData.get('seedDemoProject') === 'on';
+  const inviteToken = (formData.get('inviteToken') as string | null) ?? null;
 
   const cookieStore = await cookies();
   const demoLocale: 'it' | 'en' = cookieStore.get(LOCALE_COOKIE)?.value === 'en' ? 'en' : 'it';
@@ -57,7 +68,7 @@ export async function registerAction(
     return { error: msg };
   }
 
-  redirect('/dashboard');
+  redirect(safePostLoginRedirect(inviteToken));
 }
 
 
