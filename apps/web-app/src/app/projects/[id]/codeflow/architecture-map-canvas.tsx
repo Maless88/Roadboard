@@ -12,6 +12,7 @@ import {
   type Edge,
   type NodeMouseHandler,
   type NodeProps,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import dagre from 'dagre';
 import type { ArchitectureNode, ArchitectureEdge } from '@/lib/api';
@@ -36,8 +37,8 @@ interface Props {
 }
 
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 60;
+const NODE_WIDTH = 130;
+const NODE_HEIGHT = 50;
 
 
 type Palette = { bg: string; border: string; text: string };
@@ -247,6 +248,7 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null);
 
   useEffect(() => {
 
@@ -265,6 +267,17 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
       document.body.style.overflow = prevOverflow;
     };
   }, [isFullscreen]);
+
+  useEffect(() => {
+
+    if (!rfInstance) return;
+
+    const raf = requestAnimationFrame(() => {
+      rfInstance.fitView({ padding: 0.15, duration: 200 });
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [isFullscreen, rfInstance]);
 
   const hierarchy = useMemo(() => buildHierarchy(archNodes), [archNodes]);
 
@@ -439,22 +452,6 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         </select>
         <button
           type="button"
-          onClick={() => setExpanded(new Set(Array.from(hierarchy.values()).filter((h) => h.childIds.length > 0).map((h) => h.node.id)))}
-          className="px-2 py-1 text-[11px] rounded-md transition-colors"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
-        >
-          Espandi tutto
-        </button>
-        <button
-          type="button"
-          onClick={() => setExpanded(new Set())}
-          className="px-2 py-1 text-[11px] rounded-md transition-colors"
-          style={{ background: 'var(--surface)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}
-        >
-          Comprimi tutto
-        </button>
-        <button
-          type="button"
           onClick={() => setIsFullscreen((v) => !v)}
           aria-label={isFullscreen ? 'Esci da schermo intero' : 'Schermo intero'}
           title={isFullscreen ? 'Esci da schermo intero (Esc)' : 'Schermo intero'}
@@ -469,7 +466,7 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
         className={isFullscreen ? 'fixed inset-0 z-50' : 'rounded-xl overflow-hidden relative'}
         style={
           isFullscreen
-            ? { background: palette.canvasBg }
+            ? { background: 'var(--bg)' }
             : { border: '1px solid var(--border-soft)', height: 560, background: palette.canvasBg }
         }
       >
@@ -494,6 +491,7 @@ export function ArchitectureMapCanvas({ projectId, nodes: archNodes, edges: arch
             nodes={rfNodes}
             edges={rfEdges}
             nodeTypes={nodeTypes}
+            onInit={setRfInstance}
             fitView
             fitViewOptions={{ padding: 0.15 }}
             proOptions={{ hideAttribution: true }}
