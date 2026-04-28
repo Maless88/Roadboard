@@ -286,6 +286,20 @@ export async function updateTaskStatus(token: string, taskId: string, status: st
 }
 
 
+export async function deleteTask(token: string, taskId: string): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/tasks/${taskId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to delete task');
+  }
+}
+
+
 export async function listMemory(
   token: string,
   projectId: string,

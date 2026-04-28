@@ -175,6 +175,17 @@ const TOOLS = [
     },
   },
   {
+    name: "delete_task",
+    description: "Permanently delete a task. Irreversible — there is no soft-delete or undo. Use only when the task was created in error or is no longer relevant; prefer update_task_status with status='cancelled' to preserve history.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        taskId: { type: "string", description: "The task ID to delete" },
+      },
+      required: ["taskId"],
+    },
+  },
+  {
     name: "create_phase",
     description: "Create a new phase (roadmap milestone) in a project.",
     inputSchema: {
@@ -617,6 +628,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_task: "task.write",
   update_task: "task.write",
   update_task_status: "task.write",
+  delete_task: "task.write",
   create_phase: "project.write",
   update_phase: "project.write",
   create_memory_entry: "memory.write",
@@ -788,6 +800,13 @@ async function handleToolCall(
               when: "As work progresses and on completion.",
               required_args: ["taskId", "status"],
               optional_args: ["completionReport"],
+            },
+            {
+              name: "delete_task",
+              purpose: "Permanently delete a task. Irreversible.",
+              when: "Only when the task was created in error or is obsolete. Prefer update_task_status with status='cancelled' to preserve history.",
+              required_args: ["taskId"],
+              optional_args: [],
             },
             {
               name: "create_phase",
@@ -1058,6 +1077,11 @@ async function handleToolCall(
         assigneeId: args.assigneeId as string | undefined,
         dueDate: args.dueDate as string | undefined,
       });
+      return jsonResponse(result);
+    }
+
+    case "delete_task": {
+      const result = await client.deleteTask(args.taskId as string);
       return jsonResponse(result);
     }
 
