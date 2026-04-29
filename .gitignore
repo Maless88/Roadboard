@@ -39,6 +39,7 @@ infra/docker/data/
 
 # Agent artifacts
 .agent/
+tasks/
 
 # Logs
 *.log
