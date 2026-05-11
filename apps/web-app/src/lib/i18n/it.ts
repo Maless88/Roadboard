@@ -76,6 +76,8 @@ export const itDict = {
     totalEntries: (n: number) => `${n} entries`,
     archive: 'archivia',
     archiveLabel: 'Archivia progetto',
+    snapshotUnavailable: 'Dati non disponibili',
+    snapshotUnavailableHint: 'Permessi insufficienti per leggere il dashboard di questo progetto',
   },
   codeflow: {
     fullscreen: '⤢ Schermo intero',
@@ -172,6 +174,13 @@ export const itDict = {
     slugPlaceholder: 'Slug',
     descriptionPlaceholder: 'Descrizione (opzionale)',
     selectTeam: 'Seleziona team…',
+    repositories: {
+      label: 'Repository',
+      addRepository: '+ Aggiungi repository',
+      providerLabel: 'Provider',
+      urlPlaceholder: 'URL repository (https://…)',
+      removeRepository: 'Rimuovi',
+    },
   },
   settings: {
     title: 'Impostazioni',

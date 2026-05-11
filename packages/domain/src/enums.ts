@@ -3,7 +3,6 @@ export enum ProjectStatus {
   ACTIVE = 'active',
   PAUSED = 'paused',
   COMPLETED = 'completed',
-  ARCHIVED = 'archived',
 }
 
 export enum PhaseStatus {
@@ -125,6 +124,7 @@ export enum ArchitectureEntityType {
 export enum CodeRepositoryProvider {
   GITHUB = 'github',
   GITLAB = 'gitlab',
+  BITBUCKET = 'bitbucket',
   LOCAL = 'local',
   MANUAL = 'manual',
 }

@@ -709,7 +709,7 @@ export function SettingsTabs({
   const dict = useDict();
   const canManageUsers = isAdmin || isTeamLeader;
 
-  const archivedProjects = projects.filter((p) => p.status === 'archived');
+  const archivedProjects = projects.filter((p) => p.archivedForMe);
   const hasArchived = archivedProjects.length > 0;
 
   const visibleTabs: { key: TabKey; label: string }[] = [

@@ -5,7 +5,10 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { cookies } from 'next/headers';
 import {
   login, logout, register, updateTaskStatus, deleteTask,
-  createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject, updateProject,
+  createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
+  archiveProjectForMe, unarchiveProjectForMe,
+  listProjectRepositories, createProjectRepository, deleteProjectRepository,
+  type RepositoryProvider,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
 import { LOCALE_COOKIE, SUPPORTED_LOCALES, type Locale } from '@/lib/i18n';
@@ -273,7 +276,7 @@ export async function archiveProjectAction(projectId: string): Promise<{ error?:
   if (!token) return { error: 'Not authenticated' };
 
   try {
-    await updateProject(token, projectId, { status: 'archived' });
+    await archiveProjectForMe(token, projectId);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -292,7 +295,7 @@ export async function unarchiveProjectAction(projectId: string): Promise<{ error
   if (!token) return { error: 'Not authenticated' };
 
   try {
-    await updateProject(token, projectId, { status: 'active' });
+    await unarchiveProjectForMe(token, projectId);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -320,4 +323,63 @@ export async function deleteArchivedProjectAction(projectId: string): Promise<{ 
   revalidatePath('/projects');
   revalidatePath('/settings');
   return {};
+}
+
+
+export async function listProjectRepositoriesAction(projectId: string) {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated', data: [] };
+  }
+
+  try {
+    const data = await listProjectRepositories(token, projectId);
+    return { data };
+  } catch (e) {
+    return { error: (e as Error).message, data: [] };
+  }
+}
+
+
+export async function addProjectRepositoryAction(
+  projectId: string,
+  data: { provider: RepositoryProvider; repoUrl: string; name?: string; defaultBranch?: string },
+): Promise<{ error?: string; id?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    const repo = await createProjectRepository(token, projectId, data);
+    revalidatePath(`/projects/${projectId}`);
+    return { id: repo.id };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+
+export async function removeProjectRepositoryAction(
+  projectId: string,
+  repoId: string,
+): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    await deleteProjectRepository(token, projectId, repoId);
+    revalidatePath(`/projects/${projectId}`);
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }

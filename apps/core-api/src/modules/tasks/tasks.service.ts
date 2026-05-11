@@ -245,7 +245,7 @@ export class TasksService {
       select: { status: true },
     });
 
-    if (!project || project.status === 'archived' || project.status === 'paused') return;
+    if (!project || project.status === 'paused') return;
 
     const phases = await this.prisma.phase.findMany({
       where: { projectId },

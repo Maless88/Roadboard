@@ -73,11 +73,32 @@ export class ProjectsService {
   }
 
 
+  private async decorateWithArchivedForMe<T extends { id: string }>(
+    projects: T[],
+    userId?: string,
+  ): Promise<Array<T & { archivedForMe: boolean }>> {
+
+    if (!userId || projects.length === 0) {
+      return projects.map((p) => ({ ...p, archivedForMe: false }));
+    }
+
+    const archives = await this.prisma.projectUserArchive.findMany({
+      where: { userId, projectId: { in: projects.map((p) => p.id) } },
+      select: { projectId: true },
+    });
+
+    const archivedSet = new Set(archives.map((a) => a.projectId));
+
+    return projects.map((p) => ({ ...p, archivedForMe: archivedSet.has(p.id) }));
+  }
+
+
   async findAll(status?: ProjectStatus, userId?: string) {
 
     if (!userId) {
       const where = status ? { status } : {};
-      return this.prisma.project.findMany({ where });
+      const projects = await this.prisma.project.findMany({ where });
+      return this.decorateWithArchivedForMe(projects, userId);
     }
 
     // Collect team memberships (teamId + role) the user belongs to
@@ -139,7 +160,34 @@ export class ProjectsService {
       ...(status ? { status } : {}),
     };
 
-    return this.prisma.project.findMany({ where });
+    const projects = await this.prisma.project.findMany({ where });
+    return this.decorateWithArchivedForMe(projects, userId);
+  }
+
+
+  async archiveForUser(projectId: string, userId: string) {
+
+    await this.findOne(projectId);
+
+    await this.prisma.projectUserArchive.upsert({
+      where: { projectId_userId: { projectId, userId } },
+      update: {},
+      create: { projectId, userId },
+    });
+
+    return { projectId, userId, archivedForMe: true };
+  }
+
+
+  async unarchiveForUser(projectId: string, userId: string) {
+
+    await this.findOne(projectId);
+
+    await this.prisma.projectUserArchive.deleteMany({
+      where: { projectId, userId },
+    });
+
+    return { projectId, userId, archivedForMe: false };
   }
 
 

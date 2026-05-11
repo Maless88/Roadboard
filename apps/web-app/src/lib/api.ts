@@ -40,14 +40,18 @@ export interface Grant {
 }
 
 
+export type ProjectStatusValue = 'draft' | 'active' | 'paused' | 'completed';
+
+
 export interface Project {
   id: string;
   name: string;
   slug: string;
   description: string | null;
-  status: string;
+  status: ProjectStatusValue;
   ownerTeamId: string;
   ownerUserId: string | null;
+  archivedForMe?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -658,6 +662,34 @@ export async function updateProject(
 }
 
 
+export async function archiveProjectForMe(token: string, projectId: string): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/archive`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to archive project');
+  }
+}
+
+
+export async function unarchiveProjectForMe(token: string, projectId: string): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/archive`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to unarchive project');
+  }
+}
+
+
 export async function deleteProject(token: string, projectId: string): Promise<void> {
 
   const res = await fetch(`${CORE_API}/projects/${projectId}`, {
@@ -668,6 +700,78 @@ export async function deleteProject(token: string, projectId: string): Promise<v
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as { message?: string };
     throw new Error(err.message ?? 'Failed to delete project');
+  }
+}
+
+
+export type RepositoryProvider = 'github' | 'gitlab' | 'bitbucket' | 'local' | 'manual';
+
+
+export interface ProjectRepository {
+  id: string;
+  projectId: string;
+  name: string;
+  repoUrl: string | null;
+  provider: RepositoryProvider;
+  defaultBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export async function listProjectRepositories(
+  token: string,
+  projectId: string,
+): Promise<ProjectRepository[]> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/repositories`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to list repositories');
+  }
+
+  return res.json() as Promise<ProjectRepository[]>;
+}
+
+
+export async function createProjectRepository(
+  token: string,
+  projectId: string,
+  data: { provider: RepositoryProvider; repoUrl: string; name?: string; defaultBranch?: string },
+): Promise<ProjectRepository> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/repositories`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create repository');
+  }
+
+  return res.json() as Promise<ProjectRepository>;
+}
+
+
+export async function deleteProjectRepository(
+  token: string,
+  projectId: string,
+  repoId: string,
+): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/repositories/${repoId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to delete repository');
   }
 }
 
@@ -746,7 +850,11 @@ export async function getDashboardSnapshot(token: string, projectId: string): Pr
 
   const res = await fetch(`${CORE_API}/projects/${projectId}/dashboard`, { headers: authHeaders(token) });
 
-  if (!res.ok) throw new Error('Failed to fetch dashboard');
+  if (!res.ok) {
+    const err = new Error('Failed to fetch dashboard') as Error & { status: number };
+    err.status = res.status;
+    throw err;
+  }
 
   return res.json() as Promise<DashboardSnapshot>;
 }

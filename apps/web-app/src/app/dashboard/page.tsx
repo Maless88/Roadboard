@@ -27,14 +27,22 @@ export default async function DashboardPage() {
     listTeams(token).catch(() => []),
   ]);
 
-  const visible = projects.filter((p) => p.status !== 'archived');
+  const visible = projects.filter((p) => !p.archivedForMe);
   const sorted = [...visible].sort((a, b) => {
     const order: Record<string, number> = { active: 0, paused: 1, draft: 2, completed: 3 };
     return (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.updatedAt.localeCompare(a.updatedAt);
   });
 
   const snapshots = await Promise.all(
-    sorted.map((p) => getDashboardSnapshot(token, p.id).catch(() => null)),
+    sorted.map((p) =>
+      getDashboardSnapshot(token, p.id).catch((err: unknown) => {
+        const status = (err as { status?: number }).status;
+
+        if (status === 403) return { error: 'forbidden' as const };
+
+        return { error: 'unknown' as const };
+      }),
+    ),
   );
 
   const now = new Date();

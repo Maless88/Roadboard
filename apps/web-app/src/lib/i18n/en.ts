@@ -78,6 +78,8 @@ export const enDict: Dictionary = {
     totalEntries: (n: number) => `${n} entries`,
     archive: 'archive',
     archiveLabel: 'Archive project',
+    snapshotUnavailable: 'Data unavailable',
+    snapshotUnavailableHint: 'Insufficient permissions to read this project dashboard',
   },
   codeflow: {
     fullscreen: '⤢ Fullscreen',
@@ -174,6 +176,13 @@ export const enDict: Dictionary = {
     slugPlaceholder: 'Slug',
     descriptionPlaceholder: 'Description (optional)',
     selectTeam: 'Select team…',
+    repositories: {
+      label: 'Repositories',
+      addRepository: '+ Add repository',
+      providerLabel: 'Provider',
+      urlPlaceholder: 'Repository URL (https://…)',
+      removeRepository: 'Remove',
+    },
   },
   settings: {
     title: 'Settings',

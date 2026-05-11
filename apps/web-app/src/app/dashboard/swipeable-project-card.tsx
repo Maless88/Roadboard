@@ -34,9 +34,11 @@ const REVEAL_THRESHOLD = 60;
 const SNAP_OPEN = 80;
 
 
+type SnapError = { error: 'forbidden' | 'unknown' };
+
 interface Props {
   project: Project;
-  snap: DashboardSnapshot | null;
+  snap: DashboardSnapshot | SnapError | null;
 }
 
 
@@ -52,11 +54,14 @@ export function SwipeableProjectCard({ project, snap }: Props) {
   const startOffset = useRef(0);
   const didSwipe = useRef(false);
 
-  const taskDone = snap?.tasks['done'] ?? 0;
-  const taskTotal = snap ? Object.values(snap.tasks).reduce((a, b) => a + b, 0) : 0;
+  const snapData = snap && !('error' in snap) ? snap : null;
+  const snapError = snap && 'error' in snap ? snap : null;
+
+  const taskDone = snapData?.tasks['done'] ?? 0;
+  const taskTotal = snapData ? Object.values(snapData.tasks).reduce((a, b) => a + b, 0) : 0;
   const pct = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
   const visibleStatuses = (['in_progress', 'todo', 'done', 'blocked'] as const).filter(
-    (s) => (snap?.tasks[s] ?? 0) > 0,
+    (s) => (snapData?.tasks[s] ?? 0) > 0,
   );
 
   function onPointerDown(e: React.PointerEvent) {
@@ -170,12 +175,19 @@ export function SwipeableProjectCard({ project, snap }: Props) {
           </div>
         )}
 
-        {visibleStatuses.length > 0 ? (
+        {snapError ? (
+          <p
+            className="text-[10px] text-gray-600"
+            title={dict.project.snapshotUnavailableHint}
+          >
+            {dict.project.snapshotUnavailable}
+          </p>
+        ) : visibleStatuses.length > 0 ? (
           <div className="flex items-center gap-3 flex-wrap">
             {visibleStatuses.map((s) => (
               <span key={s} className={`flex items-center gap-1 text-[10px] ${TASK_COLORS[s]}`}>
                 <span className="w-1 h-1 rounded-full bg-current" />
-                {snap!.tasks[s]} {s.replace('_', '\u00a0')}
+                {snapData!.tasks[s]} {s.replace('_', '\u00a0')}
               </span>
             ))}
           </div>
@@ -183,11 +195,11 @@ export function SwipeableProjectCard({ project, snap }: Props) {
           <p className="text-[10px] text-gray-700">{dict.project.noTasks}</p>
         )}
 
-        {snap && snap.activePhases.length > 0 && (
+        {snapData && snapData.activePhases.length > 0 && (
           <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
             <p className="text-[10px] text-gray-600 truncate">
-              📍 {snap.activePhases[0].title}
-              {snap.activePhases.length > 1 && ` +${snap.activePhases.length - 1}`}
+              📍 {snapData.activePhases[0].title}
+              {snapData.activePhases.length > 1 && ` +${snapData.activePhases.length - 1}`}
             </p>
           </div>
         )}
