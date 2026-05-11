@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { McpTransport } from '@/lib/mcp/snippet-generator';
 import { useDict } from '@/lib/i18n/locale-context';
 
@@ -22,6 +22,11 @@ function validateUrl(url: string): {
   valid: boolean;
 } {
 
+  if (!url) {
+
+    return { errorScheme: false, warnPort: false, warnPath: false, valid: false };
+  }
+
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
 
     return { errorScheme: true, warnPort: false, warnPath: false, valid: false };
@@ -31,6 +36,36 @@ function validateUrl(url: string): {
   const warnPath = !url.endsWith('/mcp');
 
   return { errorScheme: false, warnPort, warnPath, valid: true };
+}
+
+
+const COMMIT_DELAY_MS = 400;
+
+
+function useDebouncedCommit(value: string, commit: (v: string) => void, delay: number) {
+
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
+  const lastCommittedRef = useRef(value);
+
+  useEffect(() => {
+
+    if (value === lastCommittedRef.current) {
+
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+
+      lastCommittedRef.current = value;
+      commitRef.current(value);
+    }, delay);
+
+    return () => window.clearTimeout(handle);
+  }, [value, delay]);
+
+  return lastCommittedRef;
 }
 
 
@@ -44,24 +79,56 @@ export function Step3Connection({
 }: Props) {
 
   const dict = useDict().mcp.wizard;
+
+  const [localUrl, setLocalUrl] = useState(url);
+  const [localToken, setLocalToken] = useState(token);
+  const [debouncedUrl, setDebouncedUrl] = useState(url);
   const [urlTouched, setUrlTouched] = useState(false);
 
-  const validation = validateUrl(url);
+  const urlCommittedRef = useDebouncedCommit(localUrl, onUrlChange, COMMIT_DELAY_MS);
+  useDebouncedCommit(localToken, onTokenChange, COMMIT_DELAY_MS);
+
+  // Sync from parent only when it diverges from what we last committed
+  // (avoids overwriting the user's in-flight typing).
+  useEffect(() => {
+
+    if (url !== urlCommittedRef.current && url !== localUrl) {
+
+      setLocalUrl(url);
+      urlCommittedRef.current = url;
+    }
+  }, [url, localUrl, urlCommittedRef]);
 
   useEffect(() => {
 
-    if (url) {
+    const handle = window.setTimeout(() => setDebouncedUrl(localUrl), COMMIT_DELAY_MS);
 
-      setUrlTouched(true);
-    }
-  }, [url]);
+    return () => window.clearTimeout(handle);
+  }, [localUrl]);
+
+  const validation = validateUrl(debouncedUrl);
 
   function handleFixPath() {
 
-    if (!url.endsWith('/mcp')) {
+    if (!localUrl.endsWith('/mcp')) {
 
-      onUrlChange(url.replace(/\/?$/, '/mcp'));
+      const fixed = localUrl.replace(/\/?$/, '/mcp');
+      setLocalUrl(fixed);
+      setDebouncedUrl(fixed);
+      onUrlChange(fixed);
+      urlCommittedRef.current = fixed;
     }
+  }
+
+  function commitUrlNow() {
+
+    if (localUrl !== urlCommittedRef.current) {
+
+      urlCommittedRef.current = localUrl;
+      onUrlChange(localUrl);
+    }
+
+    setDebouncedUrl(localUrl);
   }
 
   const d = dict.step3;
@@ -84,17 +151,18 @@ export function Step3Connection({
         </label>
         <input
           type="text"
-          value={url}
+          value={localUrl}
           onChange={(e) => {
             setUrlTouched(true);
-            onUrlChange(e.target.value);
+            setLocalUrl(e.target.value);
           }}
+          onBlur={commitUrlNow}
           placeholder={d.urlPlaceholder}
           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-green-300 font-mono text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           aria-label={d.urlLabel}
         />
 
-        {urlTouched && (
+        {urlTouched && debouncedUrl && (
           <div className="mt-2 space-y-1 text-sm">
             {validation.errorScheme && (
               <p className="text-red-400">⛔ {d.urlErrorScheme}</p>
@@ -133,8 +201,9 @@ export function Step3Connection({
         </label>
         <input
           type="password"
-          value={token}
-          onChange={(e) => onTokenChange(e.target.value)}
+          value={localToken}
+          onChange={(e) => setLocalToken(e.target.value)}
+          onBlur={() => onTokenChange(localToken)}
           placeholder={d.tokenPlaceholder}
           className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           aria-label={d.tokenLabel}
