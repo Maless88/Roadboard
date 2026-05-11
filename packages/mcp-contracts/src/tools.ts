@@ -17,7 +17,7 @@ export const CREATE_PROJECT_TOOL: McpToolDefinition = {
       status: {
         type: 'string',
         description: 'Initial project status',
-        enum: ['draft', 'active', 'paused', 'completed', 'archived'],
+        enum: ['draft', 'active', 'paused', 'completed'],
       },
     },
     required: ['name', 'slug', 'ownerTeamId'],
@@ -34,7 +34,7 @@ export const LIST_PROJECTS_TOOL: McpToolDefinition = {
       status: {
         type: 'string',
         description: 'Filter by project status',
-        enum: ['draft', 'active', 'paused', 'completed', 'archived'],
+        enum: ['draft', 'active', 'paused', 'completed'],
       },
     },
   },

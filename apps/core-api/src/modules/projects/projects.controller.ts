@@ -66,4 +66,26 @@ export class ProjectsController {
 
     return this.projectsService.delete(id, user?.userId);
   }
+
+
+  @RequireGrant(GrantType.PROJECT_READ)
+  @Post(':projectId/archive')
+  archive(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: { userId: string },
+  ) {
+
+    return this.projectsService.archiveForUser(projectId, user.userId);
+  }
+
+
+  @RequireGrant(GrantType.PROJECT_READ)
+  @Delete(':projectId/archive')
+  unarchive(
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: { userId: string },
+  ) {
+
+    return this.projectsService.unarchiveForUser(projectId, user.userId);
+  }
 }

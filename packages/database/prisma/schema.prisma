@@ -43,6 +43,8 @@ model User {
   invitedTeamInvites  TeamInvite[] @relation("InviteInviter")
   acceptedTeamInvites TeamInvite[] @relation("InviteAccepter")
 
+  projectArchives ProjectUserArchive[]
+
   @@map("users")
 }
 
@@ -128,8 +130,8 @@ model Project {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  ownerTeam         Team               @relation(fields: [ownerTeamId], references: [id])
-  ownerUser         User?              @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerTeam         Team                  @relation(fields: [ownerTeamId], references: [id])
+  ownerUser         User?                 @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
   phases            Phase[]
   tasks             Task[]
   memoryEntries     MemoryEntry[]
@@ -137,8 +139,23 @@ model Project {
   projectGrants     ProjectGrant[]
   codeRepositories  CodeRepository[]
   architectureNodes ArchitectureNode[]
+  userArchives      ProjectUserArchive[]
 
   @@map("projects")
+}
+
+
+model ProjectUserArchive {
+  projectId  String   @map("project_id")
+  userId     String   @map("user_id")
+  archivedAt DateTime @default(now()) @map("archived_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_user_archives")
 }
 
 model Phase {

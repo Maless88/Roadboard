@@ -4,3 +4,8 @@
 
 - [x] feat-mcp-guide-refresh — Refresh schema Zed/VSCode/Claude Code in /mcp-guide page
 - [x] feat-mcp-setup-wizard — Wizard interattivo /mcp-guide a 5 step
+
+## Project Visibility — Per-User Archive & Card UX
+
+- [ ] feat-per-user-archive — Archiviazione progetto per-utente (visual only)
+- [x] fix-dashboard-card-empty-snapshot — Distinguere "snapshot non disponibile" da "progetto vuoto"

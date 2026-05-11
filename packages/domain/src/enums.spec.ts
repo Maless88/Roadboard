@@ -12,6 +12,7 @@ import {
   UserStatus,
   PhaseStatus,
   MemoryEntryType,
+  CodeRepositoryProvider,
 } from './enums';
 
 
@@ -22,7 +23,6 @@ describe('ProjectStatus', () => {
     expect(ProjectStatus.ACTIVE).toBe('active');
     expect(ProjectStatus.PAUSED).toBe('paused');
     expect(ProjectStatus.COMPLETED).toBe('completed');
-    expect(ProjectStatus.ARCHIVED).toBe('archived');
   });
 });
 
@@ -128,5 +128,21 @@ describe('MemoryEntryType', () => {
   it('has done and next', () => {
     expect(MemoryEntryType.DONE).toBe('done');
     expect(MemoryEntryType.NEXT).toBe('next');
+  });
+});
+
+
+describe('CodeRepositoryProvider', () => {
+
+  it('has the expected values including BITBUCKET', () => {
+    expect(CodeRepositoryProvider.GITHUB).toBe('github');
+    expect(CodeRepositoryProvider.GITLAB).toBe('gitlab');
+    expect(CodeRepositoryProvider.BITBUCKET).toBe('bitbucket');
+    expect(CodeRepositoryProvider.LOCAL).toBe('local');
+    expect(CodeRepositoryProvider.MANUAL).toBe('manual');
+  });
+
+  it('covers 5 providers', () => {
+    expect(Object.values(CodeRepositoryProvider)).toHaveLength(5);
   });
 });

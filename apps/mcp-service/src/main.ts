@@ -37,7 +37,7 @@ const TOOLS = [
         status: {
           type: "string",
           description: "Filter by project status",
-          enum: ["draft", "active", "paused", "completed", "archived"],
+          enum: ["draft", "active", "paused", "completed"],
         },
       },
     },
@@ -420,7 +420,7 @@ const TOOLS = [
         status: {
           type: "string",
           description: "Initial project status",
-          enum: ["draft", "active", "paused", "completed", "archived"],
+          enum: ["draft", "active", "paused", "completed"],
         },
       },
       required: ["name", "slug"],
