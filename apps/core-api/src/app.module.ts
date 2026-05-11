@@ -13,6 +13,7 @@ import { DecisionsModule } from "./modules/decisions/decisions.module";
 import { DashboardsModule } from "./modules/dashboards/dashboards.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { CodeflowModule } from "./modules/codeflow/codeflow.module";
+import { ProjectRepositoriesModule } from "./modules/projects/repositories/project-repositories.module";
 
 
 @Module({
@@ -30,6 +31,7 @@ import { CodeflowModule } from "./modules/codeflow/codeflow.module";
     DashboardsModule,
     AuditModule,
     CodeflowModule,
+    ProjectRepositoriesModule,
   ],
 })
 export class AppModule {}
