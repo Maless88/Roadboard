@@ -24,6 +24,24 @@ const SCHEMA_CYPHER: string[] = [
   'CREATE INDEX ON :Link(entityId);',
   'CREATE INDEX ON :Annotation(projectId);',
   'CREATE INDEX ON :Annotation(nodeId);',
+
+  // Deep Code Map (Wave 6) — File nodes (multi-label :ArchitectureNode:File)
+  'CREATE CONSTRAINT ON (n:File) ASSERT n.id IS UNIQUE;',
+  'CREATE INDEX ON :File(projectId);',
+  'CREATE INDEX ON :File(path);',
+  'CREATE INDEX ON :File(language);',
+
+  // Deep Code Map (Wave 6) — Symbol nodes (multi-label :ArchitectureNode:Symbol)
+  'CREATE CONSTRAINT ON (n:Symbol) ASSERT n.id IS UNIQUE;',
+  'CREATE INDEX ON :Symbol(projectId);',
+  'CREATE INDEX ON :Symbol(fqn);',
+  'CREATE INDEX ON :Symbol(fileId);',
+  'CREATE INDEX ON :Symbol(kind);',
+
+  // Deep Code Map (Wave 6) — ExternalPackage leaf aggregation nodes
+  'CREATE CONSTRAINT ON (n:ExternalPackage) ASSERT n.id IS UNIQUE;',
+  'CREATE INDEX ON :ExternalPackage(projectId);',
+  'CREATE INDEX ON :ExternalPackage(name);',
 ];
 
 
@@ -56,6 +74,10 @@ export const NODE_LABELS = [
   'Repository',
   'Link',
   'Annotation',
+  // Deep Code Map (Wave 6) — multi-label subtypes of :ArchitectureNode
+  'File',
+  'Symbol',
+  'ExternalPackage',
 ] as const;
 export const EDGE_TYPES = [
   'DEPENDS_ON',
@@ -64,6 +86,12 @@ export const EDGE_TYPES = [
   'LINKED_TO',
   'ANNOTATES',
   'BELONGS_TO',
+  // Deep Code Map (Wave 6) — code-intelligence edge types
+  'CONTAINS',
+  'CALLS',
+  'EXTENDS',
+  'IMPLEMENTS',
+  'REFERENCES_TYPE',
 ] as const;
 
 export type NodeLabel = typeof NODE_LABELS[number];

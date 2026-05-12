@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { GraphDbClient, applyGraphSchema } from './index';
 
 
@@ -98,5 +98,40 @@ describe('GraphDbClient (unit)', () => {
     const ok = await c.ping();
     await c.close();
     expect(ok).toBe(false);
+  });
+});
+
+
+describe('applyGraphSchema idempotency', () => {
+
+  it('runs twice without throwing on duplicate constraint/index errors', async () => {
+
+    const runMock = vi.fn().mockImplementation(async (stmt: string) => {
+      // Simulate Memgraph: first call succeeds, second raises "already exists"
+      if (runMock.mock.calls.length > 1 && stmt.startsWith('CREATE CONSTRAINT')) {
+        throw new Error('Constraint already exists');
+      }
+
+      if (runMock.mock.calls.length > 1 && stmt.startsWith('CREATE INDEX')) {
+        throw new Error('already exists — index is already created');
+      }
+
+      return [];
+    });
+
+    const fakeClient = { run: runMock } as unknown as GraphDbClient;
+
+    await expect(applyGraphSchema(fakeClient)).resolves.toBeUndefined();
+    await expect(applyGraphSchema(fakeClient)).resolves.toBeUndefined();
+  });
+
+
+  it('re-throws unexpected errors from Memgraph', async () => {
+
+    const runMock = vi.fn().mockRejectedValue(new Error('Connection reset'));
+
+    const fakeClient = { run: runMock } as unknown as GraphDbClient;
+
+    await expect(applyGraphSchema(fakeClient)).rejects.toThrow('Connection reset');
   });
 });
