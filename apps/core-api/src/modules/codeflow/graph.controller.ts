@@ -6,6 +6,7 @@ import { AuthGuard } from '../../common/auth.guard';
 import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { CurrentUser } from '../../common/user.decorator';
+import type { AuthUser } from '../../common/auth-user';
 import { GraphService } from './graph.service';
 import { DriftService } from './drift.service';
 import { CreateNodeDto } from './dto/create-node.dto';
@@ -62,6 +63,14 @@ export class GraphController {
 
 
   @RequireGrant(GrantType.CODEFLOW_READ)
+  @Get('snapshot/compact')
+  getSnapshotCompact(@Param('projectId') projectId: string) {
+
+    return this.graphService.getSnapshotCompact(projectId);
+  }
+
+
+  @RequireGrant(GrantType.CODEFLOW_READ)
   @Get('outbox-stats')
   getOutboxStats() {
 
@@ -89,10 +98,10 @@ export class GraphController {
   createNode(
     @Param('projectId') projectId: string,
     @Body() dto: CreateNodeDto,
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.graphService.createNode(projectId, dto, user.userId);
+    return this.graphService.createNode(projectId, dto, user);
   }
 
 
@@ -106,17 +115,21 @@ export class GraphController {
 
   @RequireGrant(GrantType.CODEFLOW_WRITE)
   @Patch('nodes/:nodeId')
-  updateNode(@Param('nodeId') nodeId: string, @Body() dto: UpdateNodeDto) {
+  updateNode(
+    @Param('nodeId') nodeId: string,
+    @Body() dto: UpdateNodeDto,
+    @CurrentUser() user: AuthUser,
+  ) {
 
-    return this.graphService.updateNode(nodeId, dto);
+    return this.graphService.updateNode(nodeId, dto, user);
   }
 
 
   @RequireGrant(GrantType.CODEFLOW_WRITE)
   @Delete('nodes/:nodeId')
-  deleteNode(@Param('nodeId') nodeId: string) {
+  deleteNode(@Param('nodeId') nodeId: string, @CurrentUser() user: AuthUser) {
 
-    return this.graphService.deleteNode(nodeId);
+    return this.graphService.deleteNode(nodeId, user);
   }
 
 
@@ -145,10 +158,10 @@ export class GraphController {
     @Param('nodeId') nodeId: string,
     @Param('projectId') projectId: string,
     @Body() dto: CreateLinkDto,
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.graphService.createLink(nodeId, projectId, dto, user.userId);
+    return this.graphService.createLink(nodeId, projectId, dto, user);
   }
 
 
@@ -158,10 +171,10 @@ export class GraphController {
     @Param('nodeId') nodeId: string,
     @Param('projectId') projectId: string,
     @Body() dto: CreateAnnotationDto,
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.graphService.createAnnotation(nodeId, projectId, dto, user.userId);
+    return this.graphService.createAnnotation(nodeId, projectId, dto, user);
   }
 
 
@@ -172,17 +185,18 @@ export class GraphController {
   createEdge(
     @Param('projectId') projectId: string,
     @Body() dto: CreateEdgeDto,
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.graphService.createEdge(projectId, dto);
+    return this.graphService.createEdge(projectId, dto, user);
   }
 
 
   @RequireGrant(GrantType.CODEFLOW_WRITE)
   @Delete('edges/:edgeId')
-  deleteEdge(@Param('edgeId') edgeId: string) {
+  deleteEdge(@Param('edgeId') edgeId: string, @CurrentUser() user: AuthUser) {
 
-    return this.graphService.deleteEdge(edgeId);
+    return this.graphService.deleteEdge(edgeId, user);
   }
 
 
@@ -190,8 +204,8 @@ export class GraphController {
 
   @RequireGrant(GrantType.CODEFLOW_WRITE)
   @Delete('links/:linkId')
-  deleteLink(@Param('linkId') linkId: string) {
+  deleteLink(@Param('linkId') linkId: string, @CurrentUser() user: AuthUser) {
 
-    return this.graphService.deleteLink(linkId);
+    return this.graphService.deleteLink(linkId, user);
   }
 }

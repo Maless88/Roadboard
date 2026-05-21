@@ -45,6 +45,8 @@ model User {
 
   projectArchives ProjectUserArchive[]
 
+  chatbotConfig ChatbotConfig?
+
   @@map("users")
 }
 
@@ -120,15 +122,20 @@ model Session {
 // ── Projects ─────────────────────────────────────────
 
 model Project {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  status      String   @default("active")
-  ownerTeamId String   @map("owner_team_id")
-  ownerUserId String?  @map("owner_user_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                     String    @id @default(cuid())
+  name                   String
+  slug                   String    @unique
+  description            String?
+  status                 String    @default("active")
+  ownerTeamId            String    @map("owner_team_id")
+  ownerUserId            String?   @map("owner_user_id")
+  homeUrl                String?   @map("home_url")
+  thumbnailUrl           String?   @map("thumbnail_url")
+  thumbnailUpdatedAt     DateTime? @map("thumbnail_updated_at")
+  thumbnailExpiresAt     DateTime? @map("thumbnail_expires_at")
+  thumbnailManualUpload  Boolean   @default(false) @map("thumbnail_manual_upload")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   ownerTeam         Team                  @relation(fields: [ownerTeamId], references: [id])
   ownerUser         User?                 @relation("ProjectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
@@ -139,6 +146,7 @@ model Project {
   projectGrants     ProjectGrant[]
   codeRepositories  CodeRepository[]
   architectureNodes ArchitectureNode[]
+  domainGroups      DomainGroup[]
   userArchives      ProjectUserArchive[]
 
   @@map("projects")
@@ -355,27 +363,45 @@ model ArchitectureSnapshot {
   @@map("architecture_snapshots")
 }
 
+model DomainGroup {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  name      String
+  color     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  nodes   ArchitectureNode[]
+
+  @@index([projectId])
+  @@map("domain_groups")
+}
+
+
 model ArchitectureNode {
-  id           String   @id @default(cuid())
-  projectId    String   @map("project_id")
-  repositoryId String   @map("repository_id")
-  snapshotId   String?  @map("snapshot_id")
-  type         String
-  name         String
-  path         String?
-  description  String?
-  domainGroup  String?  @map("domain_group")
-  isManual     Boolean  @default(false) @map("is_manual")
-  isCurrent    Boolean  @default(true) @map("is_current")
-  metadata     Json     @default("{}")
-  ownerUserId  String?  @map("owner_user_id")
-  ownerTeamId  String?  @map("owner_team_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(cuid())
+  projectId     String   @map("project_id")
+  repositoryId  String   @map("repository_id")
+  snapshotId    String?  @map("snapshot_id")
+  domainGroupId String?  @map("domain_group_id")
+  type          String
+  name          String
+  path          String?
+  description   String?
+  domainGroup   String?  @map("domain_group")
+  isManual      Boolean  @default(false) @map("is_manual")
+  isCurrent     Boolean  @default(true) @map("is_current")
+  metadata      Json     @default("{}")
+  ownerUserId   String?  @map("owner_user_id")
+  ownerTeamId   String?  @map("owner_team_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
   project       Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   repository    CodeRepository           @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
   snapshot      ArchitectureSnapshot?    @relation(fields: [snapshotId], references: [id])
+  domainGroupRef DomainGroup?            @relation(fields: [domainGroupId], references: [id], onDelete: SetNull)
   outgoingEdges ArchitectureEdge[]       @relation("EdgeFrom")
   incomingEdges ArchitectureEdge[]       @relation("EdgeTo")
   annotations   ArchitectureAnnotation[]
@@ -385,6 +411,7 @@ model ArchitectureNode {
   @@index([projectId, isCurrent])
   @@index([projectId, type])
   @@index([repositoryId, path])
+  @@index([domainGroupId])
   @@map("architecture_nodes")
 }
 
@@ -480,4 +507,21 @@ model GraphSyncEvent {
   @@index([projectId, status])
   @@index([entityType, entityId])
   @@map("graph_sync_events")
+}
+
+
+model ChatbotConfig {
+  id              String   @id @default(cuid())
+  userId          String   @unique @map("user_id")
+  provider        String
+  apiKeyEncrypted String?  @map("api_key_encrypted")
+  ollamaBaseUrl   String?  @map("ollama_base_url")
+  modelName       String   @map("model_name")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("chatbot_configs")
 }

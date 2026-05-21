@@ -66,6 +66,12 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
     name: string;
     path: string | null;
     domainGroup: string | null;
+    description?: string | null;
+    metadata?: Record<string, unknown> | null;
+    ownerUserId?: string | null;
+    ownerTeamId?: string | null;
+    isManual?: boolean | null;
+    isCurrent?: boolean | null;
   }): Promise<void> {
 
     if (!this.enabled || !this.client) return;
@@ -79,7 +85,13 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
              n.type = $type,
              n.name = $name,
              n.path = $path,
-             n.domainGroup = $domainGroup`,
+             n.domainGroup = $domainGroup,
+             n.description = $description,
+             n.metadata = $metadata,
+             n.ownerUserId = $ownerUserId,
+             n.ownerTeamId = $ownerTeamId,
+             n.isManual = $isManual,
+             n.isCurrent = $isCurrent`,
         {
           id: node.id,
           projectId: node.projectId,
@@ -87,6 +99,12 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
           name: node.name,
           path: node.path,
           domainGroup: node.domainGroup,
+          description: node.description ?? null,
+          metadata: node.metadata == null ? null : JSON.stringify(node.metadata),
+          ownerUserId: node.ownerUserId ?? null,
+          ownerTeamId: node.ownerTeamId ?? null,
+          isManual: node.isManual ?? null,
+          isCurrent: node.isCurrent ?? null,
         },
         { mode: 'write' },
       );
@@ -184,6 +202,137 @@ export class GraphSyncService implements OnModuleInit, OnModuleDestroy {
         projectId,
         entityType: 'edge',
         entityId: edgeId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+
+  async upsertLink(link: {
+    id: string;
+    projectId: string;
+    nodeId: string;
+    entityType: string;
+    entityId: string;
+    linkType: string;
+    note: string | null;
+  }): Promise<void> {
+
+    if (!this.enabled || !this.client) return;
+
+    try {
+      await this.client.run(
+        `MERGE (l:Link {id: $id})
+         SET l.projectId = $projectId,
+             l.nodeId = $nodeId,
+             l.entityType = $entityType,
+             l.entityId = $entityId,
+             l.linkType = $linkType,
+             l.note = $note
+         WITH l
+         MATCH (n {id: $nodeId, projectId: $projectId})
+         MERGE (l)-[:LINKED_TO]->(n)`,
+        {
+          id: link.id,
+          projectId: link.projectId,
+          nodeId: link.nodeId,
+          entityType: link.entityType,
+          entityId: link.entityId,
+          linkType: link.linkType,
+          note: link.note,
+        },
+        { mode: 'write' },
+      );
+    } catch (err) {
+      this.logger.warn({
+        op: 'upsertLink',
+        projectId: link.projectId,
+        entityType: 'link',
+        entityId: link.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+
+  async deleteLink(linkId: string, projectId: string): Promise<void> {
+
+    if (!this.enabled || !this.client) return;
+
+    try {
+      // Multi-tenant safe: scope delete by id AND projectId.
+      await this.client.run(
+        'MATCH (l:Link {id: $id, projectId: $pid}) DETACH DELETE l',
+        { id: linkId, pid: projectId },
+        { mode: 'write' },
+      );
+    } catch (err) {
+      this.logger.warn({
+        op: 'deleteLink',
+        projectId,
+        entityType: 'link',
+        entityId: linkId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+
+  async upsertAnnotation(annotation: {
+    id: string;
+    projectId: string;
+    nodeId: string;
+    content: string;
+  }): Promise<void> {
+
+    if (!this.enabled || !this.client) return;
+
+    try {
+      await this.client.run(
+        `MERGE (a:Annotation {id: $id})
+         SET a.projectId = $projectId,
+             a.nodeId = $nodeId,
+             a.content = $content
+         WITH a
+         MATCH (n {id: $nodeId, projectId: $projectId})
+         MERGE (a)-[:ANNOTATES]->(n)`,
+        {
+          id: annotation.id,
+          projectId: annotation.projectId,
+          nodeId: annotation.nodeId,
+          content: annotation.content,
+        },
+        { mode: 'write' },
+      );
+    } catch (err) {
+      this.logger.warn({
+        op: 'upsertAnnotation',
+        projectId: annotation.projectId,
+        entityType: 'annotation',
+        entityId: annotation.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+
+  async deleteAnnotation(annotationId: string, projectId: string): Promise<void> {
+
+    if (!this.enabled || !this.client) return;
+
+    try {
+      // Multi-tenant safe: scope delete by id AND projectId.
+      await this.client.run(
+        'MATCH (a:Annotation {id: $id, projectId: $pid}) DETACH DELETE a',
+        { id: annotationId, pid: projectId },
+        { mode: 'write' },
+      );
+    } catch (err) {
+      this.logger.warn({
+        op: 'deleteAnnotation',
+        projectId,
+        entityType: 'annotation',
+        entityId: annotationId,
         error: err instanceof Error ? err.message : String(err),
       });
     }

@@ -18,6 +18,10 @@ export class UpdateNodeDto {
 
   @IsOptional()
   @IsString()
+  domainGroupId?: string | null;
+
+  @IsOptional()
+  @IsString()
   ownerUserId?: string;
 
   @IsOptional()
