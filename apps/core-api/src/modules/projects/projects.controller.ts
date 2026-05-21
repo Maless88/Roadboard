@@ -16,6 +16,7 @@ import { GrantCheckGuard } from '../../common/grant-check.guard';
 import { FindProjectsQueryDto } from '../../common/query.dto';
 import { RequireGrant } from '../../common/require-grant.decorator';
 import { CurrentUser } from '../../common/user.decorator';
+import type { AuthUser } from '../../common/auth-user';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
@@ -30,15 +31,15 @@ export class ProjectsController {
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Post()
-  create(@Body() dto: CreateProjectDto, @CurrentUser() user: { userId: string }) {
+  create(@Body() dto: CreateProjectDto, @CurrentUser() user: AuthUser) {
 
-    return this.projectsService.create(dto, user?.userId);
+    return this.projectsService.create(dto, user);
   }
 
 
   @RequireGrant(GrantType.PROJECT_READ)
   @Get()
-  findAll(@Query() query: FindProjectsQueryDto, @CurrentUser() user: { userId: string }) {
+  findAll(@Query() query: FindProjectsQueryDto, @CurrentUser() user: AuthUser) {
 
     return this.projectsService.findAll(query.status, user?.userId);
   }
@@ -54,17 +55,17 @@ export class ProjectsController {
 
   @RequireGrant(GrantType.PROJECT_WRITE)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateProjectDto) {
+  update(@Param('id') id: string, @Body() dto: UpdateProjectDto, @CurrentUser() user: AuthUser) {
 
-    return this.projectsService.update(id, dto);
+    return this.projectsService.update(id, dto, user);
   }
 
 
   @RequireGrant(GrantType.PROJECT_ADMIN)
   @Delete(':id')
-  delete(@Param('id') id: string, @CurrentUser() user: { userId: string }) {
+  delete(@Param('id') id: string, @CurrentUser() user: AuthUser) {
 
-    return this.projectsService.delete(id, user?.userId);
+    return this.projectsService.delete(id, user);
   }
 
 
@@ -72,10 +73,10 @@ export class ProjectsController {
   @Post(':projectId/archive')
   archive(
     @Param('projectId') projectId: string,
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.projectsService.archiveForUser(projectId, user.userId);
+    return this.projectsService.archiveForUser(projectId, user);
   }
 
 
@@ -83,9 +84,9 @@ export class ProjectsController {
   @Delete(':projectId/archive')
   unarchive(
     @Param('projectId') projectId: string,
-    @CurrentUser() user: { userId: string },
+    @CurrentUser() user: AuthUser,
   ) {
 
-    return this.projectsService.unarchiveForUser(projectId, user.userId);
+    return this.projectsService.unarchiveForUser(projectId, user);
   }
 }

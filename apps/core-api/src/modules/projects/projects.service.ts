@@ -1,7 +1,10 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
 import { isInheritableByTeamMember } from '@roadboard/grants';
+import { optionalEnv } from '@roadboard/config';
+import type { AuthUser } from '../../common/auth-user';
+import { AuditService } from '../audit/audit.service';
 import { CreateProjectDto } from './create-project.dto';
 import { UpdateProjectDto } from './update-project.dto';
 
@@ -9,7 +12,42 @@ import { UpdateProjectDto } from './update-project.dto';
 @Injectable()
 export class ProjectsService {
 
-  constructor(@Inject('PRISMA') private readonly prisma: PrismaClient) {}
+  private readonly logger = new Logger(ProjectsService.name);
+  private readonly recentlyEnqueued = new Map<string, number>();
+
+
+  constructor(
+    @Inject('PRISMA') private readonly prisma: PrismaClient,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
+
+
+  private maybeEnqueueRefresh(project: { id: string; homeUrl: string | null; thumbnailExpiresAt: Date | null }): void {
+
+    if (!project.homeUrl) return;
+
+    const now = Date.now();
+    const expiresAt = project.thumbnailExpiresAt ? project.thumbnailExpiresAt.getTime() : 0;
+
+    if (expiresAt > now) return;
+
+    // De-dupe enqueue within a 60s window per project (in-memory; per-instance).
+    const last = this.recentlyEnqueued.get(project.id) ?? 0;
+
+    if (now - last < 60_000) return;
+
+    this.recentlyEnqueued.set(project.id, now);
+
+    const workerHost = optionalEnv('WORKER_JOBS_HOST', 'localhost');
+    const workerPort = optionalEnv('WORKER_JOBS_PORT', '3003');
+    const url = `http://${workerHost}:${workerPort}/jobs/thumbnail-refresh`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: project.id }),
+    }).catch((err) => this.logger.warn(`enqueue thumbnail-refresh failed: ${(err as Error).message}`));
+  }
 
 
   private async resolveOwnerTeamId(dto: CreateProjectDto): Promise<string> {
@@ -32,9 +70,10 @@ export class ProjectsService {
   }
 
 
-  async create(dto: CreateProjectDto, createdByUserId?: string) {
+  async create(dto: CreateProjectDto, user?: AuthUser) {
 
     const ownerTeamId = await this.resolveOwnerTeamId(dto);
+    const createdByUserId = user?.userId;
 
     const project = await this.prisma.project.create({
       data: {
@@ -69,6 +108,15 @@ export class ProjectsService {
       });
     }
 
+    if (user) {
+      await this.audit.recordForUser(user, 'project.created', 'project', project.id, project.id, {
+        name: project.name,
+        slug: project.slug,
+        ownerTeamId,
+        status: project.status,
+      });
+    }
+
     return project;
   }
 
@@ -95,9 +143,16 @@ export class ProjectsService {
 
   async findAll(status?: ProjectStatus, userId?: string) {
 
+    const OWNER_TEAM_INCLUDE = {
+      ownerTeam: { select: { id: true, name: true, slug: true } },
+    } as const;
+
     if (!userId) {
       const where = status ? { status } : {};
-      const projects = await this.prisma.project.findMany({ where });
+      const projects = await this.prisma.project.findMany({ where, include: OWNER_TEAM_INCLUDE });
+
+      for (const p of projects) this.maybeEnqueueRefresh(p);
+
       return this.decorateWithArchivedForMe(projects, userId);
     }
 
@@ -160,40 +215,54 @@ export class ProjectsService {
       ...(status ? { status } : {}),
     };
 
-    const projects = await this.prisma.project.findMany({ where });
+    const projects = await this.prisma.project.findMany({ where, include: OWNER_TEAM_INCLUDE });
+
+    for (const p of projects) this.maybeEnqueueRefresh(p);
+
     return this.decorateWithArchivedForMe(projects, userId);
   }
 
 
-  async archiveForUser(projectId: string, userId: string) {
+  async archiveForUser(projectId: string, user: AuthUser) {
 
     await this.findOne(projectId);
 
     await this.prisma.projectUserArchive.upsert({
-      where: { projectId_userId: { projectId, userId } },
+      where: { projectId_userId: { projectId, userId: user.userId } },
       update: {},
-      create: { projectId, userId },
+      create: { projectId, userId: user.userId },
     });
 
-    return { projectId, userId, archivedForMe: true };
+    await this.audit.recordForUser(user, 'project.archived', 'project', projectId, projectId, {
+      scope: 'per_user',
+    });
+
+    return { projectId, userId: user.userId, archivedForMe: true };
   }
 
 
-  async unarchiveForUser(projectId: string, userId: string) {
+  async unarchiveForUser(projectId: string, user: AuthUser) {
 
     await this.findOne(projectId);
 
     await this.prisma.projectUserArchive.deleteMany({
-      where: { projectId, userId },
+      where: { projectId, userId: user.userId },
     });
 
-    return { projectId, userId, archivedForMe: false };
+    await this.audit.recordForUser(user, 'project.unarchived', 'project', projectId, projectId, {
+      scope: 'per_user',
+    });
+
+    return { projectId, userId: user.userId, archivedForMe: false };
   }
 
 
   async findOne(id: string) {
 
-    const project = await this.prisma.project.findUnique({ where: { id } });
+    const project = await this.prisma.project.findUnique({
+      where: { id },
+      include: { ownerTeam: { select: { id: true, name: true, slug: true } } },
+    });
 
     if (!project) {
       throw new NotFoundException(`Project ${id} not found`);
@@ -203,31 +272,85 @@ export class ProjectsService {
   }
 
 
-  async update(id: string, dto: UpdateProjectDto) {
+  async update(id: string, dto: UpdateProjectDto, user?: AuthUser) {
 
-    await this.findOne(id);
+    const current = await this.findOne(id);
 
-    return this.prisma.project.update({
-      where: { id },
-      data: {
-        name: dto.name,
-        slug: dto.slug,
-        description: dto.description,
-        ownerTeamId: dto.ownerTeamId,
-        status: dto.status,
-      },
-    });
+    const data: Record<string, unknown> = {
+      name: dto.name,
+      slug: dto.slug,
+      description: dto.description,
+      ownerTeamId: dto.ownerTeamId,
+      status: dto.status,
+    };
+
+    if (dto.homeUrl !== undefined) {
+      const next = dto.homeUrl.trim();
+      const normalized = next.length === 0 ? null : next;
+      data.homeUrl = normalized;
+
+      // If homeUrl changed, invalidate the auto-screenshot thumbnail.
+      // Manual uploads (thumbnailManualUpload=true) are preserved unless homeUrl was set,
+      // because going URL→manual or manual→URL is a deliberate switch.
+      if (current.homeUrl !== normalized) {
+
+        if (current.thumbnailManualUpload && normalized !== null) {
+          // Switching from manual upload back to auto URL — clear the manual thumb
+          data.thumbnailUrl = null;
+          data.thumbnailUpdatedAt = null;
+          data.thumbnailExpiresAt = null;
+          data.thumbnailManualUpload = false;
+        } else if (!current.thumbnailManualUpload) {
+          // Auto URL changed — expire the auto thumbnail so the worker regenerates it
+          data.thumbnailExpiresAt = new Date(0);
+        }
+      }
+    }
+
+    const updated = await this.prisma.project.update({ where: { id }, data });
+
+    if (user) {
+      const changedFields: Record<string, { from: unknown; to: unknown }> = {};
+      const trackedKeys = ['name', 'slug', 'description', 'ownerTeamId', 'status', 'homeUrl'] as const;
+
+      for (const key of trackedKeys) {
+        const before = (current as Record<string, unknown>)[key];
+        const after = (updated as Record<string, unknown>)[key];
+
+        if (dto[key as keyof UpdateProjectDto] !== undefined && before !== after) {
+          changedFields[key] = { from: before ?? null, to: after ?? null };
+        }
+      }
+
+      if (Object.keys(changedFields).length > 0) {
+        await this.audit.recordForUser(user, 'project.updated', 'project', updated.id, updated.id, {
+          changed: changedFields,
+        });
+      }
+    }
+
+    return updated;
   }
 
 
-  async delete(id: string, requestingUserId?: string) {
+  async delete(id: string, user?: AuthUser) {
 
     const project = await this.findOne(id);
+    const requestingUserId = user?.userId;
 
     if (project.ownerUserId && requestingUserId && project.ownerUserId !== requestingUserId) {
       throw new ForbiddenException('Only the project owner can delete this project');
     }
 
-    return this.prisma.project.delete({ where: { id } });
+    const deleted = await this.prisma.project.delete({ where: { id } });
+
+    if (user) {
+      await this.audit.recordForUser(user, 'project.deleted', 'project', project.id, project.id, {
+        name: project.name,
+        slug: project.slug,
+      });
+    }
+
+    return deleted;
   }
 }

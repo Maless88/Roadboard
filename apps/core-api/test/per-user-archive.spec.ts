@@ -43,6 +43,12 @@ function auth(token: string): Record<string, string> {
 }
 
 
+function authNoBody(token: string): Record<string, string> {
+
+  return { Authorization: `Bearer ${token}` };
+}
+
+
 function authDelete(token: string): Record<string, string> {
 
   return { Authorization: `Bearer ${token}` };
@@ -148,7 +154,7 @@ describe('Per-User Archive Integration', () => {
 
     const res = await fetch(`${CORE_URL}/projects/${projectId}/archive`, {
       method: 'POST',
-      headers: auth(ownerToken),
+      headers: authNoBody(ownerToken),
     });
 
     expect([200, 201]).toContain(res.status);
@@ -174,7 +180,7 @@ describe('Per-User Archive Integration', () => {
 
     const res = await fetch(`${CORE_URL}/projects/${projectId}/archive`, {
       method: 'POST',
-      headers: auth(ownerToken),
+      headers: authNoBody(ownerToken),
     });
 
     expect([200, 201]).toContain(res.status);
@@ -188,7 +194,7 @@ describe('Per-User Archive Integration', () => {
 
     const res = await fetch(`${CORE_URL}/projects/${projectId}/archive`, {
       method: 'POST',
-      headers: auth(mateToken),
+      headers: authNoBody(mateToken),
     });
 
     expect([200, 201]).toContain(res.status);
