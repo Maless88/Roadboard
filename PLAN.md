@@ -11,7 +11,56 @@
 - [x] feat-ai-p0-02-outbox-audit — Outbox audit + alert backlog
 - [x] feat-ai-p0-03-impact-precomputation — ImpactAnalysis behavior + orphan check
 
+### CodeFlow / Graph DB migration
+
+- [x] CF-GDB-03b-A — Pre-mirror extension (Link/Annotation + node fields + backfill)
+- [x] CF-GDB-03b-B — Impact read swap (flag-gated, Cypher reverse-BFS)
+- [ ] CF-GDB-03b-C — Getter cutover and Postgres retire
+
 ## Project Visibility — Per-User Archive & Card UX
 
 - [x] feat-per-user-archive — Archiviazione progetto per-utente (visual only)
 - [x] fix-dashboard-card-empty-snapshot — Distinguere "snapshot non disponibile" da "progetto vuoto"
+
+## Deep Code Map (Wave 6)
+
+- [x] feat-deep-code-map-adr-schema — ADR schema Memgraph File/Symbol
+
+### Atlas / Domain grouping
+
+- [x] CF-22 — Domain grouping CRUD + drag-drop UI
+- [x] CF-22-enh — Drag-drop nativo Atlas (sostituisce click-to-assign in canvas)
+
+### Agent context tooling
+
+- [x] CF-19 — MCP `get_architecture_snapshot` (compact contract)
+- [x] CF-20 — Decision-Aware Graph sub-view (Atlas)
+- [x] CF-21 — Agent Context panel (snapshot viewer)
+- [x] CF-23 — Auto-attach snapshot in `create_handoff`
+
+## UX & Vibe Coding
+
+- [x] UX-naming — convenzione titoli `Area — descrizione` + retrofit task attivi
+- [x] UX-mcp-naming — MCP guidance soft warning su titoli legacy
+- [x] UX-skeletons — Skeleton + empty states su project card
+- [x] UX-coordinator — Vista web /coordinator read-only sui tasks
+- [x] UX-tasklist — Script tasks:list genera TASK_LIST.md a root
+- [x] UX-toasts — Toast unificate per Server Actions success/error
+- [x] UX-i18n — Glossario IT/EN + pass coerenza dizionari
+- [x] UX-mcp-guide — Wizard completion (verify live + token gen + 5 nuovi client)
+
+## AI Assistant
+
+- [x] AI-chatbot-foundation — Chatbot multi-provider (OpenAI / Anthropic / Ollama) per-utente
+
+## Project Discovery
+
+- [x] PD-thumbnail — Preview thumbnail home progetto (homeUrl auto + upload fallback)
+
+## Wave 4 / Team management
+
+- [x] W4-06 — Link "Gestisci inviti" da Settings a pagina team (UI invite canonical in /teams/:slug)
+
+## Observability / Audit
+
+- [x] audit-01 — Gap coverage ActivityEvent + restore tab Audit (filtri estesi)
