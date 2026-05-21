@@ -107,7 +107,9 @@ export class CoreApiClient {
       throw new Error(`core-api listTasks failed: ${res.status}`);
     }
 
-    return res.json() as Promise<unknown>;
+    const raw = await res.json() as unknown;
+
+    return this.enrichTasksWithAssignee(raw);
   }
 
 
@@ -429,6 +431,21 @@ export class CoreApiClient {
   }
 
 
+  async getArchitectureSnapshot(projectId: string): Promise<unknown> {
+
+    const res = await fetch(
+      `${BASE_URL}/projects/${projectId}/codeflow/graph/snapshot/compact`,
+      { headers: this.headers() },
+    );
+
+    if (!res.ok) {
+      throw new Error(`core-api getArchitectureSnapshot failed: ${res.status}`);
+    }
+
+    return res.json();
+  }
+
+
   async getNodeContext(projectId: string, nodeId: string): Promise<unknown> {
 
     const [nodeRes, impactRes] = await Promise.all([
@@ -586,6 +603,74 @@ export class CoreApiClient {
     }
 
     return res.json();
+  }
+
+
+  private async enrichTasksWithAssignee(raw: unknown): Promise<unknown> {
+
+    // Handles both flat array and paginated { items, nextCursor } shapes
+    const isPaginated =
+      raw !== null &&
+      typeof raw === "object" &&
+      !Array.isArray(raw) &&
+      "items" in (raw as object);
+
+    const tasks: Array<Record<string, unknown>> = isPaginated
+      ? ((raw as { items: Array<Record<string, unknown>> }).items)
+      : (raw as Array<Record<string, unknown>>);
+
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      return raw;
+    }
+
+    // Collect unique non-null assigneeIds
+    const ids = [...new Set(tasks.map((t) => t.assigneeId).filter((id): id is string => typeof id === "string" && id.length > 0))];
+
+    if (ids.length === 0) {
+      // Add assignee: null for all tasks
+      const enriched = tasks.map((t) => ({ ...t, assignee: null }));
+      return isPaginated ? { ...(raw as object), items: enriched } : enriched;
+    }
+
+    // Batch resolve (one request per unique assigneeId — typically ≤ 5)
+    const userMap = new Map<string, { id: string; username: string; displayName: string; email: string } | null>();
+    await Promise.all(
+      ids.map(async (id) => {
+        const user = await this.getUser(id).catch(() => null);
+        userMap.set(id, user);
+      }),
+    );
+
+    const enriched = tasks.map((t) => ({
+      ...t,
+      assignee: typeof t.assigneeId === "string" ? (userMap.get(t.assigneeId) ?? null) : null,
+    }));
+
+    return isPaginated ? { ...(raw as object), items: enriched } : enriched;
+  }
+
+
+  async getUser(userId: string): Promise<{ id: string; username: string; displayName: string; email: string } | null> {
+
+    const res = await fetch(`${AUTH_URL}/users/${encodeURIComponent(userId)}`, {
+      headers: this.headers(),
+    });
+
+    if (res.status === 404) {
+      return null;
+    }
+
+    if (!res.ok) {
+      throw new Error(`auth-access getUser failed: ${res.status}`);
+    }
+
+    const data = (await res.json()) as Record<string, unknown>;
+    return {
+      id: data.id as string,
+      username: data.username as string,
+      displayName: (data.displayName ?? data.username) as string,
+      email: data.email as string,
+    };
   }
 
 

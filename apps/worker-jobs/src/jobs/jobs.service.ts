@@ -7,6 +7,7 @@ import {
   QUEUE_DASHBOARD_REFRESH,
   QUEUE_SUMMARY_GENERATION,
   QUEUE_CLEANUP,
+  QUEUE_THUMBNAIL_REFRESH,
 } from './queue-names';
 
 
@@ -21,7 +22,24 @@ export class JobsService {
     @InjectQueue(QUEUE_DASHBOARD_REFRESH) private readonly dashboardRefreshQueue: Queue,
     @InjectQueue(QUEUE_SUMMARY_GENERATION) private readonly summaryGenerationQueue: Queue,
     @InjectQueue(QUEUE_CLEANUP) private readonly cleanupQueue: Queue,
+    @InjectQueue(QUEUE_THUMBNAIL_REFRESH) private readonly thumbnailRefreshQueue: Queue,
   ) {}
+
+
+  async enqueueThumbnailRefresh(projectId: string): Promise<void> {
+
+    await this.thumbnailRefreshQueue.add(
+      'refresh',
+      { projectId },
+      {
+        jobId: `thumbnail-${projectId}`,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+        attempts: 2,
+        backoff: { type: 'fixed', delay: 60_000 },
+      },
+    );
+  }
 
 
   async enqueueDashboardRefresh(projectId: string): Promise<void> {
@@ -64,16 +82,18 @@ export class JobsService {
 
   async getQueueStats(): Promise<Record<string, { waiting: number; active: number; completed: number; failed: number }>> {
 
-    const [drCounts, sgCounts, clCounts] = await Promise.all([
+    const [drCounts, sgCounts, clCounts, trCounts] = await Promise.all([
       this.dashboardRefreshQueue.getJobCounts(),
       this.summaryGenerationQueue.getJobCounts(),
       this.cleanupQueue.getJobCounts(),
+      this.thumbnailRefreshQueue.getJobCounts(),
     ]);
 
     return {
       [QUEUE_DASHBOARD_REFRESH]: drCounts as { waiting: number; active: number; completed: number; failed: number },
       [QUEUE_SUMMARY_GENERATION]: sgCounts as { waiting: number; active: number; completed: number; failed: number },
       [QUEUE_CLEANUP]: clCounts as { waiting: number; active: number; completed: number; failed: number },
+      [QUEUE_THUMBNAIL_REFRESH]: trCounts as { waiting: number; active: number; completed: number; failed: number },
     };
   }
 }
