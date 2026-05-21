@@ -21,6 +21,7 @@ export interface McpTokenInfo {
   status: string;
   createdAt: string;
   revokedAt: string | null;
+  expiresAt: string | null;
 }
 
 
@@ -51,6 +52,11 @@ export interface Project {
   status: ProjectStatusValue;
   ownerTeamId: string;
   ownerUserId: string | null;
+  homeUrl?: string | null;
+  thumbnailUrl?: string | null;
+  thumbnailUpdatedAt?: string | null;
+  thumbnailExpiresAt?: string | null;
+  thumbnailManualUpload?: boolean;
   archivedForMe?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -560,6 +566,53 @@ export async function listActivity(
 }
 
 
+export type AuditEvent = ActivityEvent;
+
+
+export interface AuditPage {
+  events: AuditEvent[];
+  total: number;
+  take: number;
+  skip: number;
+}
+
+
+export async function listAuditEvents(
+  token: string,
+  projectId: string,
+  opts: {
+    take?: number;
+    skip?: number;
+    eventType?: string;
+    actorUserId?: string;
+    targetType?: string;
+    actorType?: 'user' | 'mcp_token' | 'system';
+    dateFrom?: string;
+    dateTo?: string;
+  } = {},
+): Promise<AuditPage> {
+
+  const params = new URLSearchParams();
+
+  if (opts.take !== undefined) params.set('take', String(opts.take));
+  if (opts.skip !== undefined) params.set('skip', String(opts.skip));
+  if (opts.eventType) params.set('eventType', opts.eventType);
+  if (opts.actorUserId) params.set('actorUserId', opts.actorUserId);
+  if (opts.targetType) params.set('targetType', opts.targetType);
+  if (opts.actorType) params.set('actorType', opts.actorType);
+  if (opts.dateFrom) params.set('dateFrom', opts.dateFrom);
+  if (opts.dateTo) params.set('dateTo', opts.dateTo);
+
+  const qs = params.toString();
+  const url = `${CORE_API}/projects/${projectId}/audit${qs ? `?${qs}` : ''}`;
+  const res = await fetch(url, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error('Failed to fetch audit events');
+
+  return res.json() as Promise<AuditPage>;
+}
+
+
 export type ContributorEventType = 'contributor.added' | 'contributor.removed' | 'contributor.left';
 
 
@@ -644,7 +697,7 @@ export async function createProject(
 export async function updateProject(
   token: string,
   projectId: string,
-  data: { name?: string; slug?: string; description?: string; ownerTeamId?: string; status?: string },
+  data: { name?: string; slug?: string; description?: string; ownerTeamId?: string; status?: string; homeUrl?: string },
 ): Promise<Project> {
 
   const res = await fetch(`${CORE_API}/projects/${projectId}`, {
@@ -662,11 +715,35 @@ export async function updateProject(
 }
 
 
+export async function uploadProjectThumbnail(
+  token: string,
+  projectId: string,
+  file: File | Blob,
+): Promise<{ thumbnailUrl: string }> {
+
+  const form = new FormData();
+  form.append('file', file);
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/thumbnail`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to upload thumbnail');
+  }
+
+  return res.json() as Promise<{ thumbnailUrl: string }>;
+}
+
+
 export async function archiveProjectForMe(token: string, projectId: string): Promise<void> {
 
   const res = await fetch(`${CORE_API}/projects/${projectId}/archive`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!res.ok) {
@@ -680,7 +757,7 @@ export async function unarchiveProjectForMe(token: string, projectId: string): P
 
   const res = await fetch(`${CORE_API}/projects/${projectId}/archive`, {
     method: 'DELETE',
-    headers: authHeaders(token),
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   if (!res.ok) {
@@ -1204,4 +1281,237 @@ export async function deleteArchitectureLink(
   );
 
   if (!res.ok) throw new Error(`Failed to delete link: ${res.status}`);
+}
+
+
+export interface DomainGroup {
+  id: string;
+  projectId: string;
+  name: string;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export async function listDomainGroups(token: string, projectId: string): Promise<DomainGroup[]> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/domain-groups`, {
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error(`Failed to fetch domain groups: ${res.status}`);
+
+  return res.json() as Promise<DomainGroup[]>;
+}
+
+
+export async function createDomainGroup(
+  token: string,
+  projectId: string,
+  data: { name: string; color?: string },
+): Promise<DomainGroup> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/domain-groups`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to create domain group');
+  }
+
+  return res.json() as Promise<DomainGroup>;
+}
+
+
+export async function updateDomainGroup(
+  token: string,
+  projectId: string,
+  groupId: string,
+  data: { name?: string; color?: string },
+): Promise<DomainGroup> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/domain-groups/${groupId}`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to update domain group');
+  }
+
+  return res.json() as Promise<DomainGroup>;
+}
+
+
+export async function deleteDomainGroup(
+  token: string,
+  projectId: string,
+  groupId: string,
+): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/projects/${projectId}/domain-groups/${groupId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) throw new Error(`Failed to delete domain group: ${res.status}`);
+}
+
+
+export type ChatbotProvider = 'openai' | 'anthropic' | 'ollama';
+
+
+export interface ChatbotConfigView {
+  id: string;
+  provider: ChatbotProvider;
+  modelName: string;
+  ollamaBaseUrl: string | null;
+  hasApiKey: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
+export interface ChatbotConfigInput {
+  provider: ChatbotProvider;
+  modelName: string;
+  apiKey?: string;
+  ollamaBaseUrl?: string;
+  isActive?: boolean;
+}
+
+
+export async function getChatbotConfig(token: string): Promise<ChatbotConfigView | null> {
+
+  const res = await fetch(`${CORE_API}/chatbot/config`, { headers: authHeaders(token) });
+
+  if (!res.ok) throw new Error(`Failed to fetch chatbot config: ${res.status}`);
+
+  return res.json() as Promise<ChatbotConfigView | null>;
+}
+
+
+export async function saveChatbotConfig(
+  token: string,
+  data: ChatbotConfigInput,
+): Promise<ChatbotConfigView> {
+
+  const res = await fetch(`${CORE_API}/chatbot/config`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? `Failed to save chatbot config: ${res.status}`);
+  }
+
+  return res.json() as Promise<ChatbotConfigView>;
+}
+
+
+export async function deleteChatbotConfig(token: string): Promise<void> {
+
+  const res = await fetch(`${CORE_API}/chatbot/config`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`Failed to delete chatbot config: ${res.status}`);
+  }
+}
+
+
+export async function testChatbotConfig(
+  token: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+
+  const res = await fetch(`${CORE_API}/chatbot/config/test`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    return { ok: false, error: err.message ?? `Test failed: ${res.status}` };
+  }
+
+  return res.json() as Promise<{ ok: true } | { ok: false; error: string }>;
+}
+
+
+export async function assignNodeToDomainGroup(
+  token: string,
+  projectId: string,
+  nodeId: string,
+  domainGroupId: string | null,
+): Promise<ArchitectureNode> {
+
+  const res = await fetch(
+    `${CORE_API}/projects/${projectId}/codeflow/graph/nodes/${nodeId}`,
+    {
+      method: 'PATCH',
+      headers: authHeaders(token),
+      body: JSON.stringify({ domainGroupId }),
+    },
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as { message?: string };
+    throw new Error(err.message ?? 'Failed to assign node to domain group');
+  }
+
+  return res.json() as Promise<ArchitectureNode>;
+}
+
+
+export interface ArchitectureSnapshot {
+  projectId: string;
+  generatedAt: string;
+  nodeCount: number;
+  edgeCount: number;
+  summary: {
+    nodesByType: Record<string, number>;
+    edgesByType: Record<string, number>;
+  };
+  topImpactNodes: Array<{
+    nodeId: string;
+    name: string;
+    type: string;
+    directDependants: number;
+  }>;
+  recentAnnotations: Array<{
+    nodeId: string;
+    nodeName: string;
+    content: string;
+    createdAt: string;
+  }>;
+}
+
+
+export async function getProjectArchitectureSnapshot(
+  token: string,
+  projectId: string,
+): Promise<ArchitectureSnapshot> {
+
+  const res = await fetch(
+    `${CORE_API}/projects/${projectId}/codeflow/snapshot/compact`,
+    { headers: authHeaders(token) },
+  );
+
+  if (!res.ok) {
+    const status = res.status;
+    throw Object.assign(new Error('Failed to fetch architecture snapshot'), { status });
+  }
+
+  return res.json() as Promise<ArchitectureSnapshot>;
 }

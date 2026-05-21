@@ -15,6 +15,11 @@ const CLIENTS: { id: McpClient; icon: string; key: number }[] = [
   { id: 'zed', icon: '🔷', key: 2 },
   { id: 'vscode', icon: '🟣', key: 3 },
   { id: 'codex', icon: '✏️', key: 4 },
+  { id: 'cursor', icon: '🖱️', key: 5 },
+  { id: 'cline', icon: '🤖', key: 6 },
+  { id: 'continue', icon: '▶️', key: 7 },
+  { id: 'windsurf', icon: '🏄', key: 8 },
+  { id: 'jetbrains', icon: '🧠', key: 9 },
 ];
 
 
@@ -34,12 +39,22 @@ export function Step1ClientChoice({ selected, onSelect }: Props) {
             zed: dict.step1.zed,
             vscode: dict.step1.vscode,
             codex: dict.step1.codex,
+            cursor: dict.step1.cursor,
+            cline: dict.step1.cline,
+            continue: dict.step1.continue,
+            windsurf: dict.step1.windsurf,
+            jetbrains: dict.step1.jetbrains,
           };
           const subMap: Record<McpClient, string> = {
             'claude-code': dict.step1.claudeCodeSub,
             zed: dict.step1.zedSub,
             vscode: dict.step1.vscodeSub,
             codex: dict.step1.codexSub,
+            cursor: dict.step1.cursorSub,
+            cline: dict.step1.clineSub,
+            continue: dict.step1.continueSub,
+            windsurf: dict.step1.windsurfSub,
+            jetbrains: dict.step1.jetbrainsSub,
           };
           const label = labelMap[c.id];
           const sub = subMap[c.id];

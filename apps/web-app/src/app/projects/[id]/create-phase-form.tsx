@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { createPhaseAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 import type { Decision } from '@/lib/api';
 
 
@@ -15,6 +17,7 @@ interface CreatePhaseFormProps {
 export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormProps) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -29,13 +32,17 @@ export function CreatePhaseForm({ projectId, decisions = [] }: CreatePhaseFormPr
     if (!title.trim()) return;
 
     startTransition(async () => {
-      const result = await createPhaseAction(projectId, {
-        title: title.trim(),
-        description: description.trim() || undefined,
-        decisionId: decisionId || undefined,
-      });
+      const result = await withToast(
+        () => createPhaseAction(projectId, {
+          title: title.trim(),
+          description: description.trim() || undefined,
+          decisionId: decisionId || undefined,
+        }),
+        showToast,
+        { successMsg: dict.common.toast.created },
+      );
 
-      if (result.error) {
+      if (result?.error) {
         setError(result.error);
         return;
       }

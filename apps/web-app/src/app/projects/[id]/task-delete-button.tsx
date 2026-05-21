@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { deleteTaskAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 
 
 interface Props {
@@ -15,8 +17,8 @@ interface Props {
 export function TaskDeleteButton({ taskId, taskTitle, projectId }: Props) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
@@ -27,17 +29,13 @@ export function TaskDeleteButton({ taskId, taskTitle, projectId }: Props) {
     }
 
     startTransition(async () => {
-      const result = await deleteTaskAction(taskId, projectId);
-
-      if (result?.error) {
-        setError(result.error);
-        setConfirming(false);
-      }
+      await withToast(
+        () => deleteTaskAction(taskId, projectId),
+        showToast,
+        { successMsg: dict.common.toast.deleted },
+      );
+      setConfirming(false);
     });
-  }
-
-  if (error) {
-    return <span className="text-xs text-red-400">{error}</span>;
   }
 
   return (

@@ -3,6 +3,8 @@
 import { useState, useTransition } from 'react';
 import { deleteProjectAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 
 
 interface Props {
@@ -14,8 +16,8 @@ interface Props {
 export function DeleteProjectButton({ projectId, projectName }: Props) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [confirming, setConfirming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function handleClick() {
@@ -26,19 +28,12 @@ export function DeleteProjectButton({ projectId, projectName }: Props) {
     }
 
     startTransition(async () => {
-      const result = await deleteProjectAction(projectId);
-
-      if (result?.error) {
-        setError(result.error);
-        setConfirming(false);
-      }
+      await withToast(
+        () => deleteProjectAction(projectId),
+        showToast,
+      );
+      setConfirming(false);
     });
-  }
-
-  if (error) {
-    return (
-      <span className="text-xs text-red-400">{error}</span>
-    );
   }
 
   return (

@@ -8,6 +8,7 @@ import {
   createTask, createPhase, createDecision, createMemoryEntry, createProject, deleteProject,
   archiveProjectForMe, unarchiveProjectForMe,
   listProjectRepositories, createProjectRepository, deleteProjectRepository,
+  updateProject, uploadProjectThumbnail,
   type RepositoryProvider,
 } from '@/lib/api';
 import { setToken, clearToken, getToken } from '@/lib/auth';
@@ -236,6 +237,57 @@ export async function createProjectAction(
   revalidatePath('/projects');
   revalidatePath('/dashboard');
   return { id: project.id };
+}
+
+
+export async function updateProjectAction(
+  projectId: string,
+  data: { name?: string; slug?: string; description?: string; homeUrl?: string; status?: string },
+): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  try {
+    await updateProject(token, projectId, data);
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+
+  revalidatePath('/dashboard');
+  revalidatePath(`/projects/${projectId}`);
+  return {};
+}
+
+
+export async function uploadProjectThumbnailAction(
+  projectId: string,
+  formData: FormData,
+): Promise<{ error?: string; thumbnailUrl?: string }> {
+
+  const token = await getToken();
+
+  if (!token) {
+    return { error: 'Not authenticated' };
+  }
+
+  const file = formData.get('file');
+
+  if (!file || !(file instanceof File) || file.size === 0) {
+    return { error: 'Missing file' };
+  }
+
+  try {
+    const result = await uploadProjectThumbnail(token, projectId, file);
+    revalidatePath('/dashboard');
+    revalidatePath(`/projects/${projectId}`);
+    return { thumbnailUrl: result.thumbnailUrl };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
 }
 
 

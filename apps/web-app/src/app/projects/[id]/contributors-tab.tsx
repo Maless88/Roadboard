@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 import { addDeveloperAction, removeDeveloperAction } from '@/app/settings/actions';
 import type { User, Grant } from '@/lib/api';
 
@@ -18,10 +20,10 @@ interface ContributorsTabProps {
 export function ContributorsTab({ projectId, currentUserId, isOwner, users, initialGrants }: ContributorsTabProps) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [grants, setGrants] = useState(initialGrants);
   const [addUserId, setAddUserId] = useState('');
   const [addPending, setAddPending] = useState(false);
-  const [error, setError] = useState('');
 
   const ownerGrant = grants.find((g) => g.subjectType === 'user' && g.grantType === 'project.admin');
   const ownerUser = ownerGrant ? users.find((u) => u.id === ownerGrant.subjectId) : null;
@@ -38,13 +40,14 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
     if (!addUserId) return;
 
     setAddPending(true);
-    setError('');
 
-    const res = await addDeveloperAction(projectId, addUserId);
+    const res = await withToast(
+      () => addDeveloperAction(projectId, addUserId),
+      showToast,
+      { successMsg: dict.common.toast.added },
+    );
 
-    if (res.error) {
-      setError(res.error);
-    } else {
+    if (!res?.error) {
       const now = new Date().toISOString();
       setGrants((prev) => [
         ...prev,
@@ -59,11 +62,13 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
 
   async function handleRemove(userId: string) {
 
-    const res = await removeDeveloperAction(projectId, userId);
+    const res = await withToast(
+      () => removeDeveloperAction(projectId, userId),
+      showToast,
+      { successMsg: dict.common.toast.removed },
+    );
 
-    if (res.error) {
-      setError(res.error);
-    } else {
+    if (!res?.error) {
       setGrants((prev) =>
         prev.filter((g) => !(g.subjectType === 'user' && g.subjectId === userId && g.grantType !== 'project.admin')),
       );
@@ -72,15 +77,6 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
 
   return (
     <div className="space-y-5">
-
-      {error && (
-        <div
-          className="rounded-lg px-4 py-3 text-sm text-red-400"
-          style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)' }}
-        >
-          {error}
-        </div>
-      )}
 
       <Card title={dict.settings.members.owner}>
         {ownerUser ? (
