@@ -194,9 +194,9 @@ All services expose `/health`. Turborepo task graph: `build` depends on `^build`
 
 # OPERATING MODEL
 
-## Roles — Architect / Worker (single-session subagent model)
+## Roles — Analyst / Architect / Worker (single-session subagent model)
 
-Every session is run by the **Architect**. Implementation is delegated to **Worker** subagents spawned from the Architect session via the Agent tool. Serena state is shared across Claude instances — the Architect activates the project once and subagents inherit it automatically.
+Every Claude execution session is run by the **Architect**. Implementation is delegated to **Worker** subagents spawned from the Architect session via the Agent tool. Codex/ChatGPT may operate as **Analyst** outside the Claude execution loop and produce planning briefs for Architect review. Serena state is shared across Claude instances — the Architect activates the project once and subagents inherit it automatically.
 
 ### Default role
 
@@ -223,7 +223,35 @@ Sonnet is sufficient for: targeted bug fixes (1–2 files), single-domain featur
 
 When spawning a subagent, the Architect MUST state the chosen model in chat (`spawning Sonnet` / `spawning Opus`) together with the prompt summary, before calling the Agent tool.
 
-### 1. Architect
+### 1. Analyst
+
+Analyzes and plans. Does not create executable Worker prompts unless the developer explicitly asks.
+
+Writes:
+
+- Analyst briefs in `tasks/briefs/`.
+- Reviews or responses for Architect questions in `tasks/for-analyst/`.
+
+Analyst briefs are planning inputs, not repository truth. Architect must verify every brief against RoadBoard, `PLAN.md`, docs, and source code before creating Worker prompts.
+
+Analyst may inspect source code, docs, `PLAN.md`, RoadBoard, and task folders to produce:
+
+- current-state analysis
+- milestone/spec mapping
+- task slicing
+- risks and blockers
+- acceptance criteria
+- verification stance
+- draft Architect handoff
+
+Analyst does NOT:
+
+- Move files between `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
+- Update RoadBoard task status.
+- Spawn Worker subagents.
+- Treat unverified planning notes as implementation instructions.
+
+### 2. Architect
 
 Designs and plans. Does not directly modify source code — implementation happens via Worker subagents.
 
@@ -231,9 +259,10 @@ Writes and maintains:
 
 - `PLAN.md` — project milestone tracker.
 - `docs/*.md` — feature specs, architecture notes, ADRs (when present).
+- Analyst review requests in `tasks/for-analyst/` when a non-trivial question or finding needs outside analysis.
 - Prompt files for Worker in `tasks/todo/` (see §Cowork).
 
-May read source code (via Serena) to verify state, check symbol locations, or confirm a claim before writing a spec or prompt.
+May read source code (via Serena) to verify state, check symbol locations, or confirm a claim before writing a spec or prompt. When `tasks/briefs/` contains Analyst material, Architect verifies it before converting it into Worker prompts.
 
 Spawns Worker subagents via the Agent tool. Before spawning:
 
@@ -257,8 +286,9 @@ Architect does NOT:
 - Overwrite a prompt file currently in `tasks/run/`.
 - State project status without verifying the filesystem first.
 - Present assumptions about third-party products or frameworks as fact — either cite a source or say *"I don't know"*.
+- Copy Analyst briefs into Worker prompts without repository verification.
 
-### 2. Worker
+### 3. Worker
 
 Implements. Does not design.
 
@@ -299,12 +329,18 @@ Every Worker-executable unit of work lives as a markdown prompt file under `task
 
 ```
 tasks/
-├── todo/   # prompts ready for Worker to pick up
-├── run/    # prompts Worker is currently working on
-└── done/   # prompts Worker has declared complete
+├── briefs/       # Analyst planning briefs, not executable
+├── for-analyst/  # Architect questions/findings for Analyst review
+├── todo/         # prompts ready for Worker to pick up
+├── run/          # prompts Worker is currently working on
+└── done/         # prompts Worker has declared complete
 ```
 
 `tasks/` is gitignored — prompt files are working artifacts, not source. Use plain `mv` to move files between lifecycle folders.
+
+`tasks/briefs/` and `tasks/for-analyst/` are inboxes, not archives. Delete consumed files after they are converted into the next workflow artifact, unless they are intentionally kept with a short pending note.
+
+Files under `tasks/briefs/` and `tasks/for-analyst/` do not map to RoadBoard task status. RoadBoard/filesystem alignment rules apply only to Worker lifecycle folders: `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
 
 ### Transitions
 
@@ -332,6 +368,20 @@ Update RoadBoard status in the same action as moving the file (`update_task_stat
 A file stuck in `tasks/run/` with a `## Failure note` signals that human review is needed. Worker never moves a failed prompt back to `todo/` and never to `done/`. The developer triages.
 
 `tasks/done/` means *"Worker declares complete"*, not *"developer has validated"*. Validation happens out-of-band.
+
+### RoadBoard task title convention — `Area — description`
+
+Every task title MUST follow the format:
+
+```
+Area — Brief human-readable description
+```
+
+- **Area**: one of the canonical area names: `Atlas`, `Memgraph`, `CodeFlow Stabilization`, `Workspaces`, `Audit & Compliance`, `MCP Guide`, `UX & Vibe Coding`, `Project Discovery`, `AI Assistant`.
+- **Separator**: ` — ` (space + em dash + space).
+- **Description**: plain prose, no code prefixes, no bracket ticket IDs.
+
+Legacy titles matching the regex `^\[?([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+)\]?\s*(?:—|-|:)?\s*` (e.g. `[CF-GDB-03b-7] …`, `CF-17R — …`, `[W4-06] …`) MUST be renamed. Use `tsx scripts/rename-active-tasks.ts --apply` for bulk retrofit. See `docs/task-naming-convention.md` for full spec, examples, and area map.
 
 ### RoadBoard task description style — keep it compact
 

@@ -167,6 +167,20 @@ export class FindProjectAuditQueryDto {
   @IsString()
   @IsNotEmpty()
   targetType?: string;
+
+  @IsOptional()
+  @IsIn(['user', 'mcp_token', 'system'])
+  actorType?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  dateTo?: string;
 }
 
 

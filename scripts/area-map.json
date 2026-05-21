@@ -1,0 +1,32 @@
+{
+  "_comment": "Maps legacy task code prefixes to human-readable area names. Used by rename-active-tasks.ts.",
+  "prefixes": {
+    "CF-GDB": "Memgraph",
+    "CF-AGENT": "Atlas",
+    "CF": "Atlas",
+    "AI-P": "CodeFlow Stabilization",
+    "W4": "Workspaces",
+    "Audit": "Audit & Compliance",
+    "audit": "Audit & Compliance",
+    "MCP": "MCP Guide",
+    "UX": "UX & Vibe Coding",
+    "PD": "Project Discovery",
+    "AI-chatbot": "AI Assistant"
+  },
+  "exact": {
+    "CF-17R": "Atlas",
+    "CF-GDB-03b-7": "Memgraph",
+    "CF-GDB-03b": "Memgraph",
+    "CF-GDB-03": "Memgraph",
+    "CF-GDB-04": "Memgraph",
+    "CF-AGENT-01c": "Atlas",
+    "CF-AGENT-01d": "Atlas",
+    "CF-19": "Atlas",
+    "CF-20": "Atlas",
+    "CF-21": "Atlas",
+    "CF-22": "Atlas",
+    "CF-23": "Atlas",
+    "W4-06": "Workspaces",
+    "audit-01": "Audit & Compliance"
+  }
+}
