@@ -17,6 +17,7 @@ import {
   SEARCH_MEMORY_TOOL,
   GET_ARCHITECTURE_MAP_TOOL,
   GET_NODE_CONTEXT_TOOL,
+  GET_ARCHITECTURE_SNAPSHOT_TOOL,
   CREATE_ARCHITECTURE_REPOSITORY_TOOL,
   CREATE_ARCHITECTURE_NODE_TOOL,
   CREATE_ARCHITECTURE_EDGE_TOOL,
@@ -24,13 +25,15 @@ import {
   CREATE_ARCHITECTURE_ANNOTATION_TOOL,
   INGEST_ARCHITECTURE_TOOL,
   LINK_TASK_TO_NODE_TOOL,
+  type ArchitectureSnapshot,
 } from './tools';
+import { LEGACY_TITLE_REGEX, checkLegacyTitle } from './naming';
 
 
 describe('MCP_TOOLS', () => {
 
-  it('exports exactly 24 tools', () => {
-    expect(MCP_TOOLS).toHaveLength(24);
+  it('exports exactly 25 tools', () => {
+    expect(MCP_TOOLS).toHaveLength(25);
   });
 
   it('all tools have name, description and inputSchema', () => {
@@ -145,6 +148,105 @@ describe('project management tools', () => {
 });
 
 
+describe('task naming convention', () => {
+
+  describe('LEGACY_TITLE_REGEX — positive matches (legacy titles)', () => {
+
+    it('matches bracket+code prefix: [CF-GDB-03b-7]', () => {
+      expect(LEGACY_TITLE_REGEX.test('[CF-GDB-03b-7] Test outbox')).toBe(true);
+    });
+
+    it('matches bracket+code prefix: [CF-17R]', () => {
+      expect(LEGACY_TITLE_REGEX.test('[CF-17R] Impact view')).toBe(true);
+    });
+
+    it('matches bare code prefix with em-dash: CF-17R —', () => {
+      expect(LEGACY_TITLE_REGEX.test('CF-17R — Impact view generalizzata')).toBe(true);
+    });
+
+    it('matches bracket+short code: [W4-06]', () => {
+      expect(LEGACY_TITLE_REGEX.test('[W4-06] web-app: invite flow')).toBe(true);
+    });
+
+    it('matches lowercase code prefix: audit-01:', () => {
+      expect(LEGACY_TITLE_REGEX.test('audit-01: popolare AuditEvent')).toBe(true);
+    });
+
+    it('matches code without brackets or separator', () => {
+      expect(LEGACY_TITLE_REGEX.test('CF-AGENT-01c description here')).toBe(true);
+    });
+  });
+
+
+  describe('LEGACY_TITLE_REGEX — negative matches (compliant titles)', () => {
+
+    it('does not match "Area — description" format', () => {
+      expect(LEGACY_TITLE_REGEX.test('Atlas — Impact view generalizzata')).toBe(false);
+    });
+
+    it('does not match Memgraph area prefix', () => {
+      expect(LEGACY_TITLE_REGEX.test('Memgraph — Swap reads to graph DB')).toBe(false);
+    });
+
+    it('does not match "Settings → tab Usage: consumo token"', () => {
+      expect(LEGACY_TITLE_REGEX.test('Settings → tab Usage: consumo token per utente')).toBe(false);
+    });
+
+    it('does not match plain prose title', () => {
+      expect(LEGACY_TITLE_REGEX.test('Fix login button color on mobile')).toBe(false);
+    });
+
+    it('does not match "UX & Vibe Coding — ..."', () => {
+      expect(LEGACY_TITLE_REGEX.test('UX & Vibe Coding — Empty state per lista task vuota')).toBe(false);
+    });
+  });
+
+
+  describe('checkLegacyTitle — warning shape', () => {
+
+    it('returns null for compliant title', () => {
+      expect(checkLegacyTitle('Atlas — Gruppi di dominio (CRUD)')).toBeNull();
+    });
+
+    it('returns a warning string for legacy title', () => {
+      const warning = checkLegacyTitle('[CF-XX-01] Fix something');
+      expect(typeof warning).toBe('string');
+      expect(warning).toContain('legacy code');
+      expect(warning).toContain('Area — description');
+      expect(warning).toContain('docs/task-naming-convention.md');
+    });
+
+    it('warning includes the offending title', () => {
+      const title = 'CF-17R — Impact view';
+      const warning = checkLegacyTitle(title);
+      expect(warning).toContain(title);
+    });
+
+    it('returns null for Memgraph area title', () => {
+      expect(checkLegacyTitle('Memgraph — Estendi mirror a Link')).toBeNull();
+    });
+  });
+
+
+  describe('create_task tool — naming guidance in description and schema', () => {
+
+    it('description contains naming convention instruction', () => {
+      expect(CREATE_TASK_TOOL.description).toContain('Area — description');
+    });
+
+    it('description contains positive examples', () => {
+      expect(CREATE_TASK_TOOL.description).toContain('Atlas — Gruppi di dominio (CRUD)');
+    });
+
+    it('title field description warns against legacy codes', () => {
+      const props = CREATE_TASK_TOOL.inputSchema.properties as Record<string, { description: string }>;
+      expect(props.title.description).toContain('Area — description');
+      expect(props.title.description).toContain('CF-XX-YY');
+    });
+  });
+});
+
+
 describe('codeflow tools', () => {
 
   it('get_architecture_map requires projectId', () => {
@@ -191,5 +293,49 @@ describe('codeflow tools', () => {
   it('link_task_to_node requires projectId, taskId, nodeId', () => {
     expect(LINK_TASK_TO_NODE_TOOL.name).toBe('link_task_to_node');
     expect(LINK_TASK_TO_NODE_TOOL.inputSchema.required).toEqual(['projectId', 'taskId', 'nodeId']);
+  });
+
+  it('get_architecture_snapshot requires projectId only', () => {
+    expect(GET_ARCHITECTURE_SNAPSHOT_TOOL.name).toBe('get_architecture_snapshot');
+    expect(GET_ARCHITECTURE_SNAPSHOT_TOOL.inputSchema.required).toEqual(['projectId']);
+  });
+
+  it('get_architecture_snapshot is listed in MCP_TOOLS', () => {
+    const names = MCP_TOOLS.map((t) => t.name);
+    expect(names).toContain('get_architecture_snapshot');
+  });
+});
+
+
+describe('ArchitectureSnapshot contract', () => {
+
+  it('satisfies the compact contract shape', () => {
+
+    const sample: ArchitectureSnapshot = {
+      projectId: 'proj-1',
+      generatedAt: new Date().toISOString(),
+      nodeCount: 3,
+      edgeCount: 2,
+      summary: {
+        nodesByType: { app: 2, package: 1 },
+        edgesByType: { depends_on: 2 },
+      },
+      topImpactNodes: [
+        { nodeId: 'n1', name: 'domain', type: 'package', directDependants: 2 },
+      ],
+      recentAnnotations: [
+        {
+          nodeId: 'n1',
+          nodeName: 'domain',
+          content: 'Core shared package',
+          createdAt: '2026-05-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    expect(sample.projectId).toBe('proj-1');
+    expect(sample.topImpactNodes).toHaveLength(1);
+    expect(sample.recentAnnotations).toHaveLength(1);
+    expect(sample.summary.nodesByType).toEqual({ app: 2, package: 1 });
   });
 });

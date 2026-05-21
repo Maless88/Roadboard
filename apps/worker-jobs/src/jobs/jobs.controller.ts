@@ -50,4 +50,13 @@ export class JobsController {
     await this.jobs.enqueueCleanup();
     return { queued: true };
   }
+
+
+  @Post('thumbnail-refresh')
+  @HttpCode(202)
+  async triggerThumbnailRefresh(@Body() body: { projectId: string }): Promise<{ queued: boolean }> {
+
+    await this.jobs.enqueueThumbnailRefresh(body.projectId);
+    return { queued: true };
+  }
 }

@@ -116,7 +116,7 @@ export const GET_PROJECT_MEMORY_TOOL: McpToolDefinition = {
 
 export const CREATE_TASK_TOOL: McpToolDefinition = {
   name: 'create_task',
-  description: 'Create a new task in a project',
+  description: `Create a new task in a project. TITLE NAMING CONVENTION: Title MUST follow the format "Area — description". Examples: "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link", "CodeFlow Stabilization — Fix drift validator false positives", "Workspaces — Invite flow per team condivisi", "UX & Vibe Coding — Empty state per lista task vuota". Avoid legacy codes like CF-XX-YY, [W4-06], audit-01 in the title.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -126,7 +126,7 @@ export const CREATE_TASK_TOOL: McpToolDefinition = {
       },
       title: {
         type: 'string',
-        description: 'The task title',
+        description: 'The task title. MUST follow the convention "Area — description" (e.g. "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link"). Do NOT use legacy codes like CF-XX-YY or [W4-06].',
       },
       priority: {
         type: 'string',
@@ -236,6 +236,11 @@ export const CREATE_HANDOFF_TOOL: McpToolDefinition = {
         type: 'array',
         items: { type: 'string' },
         description: 'Ordered list of next actions for the following session',
+      },
+      attachArchitecture: {
+        type: 'boolean',
+        description:
+          'When true (default), automatically appends a compact architecture snapshot to the handoff body. Set to false to skip the snapshot attachment.',
       },
     },
     required: ['projectId', 'summary'],
@@ -367,6 +372,54 @@ export const GET_NODE_CONTEXT_TOOL: McpToolDefinition = {
     required: ['projectId', 'nodeId'],
   },
 };
+
+
+export const GET_ARCHITECTURE_SNAPSHOT_TOOL: McpToolDefinition = {
+  name: 'get_architecture_snapshot',
+  description:
+    'Get a compact architecture snapshot for a project: summary by node/edge type, top 5 highest-impact nodes, and the 10 most recent annotations. Payload is always < 8 KB — suitable for agent context windows.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      projectId: {
+        type: 'string',
+        description: 'The project ID',
+      },
+    },
+    required: ['projectId'],
+  },
+};
+
+
+/**
+ * Compact architecture snapshot returned by `get_architecture_snapshot`.
+ * Always < 8 KB — does NOT include the full nodes[] / edges[] arrays.
+ */
+export interface ArchitectureSnapshot {
+  projectId: string;
+  /** ISO 8601 */
+  generatedAt: string;
+  nodeCount: number;
+  edgeCount: number;
+  summary: {
+    nodesByType: Record<string, number>;
+    edgesByType: Record<string, number>;
+  };
+  /** Top 5, ordered by directDependants desc */
+  topImpactNodes: Array<{
+    nodeId: string;
+    name: string;
+    type: string;
+    directDependants: number;
+  }>;
+  /** Last 10, ordered by createdAt desc */
+  recentAnnotations: Array<{
+    nodeId: string;
+    nodeName: string;
+    content: string;
+    createdAt: string;
+  }>;
+}
 
 
 // ── Atomic write tools for agent-driven onboarding (B.2 flow) ──────────
@@ -583,6 +636,7 @@ export const MCP_TOOLS = [
   SEARCH_MEMORY_TOOL,
   GET_ARCHITECTURE_MAP_TOOL,
   GET_NODE_CONTEXT_TOOL,
+  GET_ARCHITECTURE_SNAPSHOT_TOOL,
   CREATE_ARCHITECTURE_REPOSITORY_TOOL,
   CREATE_ARCHITECTURE_NODE_TOOL,
   CREATE_ARCHITECTURE_EDGE_TOOL,

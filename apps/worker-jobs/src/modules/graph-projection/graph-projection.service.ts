@@ -26,6 +26,10 @@ const BACKOFF_MS = [1_000, 5_000, 30_000, 5 * 60_000, 60 * 60_000];
 const POLL_INTERVAL_MS = 1_000;
 const BATCH_SIZE = 25;
 
+/** Emit a backlog alert at most once every ALERT_INTERVAL_TICKS ticks (≈ 10 s). */
+const BACKLOG_THRESHOLD = 50;
+const ALERT_INTERVAL_TICKS = 10;
+
 
 @Injectable()
 export class GraphProjectionService implements OnModuleInit, OnModuleDestroy {
@@ -37,6 +41,7 @@ export class GraphProjectionService implements OnModuleInit, OnModuleDestroy {
   private running = false;
   private graphReady = false;
   private readonly enabled: boolean;
+  private tickCount = 0;
 
   constructor() {
 
@@ -90,6 +95,7 @@ export class GraphProjectionService implements OnModuleInit, OnModuleDestroy {
     if (!this.enabled || this.running) return;
 
     this.running = true;
+    this.tickCount += 1;
 
     try {
       // Lazy reattach to Memgraph if it was down at boot.
@@ -118,9 +124,42 @@ export class GraphProjectionService implements OnModuleInit, OnModuleDestroy {
           await this.markFailed(evt, err instanceof Error ? err.message : String(err));
         }
       }
+
+      if (this.tickCount % ALERT_INTERVAL_TICKS === 0) {
+        await this.checkBacklogAlert();
+      }
     } finally {
       this.running = false;
     }
+  }
+
+
+  /**
+   * Emits a structured warning log when the active backlog (pending + failed
+   * events) exceeds BACKLOG_THRESHOLD. Called every ALERT_INTERVAL_TICKS ticks
+   * to avoid log flooding while still guaranteeing detection within ~10 s.
+   */
+  async checkBacklogAlert(): Promise<{ pending: number; dead: number; backlog: number }> {
+
+    const [pending, dead] = await Promise.all([
+      this.prisma.graphSyncEvent.count({ where: { status: 'pending' } }),
+      this.prisma.graphSyncEvent.count({ where: { status: 'dead' } }),
+    ]);
+
+    const backlog = pending + dead;
+
+    if (backlog > BACKLOG_THRESHOLD) {
+      this.logger.warn({
+        msg: 'graph_sync_backlog_high',
+        pending,
+        dead,
+        backlog,
+        threshold: BACKLOG_THRESHOLD,
+        hint: 'Run the outbox runbook: docs/codeflow-outbox-runbook.md',
+      });
+    }
+
+    return { pending, dead, backlog };
   }
 
 

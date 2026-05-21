@@ -7,6 +7,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { optionalEnv } from "@roadboard/config";
+import { checkLegacyTitle } from "@roadboard/mcp-contracts";
 import { CoreApiClient } from "./clients/core-api.client.js";
 
 
@@ -48,6 +49,20 @@ const TOOLS = [
     inputSchema: {
       type: "object" as const,
       properties: {},
+    },
+  },
+  {
+    name: "get_user",
+    description: "Look up a user by ID and return their public profile: id, username, displayName, email. Use this to resolve raw userId/assigneeId references into human-readable names.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        userId: {
+          type: "string",
+          description: "The user ID to resolve",
+        },
+      },
+      required: ["userId"],
     },
   },
   {
@@ -119,7 +134,9 @@ const TOOLS = [
   },
   {
     name: "create_task",
-    description: "Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically. IMPORTANT: immediately after the task is created, if it will modify any code (most tasks), call link_task_to_node for each ArchitectureNode it will touch. Use get_architecture_map to discover the right nodeId. This is mandatory unless the task is purely meta — it is how Roadboard populates the graph that powers future context retrieval.",
+    description: `Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically. IMPORTANT: immediately after the task is created, if it will modify any code (most tasks), call link_task_to_node for each ArchitectureNode it will touch. Use get_architecture_map to discover the right nodeId. This is mandatory unless the task is purely meta — it is how Roadboard populates the graph that powers future context retrieval.
+
+TITLE NAMING CONVENTION: Title MUST follow the format "Area — description". Examples: "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link", "CodeFlow Stabilization — Fix drift validator false positives", "Workspaces — Invite flow per team condivisi", "UX & Vibe Coding — Empty state per lista task vuota". Avoid legacy codes like CF-XX-YY, [W4-06], audit-01 in the title.`,
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -133,7 +150,7 @@ const TOOLS = [
         },
         title: {
           type: "string",
-          description: "The task title",
+          description: 'The task title. MUST follow the convention "Area — description" (e.g. "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link"). Do NOT use legacy codes like CF-XX-YY or [W4-06].',
         },
         description: {
           type: "string",
@@ -208,12 +225,14 @@ const TOOLS = [
   },
   {
     name: "create_phase",
-    description: "Create a new phase (roadmap milestone) in a project.",
+    description: `Create a new phase (roadmap milestone) in a project.
+
+TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — description". Examples: "Atlas — Architettura base e onboarding", "Memgraph — Migration e schema graph DB", "Workspaces — Team invite flow". Avoid legacy codes like CF-XX-YY, [W4-06], audit-01 in the title.`,
     inputSchema: {
       type: "object" as const,
       properties: {
         projectId: { type: "string", description: "The project ID" },
-        title: { type: "string", description: "Phase title" },
+        title: { type: "string", description: 'Phase title. MUST follow the convention "Area — description" (e.g. "Atlas — Architettura base e onboarding"). Do NOT use legacy codes.' },
         description: { type: "string", description: "Phase description" },
         decisionId: { type: "string", description: "Link this phase to a decision that it resolves" },
         orderIndex: { type: "number", description: "Position in the roadmap (0-based)" },
@@ -450,6 +469,18 @@ const TOOLS = [
     },
   },
   {
+    name: "get_architecture_snapshot",
+    description:
+      "Get a compact architecture snapshot for a project: summary by node/edge type, top 5 highest-impact nodes, and the 10 most recent annotations. Payload is always < 8 KB — suitable for agent context windows.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        projectId: { type: "string", description: "The project ID" },
+      },
+      required: ["projectId"],
+    },
+  },
+  {
     name: "create_architecture_repository",
     description: "Create a CodeRepository record for a project. Required before creating any ArchitectureNode. Typical agent flow: call once at the start of an onboarding scan, then use the returned id as repositoryId for each create_architecture_node call.",
     inputSchema: {
@@ -638,6 +669,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   list_projects: "project.read",
   list_teams: "project.read",
   get_project: "project.read",
+  get_user: "project.read",
   list_active_tasks: "project.read",
   list_phases: "project.read",
   get_project_memory: "project.read",
@@ -659,6 +691,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_project: "project.admin",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
+  get_architecture_snapshot: "codeflow.read",
   create_architecture_repository: "codeflow.write",
   create_architecture_node: "codeflow.write",
   create_architecture_edge: "codeflow.write",
@@ -709,7 +742,7 @@ function errorResponse(message: string): { content: { type: "text"; text: string
 }
 
 
-async function handleToolCall(
+export async function handleToolCall(
   client: CoreApiClient,
   name: string,
   args: Record<string, unknown>,
@@ -1081,7 +1114,12 @@ async function handleToolCall(
         body: `Fase: ${phaseId} · Priorità: ${(task.priority as string) ?? "medium"}`,
       }).catch(() => null);
 
-      return jsonResponse(result);
+      const titleWarning = checkLegacyTitle(args.title as string);
+      const responsePayload = titleWarning
+        ? { ...task, warning: titleWarning }
+        : task;
+
+      return jsonResponse(responsePayload);
     }
 
     case "update_task_status": {
@@ -1121,7 +1159,13 @@ async function handleToolCall(
         startDate: args.startDate as string | undefined,
         endDate: args.endDate as string | undefined,
       });
-      return jsonResponse(result);
+
+      const phaseWarning = checkLegacyTitle(args.title as string);
+      const phasePayload = phaseWarning
+        ? { ...(result as Record<string, unknown>), warning: phaseWarning }
+        : result;
+
+      return jsonResponse(phasePayload);
     }
 
     case "update_phase": {
@@ -1256,11 +1300,28 @@ async function handleToolCall(
       const projectId = args.projectId as string;
       const summary = args.summary as string;
       const nextSteps = args.next_steps as string[] | undefined;
+      const attachArchitecture = args.attachArchitecture !== false;
 
       const parts: string[] = [`## Summary\n${summary}`];
 
       if (nextSteps && nextSteps.length > 0) {
         parts.push(`## Next Steps\n${nextSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`);
+      }
+
+      if (attachArchitecture) {
+
+        const snapshot = await client.getArchitectureSnapshot(projectId).catch((err: unknown) => {
+          console.warn(`[create_handoff] architecture snapshot unavailable for project ${projectId}: ${String(err)}`);
+          return null;
+        });
+
+        if (snapshot !== null) {
+          const snap = snapshot as Record<string, unknown>;
+          const nodeCount = snap.node_count ?? snap.nodeCount ?? '?';
+          const edgeCount = snap.edge_count ?? snap.edgeCount ?? '?';
+          const generatedAt = snap.generated_at ?? snap.generatedAt ?? new Date().toISOString();
+          parts.push(`## Architecture Snapshot\n_Generated: ${generatedAt} — ${nodeCount} nodes, ${edgeCount} edges_\n\n\`\`\`json\n${JSON.stringify(snapshot, null, 2)}\n\`\`\``);
+        }
       }
 
       const result = await client.createMemoryEntry({
@@ -1356,6 +1417,11 @@ async function handleToolCall(
         args.projectId as string,
         args.nodeId as string,
       );
+      return jsonResponse(result);
+    }
+
+    case "get_architecture_snapshot": {
+      const result = await client.getArchitectureSnapshot(args.projectId as string);
       return jsonResponse(result);
     }
 
@@ -1530,6 +1596,16 @@ async function handleToolCall(
         reset,
         nodesByKey: keyToId,
       });
+    }
+
+    case "get_user": {
+      const user = await client.getUser(args.userId as string);
+
+      if (!user) {
+        return jsonResponse({ error: "not_found", userId: args.userId });
+      }
+
+      return jsonResponse(user);
     }
 
     default:
