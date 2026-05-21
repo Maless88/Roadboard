@@ -1,4 +1,13 @@
-export type McpClient = 'claude-code' | 'zed' | 'vscode' | 'codex';
+export type McpClient =
+  | 'claude-code'
+  | 'zed'
+  | 'vscode'
+  | 'codex'
+  | 'cursor'
+  | 'cline'
+  | 'continue'
+  | 'windsurf'
+  | 'jetbrains';
 export type McpScope = 'user' | 'workspace';
 export type McpTransport = 'http' | 'stdio';
 
@@ -36,6 +45,31 @@ export function generateSnippet(input: SnippetInput): SnippetOutput {
   if (client === 'vscode') {
 
     return generateVscodeSnippet(scope, url, token);
+  }
+
+  if (client === 'cursor') {
+
+    return generateCursorSnippet(scope, url, token);
+  }
+
+  if (client === 'cline') {
+
+    return generateClineSnippet(url, token);
+  }
+
+  if (client === 'continue') {
+
+    return generateContinueSnippet(url, token);
+  }
+
+  if (client === 'windsurf') {
+
+    return generateWindsurfSnippet(url, token);
+  }
+
+  if (client === 'jetbrains') {
+
+    return generateJetbrainsSnippet(url, token);
   }
 
   return generateCodexSnippet(url, token);
@@ -171,4 +205,104 @@ bearer_token_env_var = "ROADBOARD_MCP_TOKEN"
 # Esporta poi nello shell: \`export ROADBOARD_MCP_TOKEN=${token}\``;
 
   return { filePath, format: 'toml', content };
+}
+
+
+function generateCursorSnippet(scope: McpScope, url: string, token: string): SnippetOutput {
+
+  const filePath = scope === 'user' ? '~/.cursor/mcp.json' : '.cursor/mcp.json';
+
+  const content = JSON.stringify(
+    {
+      mcpServers: {
+        roadboard: {
+          url,
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return { filePath, format: 'json', content };
+}
+
+
+function generateClineSnippet(url: string, token: string): SnippetOutput {
+
+  const filePath = '~/.vscode/cline_mcp_settings.json';
+
+  const content = JSON.stringify(
+    {
+      mcpServers: {
+        roadboard: {
+          url,
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return { filePath, format: 'json', content };
+}
+
+
+function generateContinueSnippet(url: string, token: string): SnippetOutput {
+
+  const filePath = '~/.continue/config.yaml';
+
+  const content = `mcpServers:
+  - name: roadboard
+    transport:
+      type: http
+      url: "${url}"
+      headers:
+        Authorization: "Bearer ${token}"`;
+
+  return { filePath, format: 'toml', content };
+}
+
+
+function generateWindsurfSnippet(url: string, token: string): SnippetOutput {
+
+  const filePath = '~/.codeium/windsurf/mcp_config.json';
+
+  const content = JSON.stringify(
+    {
+      mcpServers: {
+        roadboard: {
+          serverUrl: url,
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return { filePath, format: 'json', content };
+}
+
+
+function generateJetbrainsSnippet(url: string, token: string): SnippetOutput {
+
+  const filePath = '~/.config/JetBrains/mcp.json';
+
+  const content = JSON.stringify(
+    {
+      servers: {
+        roadboard: {
+          url,
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      },
+    },
+    null,
+    2,
+  );
+
+  return { filePath, format: 'json', content };
 }

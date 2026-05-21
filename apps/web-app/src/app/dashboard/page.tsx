@@ -1,11 +1,13 @@
+import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
-import { validateSession, listProjects, listTeams, getDashboardSnapshot } from '@/lib/api';
+import { validateSession, listProjects, listTeams } from '@/lib/api';
 import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { AutoRefresh } from '@/components/auto-refresh';
 import { CreateProjectForm } from '@/app/projects/create-project-form';
-import { SwipeableProjectCard } from './swipeable-project-card';
+import { ProjectsGrid } from './projects-grid';
+import { ProjectGridSkeleton } from './project-card-skeleton';
 import type { Project } from '@/lib/api';
 
 
@@ -15,35 +17,20 @@ export default async function DashboardPage() {
 
   if (!token) redirect('/login');
 
-  const [session, dict] = await Promise.all([
+  const [session, dict, projects, teams] = await Promise.all([
     validateSession(token),
     getDict(),
-  ]);
-
-  if (!session) redirect('/login');
-
-  const [projects, teams] = await Promise.all([
     listProjects(token).catch(() => [] as Project[]),
     listTeams(token).catch(() => []),
   ]);
+
+  if (!session) redirect('/login');
 
   const visible = projects.filter((p) => !p.archivedForMe);
   const sorted = [...visible].sort((a, b) => {
     const order: Record<string, number> = { active: 0, paused: 1, draft: 2, completed: 3 };
     return (order[a.status] ?? 9) - (order[b.status] ?? 9) || b.updatedAt.localeCompare(a.updatedAt);
   });
-
-  const snapshots = await Promise.all(
-    sorted.map((p) =>
-      getDashboardSnapshot(token, p.id).catch((err: unknown) => {
-        const status = (err as { status?: number }).status;
-
-        if (status === 403) return { error: 'forbidden' as const };
-
-        return { error: 'unknown' as const };
-      }),
-    ),
-  );
 
   const now = new Date();
   const dateLabel = now.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -66,24 +53,9 @@ export default async function DashboardPage() {
             <CreateProjectForm teams={teams} />
           </div>
 
-          {sorted.length === 0 ? (
-            <div
-              className="rounded-2xl p-12 text-center"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-            >
-              <p className="text-sm" style={{ color: 'var(--text-faint)' }}>{dict.projects.noProjects}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {sorted.map((project, i) => (
-                <SwipeableProjectCard
-                  key={project.id}
-                  project={project}
-                  snap={snapshots[i]}
-                />
-              ))}
-            </div>
-          )}
+          <Suspense fallback={<ProjectGridSkeleton count={sorted.length || 3} />}>
+            <ProjectsGrid token={token} projects={sorted} />
+          </Suspense>
 
         </div>
       </main>

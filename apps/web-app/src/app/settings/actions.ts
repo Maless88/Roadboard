@@ -21,6 +21,11 @@ import {
   listMyMemberships,
   getProject,
   recordContributorEvent,
+  saveChatbotConfig,
+  deleteChatbotConfig,
+  testChatbotConfig,
+  type ChatbotProvider,
+  type ChatbotConfigView,
 } from '@/lib/api';
 
 
@@ -65,6 +70,7 @@ export interface CreatedTokenInfo {
   name: string;
   scopes: string[];
   createdAt: string;
+  expiresAt?: string | null;
 }
 
 
@@ -98,6 +104,7 @@ export async function createTokenAction(
         name: created.name,
         scopes: created.scopes,
         createdAt: created.createdAt,
+        expiresAt: created.expiresAt ?? null,
       },
     };
   } catch (err) {
@@ -435,5 +442,80 @@ export async function removeTeamMemberAction(membershipId: string): Promise<{ er
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : 'Errore' };
+  }
+}
+
+
+export interface ChatbotConfigActionState {
+  error?: string;
+  success?: boolean;
+  saved?: ChatbotConfigView;
+}
+
+
+export async function saveChatbotConfigAction(
+  _prev: ChatbotConfigActionState,
+  formData: FormData,
+): Promise<ChatbotConfigActionState> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  const provider = (formData.get('provider') as string) as ChatbotProvider;
+  const modelName = ((formData.get('modelName') as string) ?? '').trim();
+  const apiKey = ((formData.get('apiKey') as string) ?? '').trim();
+  const ollamaBaseUrl = ((formData.get('ollamaBaseUrl') as string) ?? '').trim();
+  const isActive = formData.get('isActive') === 'on';
+
+  if (!provider || !modelName) return { error: 'Provider e modello obbligatori' };
+
+  try {
+    const saved = await saveChatbotConfig(token, {
+      provider,
+      modelName,
+      apiKey: apiKey || undefined,
+      ollamaBaseUrl: ollamaBaseUrl || undefined,
+      isActive,
+    });
+
+    revalidatePath('/settings');
+    return { success: true, saved };
+  } catch (err) {
+
+    return { error: err instanceof Error ? err.message : 'Errore' };
+  }
+}
+
+
+export async function deleteChatbotConfigAction(): Promise<{ error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'Non autenticato' };
+
+  try {
+    await deleteChatbotConfig(token);
+    revalidatePath('/settings');
+    return {};
+  } catch (err) {
+
+    return { error: err instanceof Error ? err.message : 'Errore' };
+  }
+}
+
+
+export async function testChatbotConfigAction(): Promise<{ ok: boolean; error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { ok: false, error: 'Non autenticato' };
+
+  try {
+    const res = await testChatbotConfig(token);
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  } catch (err) {
+
+    return { ok: false, error: err instanceof Error ? err.message : 'Errore' };
   }
 }

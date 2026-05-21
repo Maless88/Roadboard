@@ -26,13 +26,3 @@ export function DecisionGraphView({ dict }: { dict: Dictionary }) {
 }
 
 
-export function AgentContextView({ dict }: { dict: Dictionary }) {
-
-  return (
-    <EmptyState
-      badge={dict.codeflow.comingSoon}
-      title={dict.codeflow.subNav.agentContext}
-      hint={dict.codeflow.agentContextComingSoon}
-    />
-  );
-}

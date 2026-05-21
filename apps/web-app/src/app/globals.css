@@ -177,3 +177,8 @@ html.light [class*="bg-blue-"] .text-white,
 html.light [class*="bg-blue-"].text-white,
 html.light [class*="bg-gradient"] .text-white,
 html.light [class*="bg-gradient"].text-white { color: #fff; }
+
+@keyframes toast-slide-in {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to   { opacity: 1; transform: translateY(0); }
+}

@@ -88,4 +88,68 @@ describe('generateSnippet', () => {
     expect(parsed.mcpServers.roadboard.type).toBe('stdio');
     expect(parsed.mcpServers.roadboard.command).toBe('npx');
   });
+
+  it('cursor user scope → ~/.cursor/mcp.json JSON', () => {
+
+    const result = generateSnippet({ client: 'cursor', scope: 'user', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('~/.cursor/mcp.json');
+    expect(result.format).toBe('json');
+
+    const parsed = JSON.parse(result.content);
+    expect(parsed.mcpServers.roadboard.url).toBe(url);
+    expect(parsed.mcpServers.roadboard.headers.Authorization).toBe(`Bearer ${token}`);
+  });
+
+  it('cursor workspace scope → .cursor/mcp.json JSON', () => {
+
+    const result = generateSnippet({ client: 'cursor', scope: 'workspace', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('.cursor/mcp.json');
+  });
+
+  it('cline → ~/.vscode/cline_mcp_settings.json JSON', () => {
+
+    const result = generateSnippet({ client: 'cline', scope: 'user', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('~/.vscode/cline_mcp_settings.json');
+    expect(result.format).toBe('json');
+
+    const parsed = JSON.parse(result.content);
+    expect(parsed.mcpServers.roadboard.url).toBe(url);
+  });
+
+  it('continue → ~/.continue/config.yaml with http transport', () => {
+
+    const result = generateSnippet({ client: 'continue', scope: 'user', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('~/.continue/config.yaml');
+    expect(result.content).toContain('type: http');
+    expect(result.content).toContain(url);
+    expect(result.content).toContain(`Bearer ${token}`);
+  });
+
+  it('windsurf → ~/.codeium/windsurf/mcp_config.json JSON', () => {
+
+    const result = generateSnippet({ client: 'windsurf', scope: 'user', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('~/.codeium/windsurf/mcp_config.json');
+    expect(result.format).toBe('json');
+
+    const parsed = JSON.parse(result.content);
+    expect(parsed.mcpServers.roadboard.serverUrl).toBe(url);
+    expect(parsed.mcpServers.roadboard.headers.Authorization).toBe(`Bearer ${token}`);
+  });
+
+  it('jetbrains → ~/.config/JetBrains/mcp.json JSON', () => {
+
+    const result = generateSnippet({ client: 'jetbrains', scope: 'user', transport: 'http', url, token });
+
+    expect(result.filePath).toBe('~/.config/JetBrains/mcp.json');
+    expect(result.format).toBe('json');
+
+    const parsed = JSON.parse(result.content);
+    expect(parsed.servers.roadboard.url).toBe(url);
+    expect(parsed.servers.roadboard.headers.Authorization).toBe(`Bearer ${token}`);
+  });
 });

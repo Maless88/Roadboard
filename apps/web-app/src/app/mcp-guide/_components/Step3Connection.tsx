@@ -69,6 +69,10 @@ function useDebouncedCommit(value: string, commit: (v: string) => void, delay: n
 }
 
 
+type TokenCheckState = 'idle' | 'checking' | 'valid' | 'invalid';
+type TokenGenState = 'idle' | 'generating' | 'done' | 'error';
+
+
 export function Step3Connection({
   url,
   token,
@@ -84,12 +88,15 @@ export function Step3Connection({
   const [localToken, setLocalToken] = useState(token);
   const [debouncedUrl, setDebouncedUrl] = useState(url);
   const [urlTouched, setUrlTouched] = useState(false);
+  const [tokenCheckState, setTokenCheckState] = useState<TokenCheckState>('idle');
+  const [tokenCheckError, setTokenCheckError] = useState<string | null>(null);
+  const [tokenGenState, setTokenGenState] = useState<TokenGenState>('idle');
+  const [tokenGenError, setTokenGenError] = useState<string | null>(null);
 
   const urlCommittedRef = useDebouncedCommit(localUrl, onUrlChange, COMMIT_DELAY_MS);
   useDebouncedCommit(localToken, onTokenChange, COMMIT_DELAY_MS);
 
   // Sync from parent only when it diverges from what we last committed
-  // (avoids overwriting the user's in-flight typing).
   useEffect(() => {
 
     if (url !== urlCommittedRef.current && url !== localUrl) {
@@ -105,6 +112,13 @@ export function Step3Connection({
 
     return () => window.clearTimeout(handle);
   }, [localUrl]);
+
+  // Reset token check when token changes
+  useEffect(() => {
+
+    setTokenCheckState('idle');
+    setTokenCheckError(null);
+  }, [localToken]);
 
   const validation = validateUrl(debouncedUrl);
 
@@ -129,6 +143,66 @@ export function Step3Connection({
     }
 
     setDebouncedUrl(localUrl);
+  }
+
+  async function handleGenerateToken() {
+
+    setTokenGenState('generating');
+    setTokenGenError(null);
+
+    try {
+
+      const res = await fetch('/api/mcp/token-generate', { method: 'POST' });
+      const data = (await res.json()) as { token?: string; error?: string; expiresAt?: string | null };
+
+      if (!res.ok || !data.token) {
+
+        setTokenGenState('error');
+        setTokenGenError(data.error ?? 'Generation failed');
+
+        return;
+      }
+
+      setLocalToken(data.token);
+      onTokenChange(data.token);
+      setTokenGenState('done');
+      setTokenCheckState('valid');
+    } catch (e) {
+
+      setTokenGenState('error');
+      setTokenGenError(e instanceof Error ? e.message : 'Network error');
+    }
+  }
+
+  async function handleCheckToken() {
+
+    if (!localToken) return;
+
+    setTokenCheckState('checking');
+    setTokenCheckError(null);
+
+    try {
+
+      const res = await fetch('/api/mcp/token-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: localToken }),
+      });
+      const data = (await res.json()) as { valid?: boolean; error?: string };
+
+      if (data.valid) {
+
+        setTokenCheckState('valid');
+      } else {
+
+        setTokenCheckState('invalid');
+        setTokenCheckError(data.error ?? 'Invalid token');
+      }
+    } catch (e) {
+
+      setTokenCheckState('invalid');
+      setTokenCheckError(e instanceof Error ? e.message : 'Network error');
+    }
   }
 
   const d = dict.step3;
@@ -196,24 +270,61 @@ export function Step3Connection({
 
       {/* Token field */}
       <div className="mb-5">
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          {d.tokenLabel}
-        </label>
-        <input
-          type="password"
-          value={localToken}
-          onChange={(e) => setLocalToken(e.target.value)}
-          onBlur={() => onTokenChange(localToken)}
-          placeholder={d.tokenPlaceholder}
-          className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          aria-label={d.tokenLabel}
-        />
-        <p className="mt-1.5 text-xs text-gray-500">
-          {d.tokenHint}{' '}
-          <a href="/settings" className="text-indigo-400 hover:text-indigo-300 underline">
-            {d.tokenHintLink}
-          </a>
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-sm font-medium text-gray-300">
+            {d.tokenLabel}
+          </label>
+          <button
+            onClick={handleGenerateToken}
+            disabled={tokenGenState === 'generating'}
+            className="text-xs bg-indigo-900/50 border border-indigo-700/60 text-indigo-300 rounded px-3 py-1 hover:bg-indigo-900/80 hover:text-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {tokenGenState === 'generating' ? d.tokenGenerating : d.tokenGenerateButton}
+          </button>
+        </div>
+        <div className="relative">
+          <input
+            type="password"
+            value={localToken}
+            onChange={(e) => setLocalToken(e.target.value)}
+            onBlur={() => onTokenChange(localToken)}
+            placeholder={d.tokenPlaceholder}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 pr-24"
+            aria-label={d.tokenLabel}
+          />
+          {localToken && tokenCheckState !== 'valid' && (
+            <button
+              onClick={handleCheckToken}
+              disabled={tokenCheckState === 'checking'}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-xs bg-gray-800 border border-gray-600 text-gray-300 rounded px-2.5 py-1 hover:bg-gray-700 hover:text-white transition-colors disabled:opacity-50"
+            >
+              {tokenCheckState === 'checking' ? d.tokenChecking : d.tokenCheckButton}
+            </button>
+          )}
+        </div>
+
+        {/* Token status feedback */}
+        {tokenGenState === 'done' && (
+          <p className="mt-1.5 text-xs text-green-400">✓ {d.tokenGenerated}</p>
+        )}
+        {tokenGenState === 'error' && tokenGenError && (
+          <p className="mt-1.5 text-xs text-red-400">⛔ {tokenGenError}</p>
+        )}
+        {tokenCheckState === 'valid' && tokenGenState !== 'done' && (
+          <p className="mt-1.5 text-xs text-green-400">✓ {d.tokenValid}</p>
+        )}
+        {tokenCheckState === 'invalid' && (
+          <p className="mt-1.5 text-xs text-red-400">⛔ {d.tokenInvalid}{tokenCheckError ? `: ${tokenCheckError}` : ''}</p>
+        )}
+
+        {tokenGenState === 'idle' && tokenCheckState === 'idle' && (
+          <p className="mt-1.5 text-xs text-gray-500">
+            {d.tokenHint}{' '}
+            <a href="/settings" className="text-indigo-400 hover:text-indigo-300 underline">
+              {d.tokenHintLink}
+            </a>
+          </p>
+        )}
       </div>
 
       {/* Transport */}

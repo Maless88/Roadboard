@@ -11,7 +11,7 @@ import { Step4Snippet } from './Step4Snippet';
 import { Step5Verify } from './Step5Verify';
 
 
-const CLIENTS_WITH_SCOPE: McpClient[] = ['claude-code', 'vscode'];
+const CLIENTS_WITH_SCOPE: McpClient[] = ['claude-code', 'vscode', 'cursor'];
 const TOTAL_STEPS = 5;
 const MCP_URL_DEFAULT = process.env.NEXT_PUBLIC_MCP_URL ?? '';
 
@@ -133,7 +133,10 @@ export function Wizard() {
 
         if (step === 1) {
 
-          const clients: McpClient[] = ['claude-code', 'zed', 'vscode', 'codex'];
+          const clients: McpClient[] = [
+            'claude-code', 'zed', 'vscode', 'codex',
+            'cursor', 'cline', 'continue', 'windsurf', 'jetbrains',
+          ];
 
           if (clients[num - 1]) {
 
@@ -285,6 +288,8 @@ export function Wizard() {
         {step === 5 && client && (
           <Step5Verify
             client={client}
+            url={url}
+            token={token}
             onRestart={handleRestart}
           />
         )}

@@ -4,6 +4,9 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { archiveProjectAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
+import { resolveThumbnailUrl } from '@/lib/thumbnail-url';
 import type { Project, DashboardSnapshot } from '@/lib/api';
 
 
@@ -45,6 +48,7 @@ interface Props {
 export function SwipeableProjectCard({ project, snap }: Props) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const router = useRouter();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(false);
@@ -114,12 +118,18 @@ export function SwipeableProjectCard({ project, snap }: Props) {
   function handleArchive() {
 
     startTransition(async () => {
-      await archiveProjectAction(project.id);
+      await withToast(
+        () => archiveProjectAction(project.id),
+        showToast,
+        { successMsg: dict.common.toast.saved },
+      );
       router.refresh();
     });
   }
 
   const revealWidth = Math.abs(offset);
+  const isCompleted = project.status === 'completed';
+  const thumbnailUrl = resolveThumbnailUrl(project.thumbnailUrl);
 
   return (
     <div
@@ -133,23 +143,50 @@ export function SwipeableProjectCard({ project, snap }: Props) {
       onPointerCancel={onPointerUp}
     >
       <div
-        className="group block rounded-2xl p-5 cursor-pointer transition-all h-full"
+        className="group block rounded-2xl overflow-hidden cursor-pointer transition-all h-full"
         style={{
-          background: 'var(--surface)',
-          border: '1px solid var(--border)',
+          background: thumbnailUrl
+            ? `url(${thumbnailUrl}) center / cover no-repeat`
+            : isCompleted ? 'var(--surface)' : 'var(--surface)',
+          border: isCompleted ? '1px solid rgba(99,102,241,0.25)' : '1px solid var(--border)',
           boxShadow: 'var(--shadow-card)',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--surface-hover)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface)'; }}
+        onMouseEnter={(e) => {
+          if (!thumbnailUrl) e.currentTarget.style.background = 'var(--surface-hover)';
+        }}
+        onMouseLeave={(e) => {
+          if (!thumbnailUrl) e.currentTarget.style.background = 'var(--surface)';
+        }}
       >
+        {thumbnailUrl && (
+          <div
+            className="absolute inset-0 rounded-2xl pointer-events-none"
+            style={{ background: 'rgba(0,0,0,0.55)', zIndex: 0 }}
+          />
+        )}
+        <div className="p-5" style={{ position: 'relative', zIndex: 1 }}>
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2 min-w-0">
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[project.status] ?? 'bg-gray-500'}`} />
             <h2 className="text-sm font-semibold text-white truncate">{project.name}</h2>
           </div>
-          <span className={`text-xs shrink-0 font-medium ${STATUS_LABEL[project.status] ?? 'text-gray-500'}`}>
-            {project.status}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {isCompleted && (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1"
+                style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}
+                title={dict.projects.completed.title}
+              >
+                <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+                  <path d="M10.293 2.293a1 1 0 0 1 1.414 1.414l-6 6a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L5 7.586l5.293-5.293z" />
+                </svg>
+                {dict.projects.completed.badge}
+              </span>
+            )}
+            <span className={`text-xs font-medium ${STATUS_LABEL[project.status] ?? 'text-gray-500'}`}>
+              {project.status}
+            </span>
+          </div>
         </div>
 
         {project.description && (
@@ -165,7 +202,12 @@ export function SwipeableProjectCard({ project, snap }: Props) {
             <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
               <div
                 className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${pct}%`, background: 'linear-gradient(90deg,#6366f1,#818cf8)' }}
+                style={{
+                  width: `${pct}%`,
+                  background: pct === 100
+                    ? 'linear-gradient(90deg,#4f46e5,#6366f1)'
+                    : 'linear-gradient(90deg,#6366f1,#818cf8)',
+                }}
               />
             </div>
           </div>
@@ -187,9 +229,35 @@ export function SwipeableProjectCard({ project, snap }: Props) {
             {visibleStatuses.map((s) => (
               <span key={s} className={`flex items-center gap-1 text-[10px] ${TASK_COLORS[s]}`}>
                 <span className="w-1 h-1 rounded-full bg-current" />
-                {snapData!.tasks[s]} {s.replace('_', '\u00a0')}
+                {snapData!.tasks[s]} {s.replace('_', ' ')}
               </span>
             ))}
+          </div>
+        ) : snapData !== null ? (
+          <div className="flex flex-col items-center gap-1.5 py-2">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-gray-700"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <path d="M9 12h6M12 9v6" />
+            </svg>
+            <p className="text-[10px] text-gray-600">{dict.projects.emptyState.title}</p>
+            <a
+              href={`/projects/${project.id}/tasks/new`}
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-2"
+            >
+              {dict.projects.emptyState.cta}
+            </a>
           </div>
         ) : (
           <p className="text-[10px] text-gray-700">{dict.project.noTasks}</p>
@@ -203,6 +271,7 @@ export function SwipeableProjectCard({ project, snap }: Props) {
             </p>
           </div>
         )}
+        </div>
       </div>
 
       <div
@@ -211,6 +280,7 @@ export function SwipeableProjectCard({ project, snap }: Props) {
           width: revealWidth,
           transition: startX.current !== null ? 'none' : 'width 0.2s ease',
           background: 'linear-gradient(135deg, #451a03 0%, #78350f 100%)',
+          zIndex: 2,
         }}
       >
         <button
@@ -240,3 +310,4 @@ export function SwipeableProjectCard({ project, snap }: Props) {
     </div>
   );
 }
+

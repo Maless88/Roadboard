@@ -4,6 +4,8 @@ import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { archiveProjectAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 
 
 const STATUS_COLOR: Record<string, string> = {
@@ -29,6 +31,7 @@ interface Props {
 export function SwipeableProjectRow({ id, name, status, description }: Props) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const router = useRouter();
   const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState(false);
@@ -82,7 +85,11 @@ export function SwipeableProjectRow({ id, name, status, description }: Props) {
   function handleArchive() {
 
     startTransition(async () => {
-      await archiveProjectAction(id);
+      await withToast(
+        () => archiveProjectAction(id),
+        showToast,
+        { successMsg: dict.common.toast.saved },
+      );
       router.refresh();
     });
   }

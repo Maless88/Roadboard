@@ -16,6 +16,11 @@ const USER_FILE: Record<McpClient, string> = {
   vscode: '~/.config/Code/User/mcp.json',
   zed: '~/.config/zed/settings.json',
   codex: '~/.codex/config.toml',
+  cursor: '~/.cursor/mcp.json',
+  cline: '~/.vscode/cline_mcp_settings.json',
+  continue: '~/.continue/config.yaml',
+  windsurf: '~/.codeium/windsurf/mcp_config.json',
+  jetbrains: '~/.config/JetBrains/mcp.json',
 };
 
 
@@ -24,6 +29,11 @@ const WORKSPACE_FILE: Record<McpClient, string> = {
   vscode: '.vscode/mcp.json',
   zed: '~/.config/zed/settings.json',
   codex: '~/.codex/config.toml',
+  cursor: '.cursor/mcp.json',
+  cline: '~/.vscode/cline_mcp_settings.json',
+  continue: '~/.continue/config.yaml',
+  windsurf: '~/.codeium/windsurf/mcp_config.json',
+  jetbrains: '~/.config/JetBrains/mcp.json',
 };
 
 
@@ -32,6 +42,11 @@ const CLIENT_LABELS: Record<McpClient, string> = {
   zed: 'Zed',
   vscode: 'VS Code',
   codex: 'Codex',
+  cursor: 'Cursor',
+  cline: 'Cline',
+  continue: 'Continue.dev',
+  windsurf: 'Windsurf',
+  jetbrains: 'JetBrains AI',
 };
 
 

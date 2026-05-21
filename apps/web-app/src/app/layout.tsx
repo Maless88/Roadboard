@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
 import './globals.css';
 import { ThemeProvider, THEME_INIT_SCRIPT, THEME_COOKIE } from '@/lib/theme-context';
+import { ToastProvider } from '@/lib/toast-context';
 
 
 export const metadata: Metadata = {
@@ -24,7 +25,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         className="min-h-screen antialiased"
         style={{ background: 'var(--bg)', color: 'var(--text)' }}
       >
-        <ThemeProvider initialTheme={initialTheme}>{children}</ThemeProvider>
+        <ThemeProvider initialTheme={initialTheme}>
+          <ToastProvider>{children}</ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getToken } from '@/lib/auth';
-import { validateSession, listTokens, listUsers, listProjects, listMyMemberships, listMemberships } from '@/lib/api';
+import { validateSession, listTokens, listUsers, listProjects, listMyMemberships, listMemberships, getChatbotConfig } from '@/lib/api';
 import { getDict } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { SettingsTabs } from './settings-tabs';
@@ -19,11 +19,12 @@ export default async function SettingsPage() {
 
   if (!session) redirect('/login');
 
-  const [tokens, users, projects, myMemberships] = await Promise.all([
+  const [tokens, users, projects, myMemberships, chatbotConfig] = await Promise.all([
     listTokens(token, session.userId),
     listUsers(token),
     listProjects(token),
     listMyMemberships(token, session.userId).catch(() => []),
+    getChatbotConfig(token).catch(() => null),
   ]);
 
   const teams = await Promise.all(
@@ -54,6 +55,7 @@ export default async function SettingsPage() {
           teams={teams}
           isAdmin={isAdmin}
           isTeamLeader={isTeamLeader}
+          chatbotConfig={chatbotConfig}
         />
       </main>
     </AppShell>

@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useState, useActionState, useEffect, useRef } from 'react';
-import type { SessionInfo, McpTokenInfo, User, Project, Team, TeamMembership } from '@/lib/api';
+import type { SessionInfo, McpTokenInfo, User, Project, Team, TeamMembership, ChatbotConfigView } from '@/lib/api';
 import { ArchivedProjectsTab } from './archived-projects-tab';
+import { AiAssistantTab } from './ai-assistant-tab';
 import { useDict } from '@/lib/i18n/locale-context';
 import { useTheme } from '@/lib/theme-context';
+import { useToast } from '@/lib/toast-context';
+import { withToast } from '@/lib/with-toast';
 import {
   changePasswordAction,
   createTokenAction,
@@ -35,10 +38,11 @@ interface Props {
   teams: TeamWithMembers[];
   isAdmin: boolean;
   isTeamLeader: boolean;
+  chatbotConfig: ChatbotConfigView | null;
 }
 
 
-type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'appearance' | 'archived';
+type TabKey = 'security' | 'tokens' | 'teams' | 'users' | 'appearance' | 'archived' | 'aiAssistant';
 
 
 function AppearanceTab() {
@@ -189,6 +193,7 @@ const MCP_TOKEN_SCOPES: { value: string; defaultChecked: boolean }[] = [
 function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTokens: McpTokenInfo[] }) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [tokens, setTokens] = useState(initialTokens);
   const [createState, createAction, createPending] = useActionState(createTokenAction, {});
   const [newToken, setNewToken] = useState<string | null>(null);
@@ -213,6 +218,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
                 status: 'active',
                 createdAt: c.createdAt,
                 revokedAt: null,
+                expiresAt: c.expiresAt ?? null,
               },
               ...prev,
             ],
@@ -222,7 +228,11 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
 
   async function handleRevoke(tokenId: string) {
 
-    await revokeTokenAction(tokenId);
+    await withToast(
+      () => revokeTokenAction(tokenId),
+      showToast,
+      { successMsg: dict.common.toast.revoked },
+    );
     setTokens((prev) => prev.filter((t) => t.id !== tokenId));
   }
 
@@ -424,6 +434,7 @@ function UsersTab({
 }) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [users, setUsers] = useState(initialUsers);
   const [createState, createAction, createPending] = useActionState(createUserAction, {});
   const [resetTarget, setResetTarget] = useState<User | null>(null);
@@ -436,7 +447,11 @@ function UsersTab({
 
   async function handleDelete(userId: string) {
 
-    await deleteUserAction(userId);
+    await withToast(
+      () => deleteUserAction(userId),
+      showToast,
+      { successMsg: dict.common.toast.deleted },
+    );
     setUsers((prev) => prev.filter((u) => u.id !== userId));
   }
 
@@ -513,6 +528,7 @@ function UsersTab({
 function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: TeamWithMembers[]; users: User[] }) {
 
   const dict = useDict();
+  const { showToast } = useToast();
   const [createState, createAction, createPending] = useActionState(createTeamAction, {});
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
@@ -546,14 +562,22 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
 
   async function handleRemoveMember(membershipId: string) {
 
-    await removeTeamMemberAction(membershipId);
+    await withToast(
+      () => removeTeamMemberAction(membershipId),
+      showToast,
+      { successMsg: dict.common.toast.removed },
+    );
   }
 
   async function handleDeleteTeam(idOrSlug: string) {
 
     if (!confirm(dict.settings.teams.confirmDelete)) return;
 
-    await deleteTeamAction(idOrSlug);
+    await withToast(
+      () => deleteTeamAction(idOrSlug),
+      showToast,
+      { successMsg: dict.common.toast.deleted },
+    );
   }
 
   return (
@@ -595,6 +619,14 @@ function TeamsTab({ session, teams, users }: { session: SessionInfo; teams: Team
                       >
                         {expanded ? '−' : '+'} {dict.settings.teams.members}
                       </button>
+                      {!isPersonal && (role === 'admin' || role === 'team_leader') && (
+                        <Link
+                          href={`/teams/${team.slug}`}
+                          className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                        >
+                          {dict.settings.teams.manageInvites}
+                        </Link>
+                      )}
                       {!isPersonal && role === 'admin' && (
                         <button
                           onClick={() => void handleDeleteTeam(team.id)}
@@ -704,6 +736,7 @@ export function SettingsTabs({
   teams,
   isAdmin,
   isTeamLeader,
+  chatbotConfig,
 }: Props) {
 
   const dict = useDict();
@@ -717,6 +750,7 @@ export function SettingsTabs({
     { key: 'appearance', label: dict.settings.tabs.appearance },
     { key: 'tokens', label: dict.settings.tabs.tokens },
     { key: 'teams', label: dict.settings.tabs.teams },
+    { key: 'aiAssistant', label: dict.settingsAiAssistant.tabLabel },
     ...(canManageUsers ? [{ key: 'users' as TabKey, label: dict.settings.tabs.users }] : []),
     ...(hasArchived ? [{ key: 'archived' as TabKey, label: dict.settings.tabs.archived }] : []),
   ];
@@ -751,6 +785,7 @@ export function SettingsTabs({
       {active === 'archived' && hasArchived && (
         <ArchivedProjectsTab projects={archivedProjects} />
       )}
+      {active === 'aiAssistant' && <AiAssistantTab initialConfig={chatbotConfig} />}
     </div>
   );
 }

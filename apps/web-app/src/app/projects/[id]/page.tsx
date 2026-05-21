@@ -30,6 +30,7 @@ import { CreateDecisionForm } from './create-decision-form';
 import { CreateMemoryForm } from './create-memory-form';
 import { MemorySearch } from './memory-search';
 import { DeleteProjectButton } from './delete-project-button';
+import { EditThumbnailForm } from './edit-thumbnail-form';
 import { PhaseAccordion } from './phase-accordion';
 import { DecisionAccordion } from './decision-accordion';
 import { TaskRow } from './task-row';
@@ -39,7 +40,8 @@ import { Markdown } from '@/components/markdown';
 import { ContributorsTab } from './contributors-tab';
 import { CodeflowSubNav } from './codeflow/sub-nav';
 import { ArchitectureMapView } from './codeflow/architecture-map-view';
-import { ChangeImpactView, DecisionGraphView, AgentContextView } from './codeflow/placeholder-views';
+import { ChangeImpactView, DecisionGraphView } from './codeflow/placeholder-views';
+import { AgentContextView } from './codeflow/agent-context-view';
 import type { Task, Phase } from '@/lib/api';
 
 
@@ -123,14 +125,24 @@ function RepositoryProviderIcon({ provider }: { provider: string }) {
 
 interface Props {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string; q?: string; cf?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    q?: string;
+    cf?: string;
+    eventType?: string;
+    actorType?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: string;
+  }>;
 }
 
 
 export default async function ProjectDetailPage({ params, searchParams }: Props) {
 
   const { id } = await params;
-  const { tab = 'tasks', q, cf = 'map' } = await searchParams;
+  const sp = await searchParams;
+  const { tab = 'tasks', q, cf = 'map' } = sp;
   const token = await getToken();
 
   if (!token) {
@@ -280,10 +292,21 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         {tab === 'decisions' && <DecisionsTab token={token} projectId={id} dict={dict} />}
         {tab === 'memory' && <MemoryTab token={token} projectId={id} q={q} dict={dict} />}
         {tab === 'codeflow' && <CodeflowTab token={token} projectId={id} activeView={cf} dict={dict} />}
-        {tab === 'activity' && (
+        {(tab === 'activity' || tab === 'audit') && (
           <div className="space-y-3">
             <h2 className="text-sm font-semibold text-white">{dict.activity.title}</h2>
-            <ActivityTimeline token={token} projectId={id} dict={dict} />
+            <ActivityTimeline
+              token={token}
+              projectId={id}
+              dict={dict}
+              filters={{
+                eventType: sp.eventType,
+                actorType: sp.actorType,
+                dateFrom: sp.dateFrom,
+                dateTo: sp.dateTo,
+                page: sp.page,
+              }}
+            />
           </div>
         )}
         {tab === 'contributors' && (
@@ -516,7 +539,7 @@ function CodeflowTab({
       {activeView === 'map' && <ArchitectureMapView token={token} projectId={projectId} dict={dict} />}
       {activeView === 'impact' && <ChangeImpactView dict={dict} />}
       {activeView === 'decisionGraph' && <DecisionGraphView dict={dict} />}
-      {activeView === 'agentContext' && <AgentContextView dict={dict} />}
+      {activeView === 'agentContext' && <AgentContextView token={token} projectId={projectId} dict={dict} />}
     </div>
   );
 }
@@ -532,7 +555,7 @@ async function ContributorsTabLoader({
   token: string;
   projectId: string;
   session: { userId: string; role: string };
-  project: { ownerUserId: string | null };
+  project: { ownerUserId: string | null; homeUrl?: string | null; thumbnailUrl?: string | null };
   dict: Dictionary;
 }) {
 
@@ -553,15 +576,24 @@ async function ContributorsTabLoader({
   const isOwner = isAdmin || project.ownerUserId === session.userId || isProjectAdmin;
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold text-white">{dict.tabs.contributors}</h2>
-      <ContributorsTab
-        projectId={projectId}
-        currentUserId={session.userId}
-        isOwner={isOwner}
-        users={users}
-        initialGrants={grants}
-      />
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-white">{dict.tabs.contributors}</h2>
+        <ContributorsTab
+          projectId={projectId}
+          currentUserId={session.userId}
+          isOwner={isOwner}
+          users={users}
+          initialGrants={grants}
+        />
+      </div>
+      {isOwner && (
+        <EditThumbnailForm
+          projectId={projectId}
+          initialHomeUrl={project.homeUrl ?? null}
+          initialThumbnailUrl={project.thumbnailUrl ?? null}
+        />
+      )}
     </div>
   );
 }

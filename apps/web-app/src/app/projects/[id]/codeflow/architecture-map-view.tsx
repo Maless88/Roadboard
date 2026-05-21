@@ -1,4 +1,4 @@
-import { getArchitectureGraph } from '@/lib/api';
+import { getArchitectureGraph, listDomainGroups } from '@/lib/api';
 import type { Dictionary } from '@/lib/i18n';
 import { EmptyState } from './empty-state';
 import { ArchitectureMapCanvas } from './architecture-map-canvas';
@@ -30,6 +30,8 @@ export async function ArchitectureMapView({ token, projectId, dict }: Props) {
     );
   }
 
+  const domainGroups = await listDomainGroups(token, projectId).catch(() => []);
+
   const lastScanned = graph.lastScannedAt
     ? new Date(graph.lastScannedAt).toLocaleString('it-IT', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -60,10 +62,12 @@ export async function ArchitectureMapView({ token, projectId, dict }: Props) {
         projectId={projectId}
         nodes={graph.nodes}
         edges={graph.edges}
+        domainGroups={domainGroups}
         dict={{
           searchPlaceholder: dict.codeflow.searchPlaceholder,
           filterAll: dict.codeflow.filterAll,
           noNodes: dict.codeflow.noNodes,
+          decisionAware: dict.codeflow.decisionAware,
         }}
       />
     </div>
