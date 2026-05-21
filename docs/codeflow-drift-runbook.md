@@ -1,8 +1,8 @@
 # CodeFlow Drift Runbook
 
 **Audience**: on-call engineers, Architect agents  
-**Last updated**: 2026-05-12  
-**Status**: baseline established (CF-GDB-03c / AI-P0-01)
+**Last updated**: 2026-05-13  
+**Status**: baseline established (CF-GDB-03c / AI-P0-01); mirror extended to Link + Annotation + extended node fields (CF-GDB-03b-A)
 
 ---
 
@@ -14,6 +14,18 @@ The CodeFlow graph stores two projections of the same architectural data:
 - **Memgraph** — the in-memory graph used for fast traversal and impact analysis.
 
 *Drift* occurs when the two projections diverge: entities present in Postgres are missing in Memgraph, or vice-versa. The drift detector (`DriftService`) computes an md5 fingerprint of sorted IDs for each entity type and reports mismatches.
+
+Tracked entity types (each must hit `inSync: true` for a clean baseline):
+
+| Entity type   | Postgres source                                          | Memgraph label        |
+|---------------|----------------------------------------------------------|-----------------------|
+| `node`        | `architecture_nodes` (filtered by `isCurrent=true`)      | `(n)` excluding `Link`/`Annotation`/`Repository` |
+| `edge`        | `architecture_edges` (filtered by `isCurrent=true`)      | typed relationships excl. `LINKED_TO`/`ANNOTATES` |
+| `link`        | `architecture_links`                                     | `:Link`               |
+| `annotation`  | `architecture_annotations`                               | `:Annotation`         |
+| `repository`  | `code_repositories`                                      | `:Repository`         |
+
+`Link` and `Annotation` mirror parity was added in CF-GDB-03b-A together with the extended node attributes (`description`, `metadata`, `ownerUserId`, `ownerTeamId`, `isManual`, `isCurrent`). Both direct-sync (`GraphSyncService`) and outbox (`GraphProjectionService`) write the same shape.
 
 ---
 

@@ -71,7 +71,14 @@ export class AuditService {
     projectId: string,
     take: number | string = 50,
     skip: number | string = 0,
-    filters: { eventType?: string; actorUserId?: string; targetType?: string } = {},
+    filters: {
+      eventType?: string;
+      actorUserId?: string;
+      targetType?: string;
+      actorType?: string;
+      dateFrom?: string | Date;
+      dateTo?: string | Date;
+    } = {},
   ) {
 
     const takeInt = Number(take) || 50;
@@ -81,6 +88,25 @@ export class AuditService {
     if (filters.eventType) where.eventType = filters.eventType;
     if (filters.actorUserId) where.actorUserId = filters.actorUserId;
     if (filters.targetType) where.targetType = filters.targetType;
+    if (filters.actorType) where.actorType = filters.actorType;
+
+    if (filters.dateFrom || filters.dateTo) {
+      const createdAt: Prisma.DateTimeFilter = {};
+
+      if (filters.dateFrom) {
+        const from = filters.dateFrom instanceof Date ? filters.dateFrom : new Date(filters.dateFrom);
+
+        if (!Number.isNaN(from.getTime())) createdAt.gte = from;
+      }
+
+      if (filters.dateTo) {
+        const to = filters.dateTo instanceof Date ? filters.dateTo : new Date(filters.dateTo);
+
+        if (!Number.isNaN(to.getTime())) createdAt.lte = to;
+      }
+
+      if (Object.keys(createdAt).length > 0) where.createdAt = createdAt;
+    }
 
     const [events, total] = await Promise.all([
       this.prisma.activityEvent.findMany({

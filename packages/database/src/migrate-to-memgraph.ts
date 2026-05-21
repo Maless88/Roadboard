@@ -32,7 +32,10 @@ async function main() {
     await graph.run(
       `MERGE (x:${label} {id: $id})
        SET x.projectId = $projectId, x.type = $type, x.name = $name,
-           x.path = $path, x.domainGroup = $domainGroup`,
+           x.path = $path, x.domainGroup = $domainGroup,
+           x.description = $description, x.metadata = $metadata,
+           x.ownerUserId = $ownerUserId, x.ownerTeamId = $ownerTeamId,
+           x.isManual = $isManual, x.isCurrent = $isCurrent`,
       {
         id: n.id,
         projectId: n.projectId,
@@ -40,6 +43,12 @@ async function main() {
         name: n.name,
         path: n.path,
         domainGroup: n.domainGroup,
+        description: n.description ?? null,
+        metadata: n.metadata == null ? null : JSON.stringify(n.metadata),
+        ownerUserId: n.ownerUserId ?? null,
+        ownerTeamId: n.ownerTeamId ?? null,
+        isManual: n.isManual,
+        isCurrent: n.isCurrent,
       },
       { mode: 'write' },
     );

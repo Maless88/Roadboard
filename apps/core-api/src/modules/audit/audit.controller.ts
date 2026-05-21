@@ -53,6 +53,9 @@ export class AuditController {
         eventType: query.eventType,
         actorUserId: query.actorUserId,
         targetType: query.targetType,
+        actorType: query.actorType,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
       },
     ) as Promise<{ events: unknown[]; total: number; take: number; skip: number }>;
   }
@@ -73,6 +76,9 @@ export class AuditController {
         eventType: query.eventType,
         actorUserId: query.actorUserId,
         targetType: query.targetType,
+        actorType: query.actorType,
+        dateFrom: query.dateFrom,
+        dateTo: query.dateTo,
       },
     ) as Promise<{ events: unknown[]; total: number; take: number; skip: number }>;
   }
