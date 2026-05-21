@@ -6,19 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-05-21
+
+### Added
+- Domain groups CRUD: `ArchitectureNode` can be assigned to named domain groups; CRUD on `GET/POST/PATCH/DELETE /codeflow/domain-groups`; drag-and-drop assignment in Atlas canvas
+- Project thumbnails: auto-refresh from project home URL (screenshot via BullMQ job) and manual upload via `POST /projects/:id/thumbnail`; displayed as card background in dashboard
+- Chatbot config per project: multi-provider AI assistant (Anthropic, OpenAI, Ollama) configurable per project; settings tab "AI assistant"
+- Deep Code Map schema: `File`, `Symbol`, `ExternalPackage` node types added to `@roadboard/graph-db` Cypher schema
+- Drift validation baseline for CodeFlow: `graph-sync.service` records a graph hash baseline and validates on each sync cycle; operational runbook in `docs/codeflow-drift-runbook.md`
+- Atlas: agent context view (`?cf=agent-context`) and domain groups panel in the canvas sub-nav
+- Tab Attività: unified with former Audit tab — full filter form (eventType, actorType, dateFrom/dateTo) + pagination; Audit tab removed from navigation; `?tab=audit` redirects to activity
+- Settings: AI assistant tab for chatbot configuration
+- Teams page at `/teams`
+- Dashboard: skeleton loader (`ProjectCardSkeleton`) and async `ProjectsGrid` component
+- MCP guide: extended snippet generator supporting all 4 runtimes; Step 3 and Step 5 content expanded
+- Feature flag `GRAPH_READ_USE_MEMGRAPH_IMPACT`: gates Memgraph Cypher read path for impact analysis (enabled 2026-05-20)
+- `docs/AI-WORKFLOW.md`: Architect/Worker/Analyst operating model documentation
+- `docs/task-naming-convention.md`: RoadBoard task title convention and area map
+- `docs/i18n-glossary.md`: IT/EN terminology glossary with coherence pass notes
+- Scripts: `rename-active-tasks.ts`, `tasks-list.ts`, `dev-light.sh`
+- `AGENTS.md`: Codex/ChatGPT Analyst startup guide
+
 ### Changed
-- Unified the `/projects` list page into the Dashboard: the dashboard now hosts the "+ Crea progetto" button and uses swipeable project cards
-- `SwipeableProjectCard`: card-layout version of the row component with swipe-left gesture to reveal a delete affordance
-- `/projects` route now redirects to `/dashboard`; post-login redirect updated accordingly
-- `deleteProjectAction` revalidates and redirects to `/dashboard`
-- Sidebar "mostra altri" link points to `/dashboard`
-- E2E tests updated to use the `[data-testid="project-card"]` selector with `data-project-href`
+- Unified the `/projects` list page into the Dashboard: swipeable project cards, "+ Crea progetto" button; `/projects` redirects to `/dashboard`
+- `projects.service`: `recordForUser` audit calls added to create, update, delete, archive, unarchive
+- `graph.service`: `recordForUser` audit calls added to all node, edge, link, and annotation writes
+- `audit.service`: `findByProject` now accepts `actorType`, `dateFrom`, `dateTo` filters
+- `activity-timeline.tsx`: rewritten to use `listAuditEvents` with filter form and pagination
+- i18n: 7 value fixes in `it.ts`, 2 in `en.ts`; new keys for audit filters, thumbnails, chatbot config
+- CLAUDE.md: Architect/Worker/Analyst model, task queue protocol (Cowork), verification discipline
 
 ### Fixed
-- Settings → Membri: native select dropdown options are now readable (solid dark background on both `<select>` and `<option>` elements)
-- `SwipeableProjectCard`: delete overlay no longer "bleeds through" the translucent card background at rest; card stays fixed while the red overlay grows from the right during swipe
-- `SwipeableProjectCard`: `setPointerCapture` on pointerdown keeps the drag tracked when the cursor leaves the card; navigation handled directly in `onPointerUp` so card click still works after capture
-- `SwipeableProjectCard`: client component now uses `useDict()` instead of receiving the `Dictionary` as prop (dictionary contains functions, not serializable across the Server→Client boundary)
+- `SwipeableProjectCard`: archive button not clickable — reveal panel had `z-index: auto` while inner card content had `z-index: 1`; fixed by adding `zIndex: 2` to the reveal panel
+- Atlas (`?tab=codeflow`): crash on page load — `dict.codeflow.decisionAware.nodeBadge` was a function in the i18n dictionary, not serializable across the Next.js Server→Client boundary; converted to string template `'{n} decisioni'` with `.replace('{n}', ...)` at call site
+- Settings → Membri: native select dropdown options readable (solid dark background on `<select>` and `<option>`)
+- `SwipeableProjectCard`: delete overlay bleed, pointer capture tracking, useDict() instead of Dictionary prop
 
 ## [0.14.0] - 2026-04-19
 
