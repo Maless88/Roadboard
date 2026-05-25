@@ -35,7 +35,6 @@ export async function AgentContextView({ token, projectId, dict }: Props) {
   return (
     <AgentContextPanel
       snapshot={snapshot}
-      dict={dict}
       projectId={projectId}
     />
   );
