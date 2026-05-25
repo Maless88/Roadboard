@@ -2,14 +2,13 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
-import type { Dictionary } from '@/lib/i18n';
 import type { ArchitectureSnapshot } from '@/lib/api';
+import { useDict } from '@/lib/i18n/locale-context';
 import { useToast } from '@/lib/toast-context';
 
 
 interface Props {
   snapshot: ArchitectureSnapshot;
-  dict: Dictionary;
   projectId: string;
 }
 
@@ -36,7 +35,7 @@ function TypeBadge({ label, count }: { label: string; count: number }) {
 }
 
 
-export function AgentContextPanel({ snapshot, dict, projectId }: Props) {
+export function AgentContextPanel({ snapshot, projectId }: Props) {
 
   const { showToast } = useToast();
   const router = useRouter();
@@ -44,7 +43,7 @@ export function AgentContextPanel({ snapshot, dict, projectId }: Props) {
   const searchParams = useSearchParams();
   const [copying, setCopying] = useState(false);
 
-  const d = dict.codeflow.agentContext;
+  const d = useDict().codeflow.agentContext;
 
   const generatedAt = new Date(snapshot.generatedAt).toLocaleString('it-IT', {
     day: 'numeric',
