@@ -1504,7 +1504,7 @@ export async function getProjectArchitectureSnapshot(
 ): Promise<ArchitectureSnapshot> {
 
   const res = await fetch(
-    `${CORE_API}/projects/${projectId}/codeflow/snapshot/compact`,
+    `${CORE_API}/projects/${projectId}/codeflow/graph/snapshot/compact`,
     { headers: authHeaders(token) },
   );
 
