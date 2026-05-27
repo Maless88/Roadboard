@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaClient } from '@roadboard/database';
@@ -29,6 +30,7 @@ interface AuthenticatedUser {
 @Injectable()
 export class GrantCheckGuard implements CanActivate {
 
+  private readonly logger = new Logger(GrantCheckGuard.name);
   private readonly authAccessHost: string;
   private readonly authAccessPort: string;
 
@@ -83,7 +85,12 @@ export class GrantCheckGuard implements CanActivate {
       const data = (await response.json()) as GrantCheckResponse;
 
       if (!data.allowed) {
-        throw new ForbiddenException('Insufficient permissions');
+        this.logger.warn('Grant check failed', { requiredGrant, projectId, subjectId: user.userId });
+        throw new ForbiddenException({
+          message: 'Insufficient permissions',
+          requiredGrant,
+          projectId,
+        });
       }
 
       return true;
