@@ -17,10 +17,18 @@ _How the work evolved across planning rounds: what changed, what was discarded, 
 
 ## Final Prompts Ready
 
-_Prompts that were delivered to `tasks/done/` with all acceptance criteria passing._
+_Worker prompts that were created, moved, or completed during this cycle. In planning-only cycles, write `None — planning-only`._
 
 - `tasks/done/<prompt-slug>.md` — [one-line description]
 - 
+
+## Planning Artifacts
+
+_Briefs, questions, and proposals produced during the cycle._
+
+- `tasks/briefs/<slug>-brief-v<N>.md`
+- `tasks/for-analyst/<slug>-q<N>.md`
+- `tasks/proposals/<slug>-proposal-v<N>.md`
 
 ## Blocked / Deferred
 
@@ -38,6 +46,8 @@ _Any `stop-point` flags that triggered human review during this cycle._
 
 ## GO Checklist
 
+- [ ] Cycle mode recorded (`planning-only` or `worker execution`)
+- [ ] If planning-only: no new `tasks/todo/` prompts created
 - [ ] All `tasks/run/` prompts resolved (done or failure-noted)
 - [ ] `pnpm typecheck` passes
 - [ ] `pnpm lint` passes

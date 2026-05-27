@@ -21,6 +21,14 @@ Codex may create Analyst briefs in `tasks/briefs/` for non-trivial planning work
 
 Use `docs/AI-WORKFLOW.md` for the project-specific collaboration flow and `docs/templates/` for brief and prompt templates.
 
+For design exploration where the Developer wants Analyst↔Architect iteration but explicitly does not want Worker prompts, use:
+
+```bash
+pnpm agent:workflow run --slug <slug> --planning-only
+```
+
+`--planning-only` allows briefs, Architect questions, and proposals, but forbids new files in `tasks/todo/`.
+
 ## Analyst interaction protocol
 
 Analyst (Codex/ChatGPT) communicates with Architect (Claude Code) through the task folder contract. The interface is strictly file-based:

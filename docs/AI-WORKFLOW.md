@@ -45,19 +45,31 @@ The pipeline has two distinct loops: an **async Analyst↔Architect planning loo
 5. For formal design proposals that need Analyst sign-off before Worker prompt creation, Architect writes to `tasks/proposals/`.
 6. Analyst reads from `tasks/for-analyst/` and `tasks/proposals/`, writes a review response back to `tasks/briefs/`.
 7. **Steps 3–6 repeat as many times as needed.** There is no limit on iteration count. The loop continues until Analyst and Architect converge.
-8. Only after convergence does Architect create final Worker prompts under `tasks/todo/`. Prompts in `tasks/todo/` represent Analyst/Architect consensus — they are not drafts.
+8. Only after planning convergence does Architect create final Worker prompts under `tasks/todo/`. Prompts in `tasks/todo/` are still reviewed once more by Analyst before the loop is considered complete.
+9. Analyst performs a final review pass against the intake and latest brief:
+   - if the prompts are correct, Analyst writes `tasks/.convergence-<slug>` with `role: "analyst"`;
+   - if there are gaps, Analyst writes `tasks/for-analyst/<slug>-q<N>.md` and the loop returns to Architect.
+10. After Analyst sign-off, prompts in `tasks/todo/` represent Analyst/Architect consensus — they are not drafts.
+
+For exploratory design work, the loop can be run in planning-only mode:
+
+```bash
+pnpm agent:workflow run --slug <slug> --planning-only
+```
+
+In planning-only mode, convergence means the analysis or proposal is ready for Developer review. It does not mean Worker prompts are ready, and the runner fails if a new file appears in `tasks/todo/`.
 
 ### GO to Worker (manual)
 
-9. Developer reviews `tasks/todo/` (use `pnpm agent:workflow ready` to list lint-passing prompts).
-10. **GO to Worker is always a manual action.** The CLI never spawns Workers, never moves files from `todo/` to `run/`, and never triggers model calls.
-11. Architect moves a prompt from `tasks/todo/` to `tasks/run/` and spawns a Worker subagent.
+11. Developer reviews `tasks/todo/` (use `pnpm agent:workflow ready` to list lint-passing prompts).
+12. **GO to Worker is always a manual action.** The CLI never spawns Workers and never moves files from `todo/` to `run`.
+13. Architect moves a prompt from `tasks/todo/` to `tasks/run/` and spawns a Worker subagent.
 
 ### Worker execution loop
 
-12. Worker implements and verifies exactly that prompt.
-13. Worker moves the prompt to `tasks/done/` when all acceptance criteria pass.
-14. Architect reviews the result and updates RoadBoard / `PLAN.md` per `CLAUDE.md`.
+14. Worker implements and verifies exactly that prompt.
+15. Worker moves the prompt to `tasks/done/` when all acceptance criteria pass.
+16. Architect reviews the result and updates RoadBoard / `PLAN.md` per `CLAUDE.md`.
 
 ### Conversation history in reports
 
@@ -66,7 +78,7 @@ The pipeline has two distinct loops: an **async Analyst↔Architect planning loo
 - Original request (from `tasks/intake/`)
 - Architect proposals (from `tasks/proposals/`)
 - Analyst reviews and corrections (from `tasks/briefs/` and `tasks/for-analyst/`)
-- Final prompts that reached `tasks/todo/`
+- Final prompts that reached `tasks/todo/` (normal mode only)
 - Blocked or deferred items with reasons
 
 Use `pnpm agent:workflow report --slug <slug>` to generate a report for a completed cycle.
@@ -163,13 +175,19 @@ pnpm agent:workflow sync
 
 Regenerates `TASK_LIST.md` from the current state of `tasks/todo/`, `tasks/run/`, and `tasks/done/`. Run after moving prompts between folders to keep the list current.
 
-**`run --slug <slug> [--planning-only]`** — run the Analyst↔Architect loop:
+**`run --slug <slug> [--dry-run] [--planning-only]`** — run the Analyst↔Architect loop:
 
 ```bash
 pnpm agent:workflow run --slug roadboard-local-runtime --planning-only
 ```
 
+Without flags, `run` invokes the configured Analyst and Architect role binaries from `.agent/workflow-adapters.json` and can converge by creating Worker prompts in `tasks/todo/`.
+
+`--dry-run` prints the commands and prompt sizes without invoking any model CLI.
+
 `--planning-only` keeps the loop in analysis mode. Analyst writes briefs, Architect writes questions or proposals, and the runner fails if a new Worker prompt appears in `tasks/todo/`.
+
+Use `--planning-only` when the Developer wants design exploration, architectural review, or Analyst↔Architect debate before deciding whether to create executable work.
 
 ## End-to-end example
 
@@ -216,13 +234,23 @@ tasks/briefs/auth-token-refresh-corrections.md
 
 ### 5. Convergence — Architect creates the final prompt
 
-After Analyst/Architect convergence, Architect creates the verified Worker prompt:
+After Analyst/Architect planning convergence, Architect creates the verified Worker prompt:
 
 ```
 tasks/todo/feat-auth-token-refresh.md
 ```
 
-### 6. Lint and ready check
+### 6. Analyst final review
+
+The loop returns the `tasks/todo/` prompt listing to Analyst. Analyst either writes final sign-off:
+
+```json
+{ "slug": "auth-token-refresh", "iteration": 2, "role": "analyst" }
+```
+
+or writes another `tasks/for-analyst/auth-token-refresh-q<N>.md` if the prompt misses risks, scope, or acceptance criteria.
+
+### 7. Lint and ready check
 
 ```bash
 pnpm agent:workflow lint
@@ -233,7 +261,7 @@ pnpm agent:workflow ready
 #   feat-auth-token-refresh.md
 ```
 
-### 7. GO (manual)
+### 8. GO (manual)
 
 Developer reviews `tasks/todo/feat-auth-token-refresh.md` and approves. Architect moves the file to `tasks/run/` and spawns a Worker subagent.
 
@@ -242,7 +270,7 @@ mv tasks/todo/feat-auth-token-refresh.md tasks/run/
 # → Architect spawns Worker via Agent tool
 ```
 
-### 8. Worker executes
+### 9. Worker executes
 
 Worker implements the prompt, verifies acceptance criteria, and moves the file to `tasks/done/`:
 
@@ -250,7 +278,7 @@ Worker implements the prompt, verifies acceptance criteria, and moves the file t
 mv tasks/run/feat-auth-token-refresh.md tasks/done/
 ```
 
-### 9. Report
+### 10. Report
 
 ```bash
 pnpm agent:workflow report --slug auth-token-refresh
@@ -258,6 +286,44 @@ pnpm agent:workflow report --slug auth-token-refresh
 ```
 
 The report includes the full conversation history: intake, proposals, briefs, for-analyst files, final prompts, and any blocked items.
+
+## Planning-Only Example
+
+Use this when the Developer wants structured analysis but explicitly does not want Worker prompts yet.
+
+### 1. Open the cycle
+
+```bash
+pnpm agent:workflow intake --slug roadboard-local-runtime
+```
+
+Fill `tasks/intake/roadboard-local-runtime-intake.md` with the goal, constraints, and desired outcome.
+
+### 2. Run the loop safely
+
+```bash
+pnpm agent:workflow run --slug roadboard-local-runtime --planning-only
+```
+
+Expected outputs:
+
+- `tasks/briefs/roadboard-local-runtime-brief-v<N>.md`
+- `tasks/for-analyst/roadboard-local-runtime-q<N>.md` if Architect needs Analyst follow-up
+- `tasks/proposals/roadboard-local-runtime-proposal-v<N>.md` if Architect has a proposal ready for Developer review
+
+Forbidden output:
+
+- Any new file in `tasks/todo/`
+
+If a new `tasks/todo/` file appears, the runner stops with a planning-only violation. Inspect and remove or convert that file before continuing.
+
+### 3. Report
+
+```bash
+pnpm agent:workflow report --slug roadboard-local-runtime
+```
+
+The report should list planning artifacts and show no new Worker prompts created for the cycle.
 
 ## Adapters (optional)
 
@@ -326,17 +392,35 @@ Output from `adapters run` is saved to `tasks/reports/<slug>-<adapter>-output.md
 
 GO decisions remain with the human. Adapters prepare and show prompts — they do not spawn Workers or update RoadBoard.
 
-## Safety gates
+## Safety Gates
 
-The `agent:workflow` CLI is a **passive file-system tool**. It reads, counts, validates, and generates reports. It is designed to never:
+Most `agent:workflow` commands are passive file-system tools:
 
-- Make model API calls (no LLM, no Claude API, no Codex API)
-- Spawn Worker subagents or trigger any AI execution
+- `status`
+- `lint`
+- `ready`
+- `sync`
+- `report`
+- `adapters list`
+- `adapters render`
+- `adapters dry-run`
+- `run --dry-run`
+
+These commands read, count, validate, render, or generate local reports without invoking model CLIs.
+
+`agent:workflow run` is different: it invokes the configured Analyst and Architect role binaries from `.agent/workflow-adapters.json`. It still does not spawn Worker subagents, move lifecycle files, update RoadBoard status, or touch git state.
+
+The CLI is designed to never:
+
+- Spawn Worker subagents
 - Move files between `tasks/` folders autonomously
-- Modify `tasks/todo/`, `tasks/run/`, or `tasks/done/` outside of `intake` (which only writes to `tasks/intake/`) and `report` (which only writes to `tasks/reports/`)
+- Modify `tasks/run/` or `tasks/done/`
 - Push commits, modify git state, or touch the git index
 - Update RoadBoard task statuses
 - Modify `PLAN.md` or `CLAUDE.md`
-- Require network access or external services
+
+Passive commands and `run --dry-run` do not require network access or external services. A real `run` may require whatever local model CLI dependencies are configured by the Developer.
+
+In normal `run` mode, the Architect model may create files in `tasks/todo/` when prompts are ready. In `run --planning-only`, creating a new `tasks/todo/` file is a hard error.
 
 All transitions between `todo/` → `run/` → `done/` are manual actions performed by the Architect or Developer. The CLI only surfaces state (`status`, `ready`) so that humans can make informed decisions.
