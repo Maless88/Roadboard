@@ -42,7 +42,11 @@ If the loop runner prompt says `Planning-only mode is active`, do NOT write to
 
 After producing your Worker prompts:
 
-1. If `tasks/todo/` now contains all prompts needed to complete the request →
+1. **Delete the consumed brief**: remove `tasks/briefs/<slug>-brief*.md` and any
+   `tasks/for-analyst/<slug>-*.md` files that have been fully addressed.
+   These are inboxes, not archives — once converted into `tasks/todo/` prompts
+   they serve no further purpose and should not accumulate.
+2. If `tasks/todo/` now contains all prompts needed to complete the request →
    write `tasks/.convergence-<slug>` with JSON content:
    ```json
    { "slug": "<slug>", "iteration": <N>, "role": "architect" }
@@ -50,10 +54,10 @@ After producing your Worker prompts:
    This signals the loop runner to return the prompt set to Analyst for a final
    review pass. Worker execution still requires Analyst sign-off and manual
    Developer GO.
-2. If you still have questions for the Analyst → write them to
+3. If you still have questions for the Analyst → write them to
    `tasks/for-analyst/<slug>-q<N>.md` instead. Do NOT write the convergence file.
-3. If neither file is written → the loop runner counts this as a wasted iteration.
-   Always write one of the two.
+4. If neither convergence file nor question file is written → the loop runner counts
+   this as a wasted iteration. Always write one of the two.
 
 In planning-only mode:
 
