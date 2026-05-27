@@ -170,13 +170,31 @@ function renderDoneSection(entries: TaskEntry[]): string {
   return lines.join("\n");
 }
 
-function generate(): void {
+export interface GenerateOptions {
+  tasksDir?: string;
+  outputPath?: string;
+}
+
+export interface GenerateResult {
+  run: number;
+  todo: number;
+  done: number;
+  outputPath: string;
+}
+
+/**
+ * Generates TASK_LIST.md from tasks/{run,todo,done}/ directories.
+ * Accepts optional overrides for tasksDir and outputPath (used in tests).
+ */
+export function generateTaskList(options: GenerateOptions = {}): GenerateResult {
+  const tasksDir = options.tasksDir ?? TASKS_DIR;
+  const outputPath = options.outputPath ?? OUTPUT;
   const now = new Date();
   const timestamp = now.toISOString().replace("T", " ").slice(0, 19) + " UTC";
 
-  const run = readTasksFromDir(path.join(TASKS_DIR, "run"));
-  const todo = readTasksFromDir(path.join(TASKS_DIR, "todo"));
-  const done = readTasksFromDir(path.join(TASKS_DIR, "done"));
+  const run = readTasksFromDir(path.join(tasksDir, "run"));
+  const todo = readTasksFromDir(path.join(tasksDir, "todo"));
+  const done = readTasksFromDir(path.join(tasksDir, "done"));
 
   // Sort done by mtime desc (most recent first)
   done.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
@@ -195,8 +213,14 @@ function generate(): void {
   ];
 
   const output = sections.join("\n");
-  fs.writeFileSync(OUTPUT, output, "utf-8");
-  console.log(`✔ TASK_LIST.md generato (run=${run.length}, todo=${todo.length}, done=${done.length})`);
+  fs.writeFileSync(outputPath, output, "utf-8");
+
+  return { run: run.length, todo: todo.length, done: done.length, outputPath };
+}
+
+function generate(): void {
+  const result = generateTaskList();
+  console.log(`✔ TASK_LIST.md generato (run=${result.run}, todo=${result.todo}, done=${result.done})`);
 }
 
 // Only run when invoked directly (not when imported in tests)
