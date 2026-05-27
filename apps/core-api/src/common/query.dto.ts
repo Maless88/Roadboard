@@ -175,6 +175,11 @@ export class FindProjectAuditQueryDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  mcpTokenId?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
   dateFrom?: string;
 
   @IsOptional()
