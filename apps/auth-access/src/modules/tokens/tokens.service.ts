@@ -89,6 +89,8 @@ export class TokensService {
     return {
       userId: mcpToken.userId,
       scopes: mcpToken.scopes,
+      tokenId: mcpToken.id,
+      tokenName: mcpToken.name,
     };
   }
 
