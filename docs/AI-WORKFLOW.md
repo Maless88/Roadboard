@@ -109,6 +109,7 @@ pnpm agent:workflow <command> [options]
 | `report` | `--slug <slug>` | Generate `tasks/reports/<slug>-final-report.md` with the full cycle artifact list |
 | `ready` | — | List `.md` files in `tasks/todo/` that pass lint with 0 errors |
 | `sync` | — | Regenerate `TASK_LIST.md` from `tasks/todo/`, `tasks/run/`, and `tasks/done/` |
+| `run` | `--slug <slug> [--dry-run] [--planning-only]` | Run the Analyst↔Architect loop; `--planning-only` forbids Worker prompt creation |
 | `adapters <sub>` | see below | Optional model CLI adapter layer (opt-in, safe by default) |
 
 ### Command details
@@ -161,6 +162,14 @@ pnpm agent:workflow sync
 ```
 
 Regenerates `TASK_LIST.md` from the current state of `tasks/todo/`, `tasks/run/`, and `tasks/done/`. Run after moving prompts between folders to keep the list current.
+
+**`run --slug <slug> [--planning-only]`** — run the Analyst↔Architect loop:
+
+```bash
+pnpm agent:workflow run --slug roadboard-local-runtime --planning-only
+```
+
+`--planning-only` keeps the loop in analysis mode. Analyst writes briefs, Architect writes questions or proposals, and the runner fails if a new Worker prompt appears in `tasks/todo/`.
 
 ## End-to-end example
 

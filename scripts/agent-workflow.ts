@@ -825,6 +825,7 @@ export interface RunLoopOptions {
   execFn?: (binary: string, args: string[], opts: object) => string;
   promptFn?: () => string;
   dryRun?: boolean;
+  planningOnly?: boolean;
   maxIterations?: number;
   pauseEvery?: number;
   logFn?: (msg: string) => void;
@@ -915,7 +916,26 @@ function buildArchitectPrompt(args: {
   todoListing: string;
   slug: string;
   iteration: number;
+  planningOnly: boolean;
 }): string {
+  const instructions = args.planningOnly
+    ? [
+        "Planning-only mode is active.",
+        `If you have questions for Analyst: write to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
+        `If analysis is ready for Developer review: write a proposal to tasks/proposals/${args.slug}-proposal-v${args.iteration}.md`,
+        `Then write tasks/.convergence-${args.slug}`,
+        `  with JSON content: {"slug":"${args.slug}","iteration":${args.iteration},"mode":"planning-only"}`,
+        "Do NOT write Worker prompts.",
+        "Do NOT write to tasks/todo/.",
+        "Do NOT write to both for-analyst/ and .convergence-<slug> in the same iteration.",
+      ]
+    : [
+        `If you have questions for Analyst: write to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
+        `If prompts are ready: write them to tasks/todo/ and write tasks/.convergence-${args.slug}`,
+        `  with JSON content: {"slug":"${args.slug}","iteration":${args.iteration}}`,
+        "Do NOT write to both for-analyst/ and .convergence-<slug> in the same iteration.",
+      ];
+
   return [
     args.systemPrompt,
     "",
@@ -927,10 +947,7 @@ function buildArchitectPrompt(args: {
     args.todoListing,
     "",
     "## Instructions",
-    `If you have questions for Analyst: write to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
-    `If prompts are ready: write them to tasks/todo/ and write tasks/.convergence-${args.slug}`,
-    `  with JSON content: {"slug":"${args.slug}","iteration":${args.iteration}}`,
-    "Do NOT write to both for-analyst/ and .convergence-<slug> in the same iteration.",
+    ...instructions,
   ].join("\n");
 }
 
@@ -953,6 +970,7 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
   const promptFn = options.promptFn ?? readlineDefault;
   const log = options.logFn ?? ((msg: string) => console.log(msg));
   const dryRun = options.dryRun ?? false;
+  const planningOnly = options.planningOnly ?? false;
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const pauseEvery = options.pauseEvery ?? DEFAULT_PAUSE_EVERY;
 
@@ -1078,6 +1096,7 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
       todoListing,
       slug,
       iteration,
+      planningOnly,
     });
     const architectArgs = [...(architectRole.flags ?? []), architectPrompt];
 
@@ -1100,8 +1119,15 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
     const currentTodoCount = listFilesMatching(todoDir, /\.md$/).length;
     const currentForAnalystCount = listFilesMatching(forAnalystDir, forAnalystPattern).length;
 
+    if (planningOnly && currentTodoCount > prevTodoCount) {
+      throw new Error(
+        `Planning-only mode violation: new tasks/todo/ file appeared for slug "${slug}". ` +
+        "Inspect and remove the Worker prompt before continuing.",
+      );
+    }
+
     // Implicit convergence: new todo file appeared, no new for-analyst file
-    if (currentTodoCount > prevTodoCount && currentForAnalystCount <= prevForAnalystCount) {
+    if (!planningOnly && currentTodoCount > prevTodoCount && currentForAnalystCount <= prevForAnalystCount) {
       converged = true;
       reason = "implicit convergence (new todo without new for-analyst)";
       log(`[iter ${iteration}] WARN: implicit convergence detected (no explicit .convergence-${slug} file)`);
@@ -1190,6 +1216,7 @@ function parseArgs(argv: string[]): {
   init?: boolean;
   show?: boolean;
   dryRun?: boolean;
+  planningOnly?: boolean;
 } {
   const [, , command = "", subcommandOrFlag = "", ...rest] = argv;
 
@@ -1213,6 +1240,7 @@ function parseArgs(argv: string[]): {
   let init = false;
   let show = false;
   let dryRun = false;
+  let planningOnly = false;
 
   for (let i = 0; i < remaining.length; i++) {
     if (remaining[i] === "--slug" && remaining[i + 1]) {
@@ -1245,9 +1273,13 @@ function parseArgs(argv: string[]): {
     else if (remaining[i] === "--dry-run") {
       dryRun = true;
     }
+
+    else if (remaining[i] === "--planning-only") {
+      planningOnly = true;
+    }
   }
 
-  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun };
+  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, planningOnly };
 }
 
 function main(): void {
@@ -1256,7 +1288,7 @@ function main(): void {
     return;
   }
 
-  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun } = parseArgs(process.argv);
+  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, planningOnly } = parseArgs(process.argv);
 
   try {
     if (command === "status") {
@@ -1363,7 +1395,7 @@ function main(): void {
     }
 
     else if (command === "run") {
-      const result = runLoop(slug ?? "", { dryRun });
+      const result = runLoop(slug ?? "", { dryRun, planningOnly });
 
       if (result.converged) {
         console.log(`\nConverged after ${result.iterations} iteration(s): ${result.reason}`);
