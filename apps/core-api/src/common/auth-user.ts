@@ -8,4 +8,6 @@ export interface AuthUser {
   sessionId: string;
   expiresAt: string;
   source: AuthSource;
+  mcpTokenId?: string;
+  mcpTokenName?: string;
 }

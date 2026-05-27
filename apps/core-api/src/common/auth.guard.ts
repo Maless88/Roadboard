@@ -18,7 +18,9 @@ interface SessionValidateResponse {
 
 interface McpTokenValidateResponse {
   userId: string;
-  scope: string;
+  scopes: string[];
+  tokenId: string;
+  tokenName: string;
 }
 
 
@@ -76,6 +78,8 @@ export class AuthGuard implements CanActivate {
           displayName: 'MCP Agent',
           expiresAt: '',
           source: 'mcp',
+          mcpTokenId: mcp.tokenId,
+          mcpTokenName: mcp.tokenName,
         };
         return true;
       }

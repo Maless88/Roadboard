@@ -26,6 +26,7 @@ export class AuditService {
     metadata?: Record<string, unknown>,
     actorUserId?: string | null,
     source?: string,
+    mcpTokenId?: string | null,
   ) {
 
     return this.prisma.activityEvent.create({
@@ -33,6 +34,7 @@ export class AuditService {
         actorType,
         actorId,
         actorUserId: actorUserId ?? null,
+        mcpTokenId: mcpTokenId ?? null,
         source: source ?? 'system',
         eventType,
         targetType,
@@ -52,6 +54,22 @@ export class AuditService {
     projectId?: string,
     metadata?: Record<string, unknown>,
   ) {
+
+    if (user.source === 'mcp' && user.mcpTokenId) {
+
+      return this.record(
+        'mcp_token',
+        user.mcpTokenId,
+        eventType,
+        targetType,
+        targetId,
+        projectId,
+        metadata,
+        user.userId,
+        user.source,
+        user.mcpTokenId,
+      );
+    }
 
     return this.record(
       'user',
@@ -76,6 +94,7 @@ export class AuditService {
       actorUserId?: string;
       targetType?: string;
       actorType?: string;
+      mcpTokenId?: string;
       dateFrom?: string | Date;
       dateTo?: string | Date;
     } = {},
@@ -89,6 +108,7 @@ export class AuditService {
     if (filters.actorUserId) where.actorUserId = filters.actorUserId;
     if (filters.targetType) where.targetType = filters.targetType;
     if (filters.actorType) where.actorType = filters.actorType;
+    if (filters.mcpTokenId) where.mcpTokenId = filters.mcpTokenId;
 
     if (filters.dateFrom || filters.dateTo) {
       const createdAt: Prisma.DateTimeFilter = {};
