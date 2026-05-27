@@ -27,6 +27,7 @@ function activeToken(overrides: Record<string, unknown> = {}) {
 
   return {
     id: 'tok-1',
+    name: 'My token',
     userId: 'u-1',
     tokenHash: 'hashed:raw-token',
     scopes: ['read'],
@@ -52,13 +53,13 @@ describe('TokensService.validate', () => {
   });
 
 
-  it('returns userId and scopes for a valid active-user token', async () => {
+  it('returns userId, scopes, tokenId and tokenName for a valid active-user token', async () => {
 
     prisma.mcpToken.findUnique.mockResolvedValue(activeToken());
 
     const result = await svc.validate('raw-token');
 
-    expect(result).toEqual({ userId: 'u-1', scopes: ['read'] });
+    expect(result).toEqual({ userId: 'u-1', scopes: ['read'], tokenId: 'tok-1', tokenName: 'My token' });
   });
 
 
