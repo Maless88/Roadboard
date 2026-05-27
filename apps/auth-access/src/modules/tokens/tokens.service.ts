@@ -67,6 +67,7 @@ export class TokensService {
 
     const mcpToken = await this.prisma.mcpToken.findUnique({
       where: { tokenHash },
+      include: { user: { select: { status: true } } },
     });
 
     if (!mcpToken) {
@@ -79,6 +80,10 @@ export class TokensService {
 
     if (mcpToken.expiresAt && mcpToken.expiresAt < new Date()) {
       throw new UnauthorizedException('Token has expired');
+    }
+
+    if (!mcpToken.user || mcpToken.user.status !== 'active') {
+      throw new UnauthorizedException('User account disabled');
     }
 
     return {
