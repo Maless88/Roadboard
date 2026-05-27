@@ -169,4 +169,92 @@ describe('DomainGroupsService', () => {
       await expect(svc.assignNode(PROJECT_ID, NODE_ID, null)).rejects.toThrow(NotFoundException);
     });
   });
+
+
+  describe('write path — Memgraph-direct (CF-GDB-03b-D)', () => {
+
+    let graph: { run: ReturnType<typeof vi.fn> };
+    let writeSvc: DomainGroupsService;
+
+    beforeEach(async () => {
+
+      process.env.GRAPH_WRITE_USE_MEMGRAPH = 'true';
+      graph = { run: vi.fn().mockResolvedValue([]) };
+
+      const module = await Test.createTestingModule({
+        providers: [
+          DomainGroupsService,
+          { provide: 'PRISMA', useValue: prisma },
+          { provide: 'GRAPH_DB_CLIENT', useValue: graph },
+        ],
+      }).compile();
+
+      writeSvc = module.get(DomainGroupsService);
+    });
+
+    afterEach(() => {
+      delete process.env.GRAPH_WRITE_USE_MEMGRAPH;
+    });
+
+
+    describe('remove', () => {
+
+      it('clears the domainGroup name on Memgraph nodes via Cypher, deletes group via Prisma, skips Prisma updateMany', async () => {
+
+        const existing = { id: GROUP_ID, projectId: PROJECT_ID, name: 'Auth' };
+        prisma.domainGroup.findUnique.mockResolvedValue(existing);
+        prisma.domainGroup.delete.mockResolvedValue(existing);
+
+        await writeSvc.remove(PROJECT_ID, GROUP_ID);
+
+        expect(graph.run).toHaveBeenCalledTimes(1);
+        const [cypher, params, opts] = graph.run.mock.calls[0];
+        expect(cypher).toMatch(/SET n\.domainGroup = null/);
+        expect(params).toEqual({ projectId: PROJECT_ID, name: 'Auth' });
+        expect(opts).toEqual({ mode: 'write' });
+        expect(prisma.architectureNode.updateMany).not.toHaveBeenCalled();
+        expect(prisma.domainGroup.delete).toHaveBeenCalledWith({ where: { id: GROUP_ID } });
+      });
+    });
+
+
+    describe('assignNode', () => {
+
+      it('assigns by setting the group name on the Memgraph node, skips Prisma update', async () => {
+
+        const group = { id: GROUP_ID, projectId: PROJECT_ID, name: 'Auth' };
+        prisma.domainGroup.findUnique.mockResolvedValue(group);
+        graph.run.mockResolvedValue([{ id: NODE_ID }]);
+
+        await writeSvc.assignNode(PROJECT_ID, NODE_ID, GROUP_ID);
+
+        expect(graph.run).toHaveBeenCalledTimes(1);
+        const [cypher, params, opts] = graph.run.mock.calls[0];
+        expect(cypher).toMatch(/SET n\.domainGroup = \$groupName/);
+        expect(params).toEqual({ nodeId: NODE_ID, projectId: PROJECT_ID, groupName: 'Auth' });
+        expect(opts).toEqual({ mode: 'write' });
+        expect(prisma.architectureNode.update).not.toHaveBeenCalled();
+      });
+
+
+      it('unassigns by setting the group name to null', async () => {
+
+        graph.run.mockResolvedValue([{ id: NODE_ID }]);
+
+        await writeSvc.assignNode(PROJECT_ID, NODE_ID, null);
+
+        const [, params] = graph.run.mock.calls[0];
+        expect(params).toEqual({ nodeId: NODE_ID, projectId: PROJECT_ID, groupName: null });
+        expect(prisma.architectureNode.findUnique).not.toHaveBeenCalled();
+      });
+
+
+      it('raises NotFoundException when the Memgraph node does not exist', async () => {
+
+        graph.run.mockResolvedValue([]);
+
+        await expect(writeSvc.assignNode(PROJECT_ID, NODE_ID, null)).rejects.toThrow(NotFoundException);
+      });
+    });
+  });
 });

@@ -1235,4 +1235,356 @@ describe('GraphService', () => {
       expect(result.recentAnnotations).toHaveLength(0);
     });
   });
+
+
+  describe('write path — Memgraph-direct (CF-GDB-03b-D)', () => {
+
+    afterEach(() => {
+      delete process.env.GRAPH_WRITE_USE_MEMGRAPH;
+    });
+
+
+    function makeGraph(runImpl?: (...args: unknown[]) => unknown) {
+      return { run: runImpl ? vi.fn(runImpl) : vi.fn().mockResolvedValue([]) };
+    }
+
+
+    function makeWriteService(graph: { run: ReturnType<typeof vi.fn> }): GraphService {
+      process.env.GRAPH_WRITE_USE_MEMGRAPH = 'true';
+      return new GraphService(prisma as never, sync as never, audit as never, graph as never);
+    }
+
+
+    describe('createNode', () => {
+
+      it('flag ON writes via Cypher MERGE, skips Prisma + sync, generates id, audits', async () => {
+
+        const graph = makeGraph();
+        const svc = makeWriteService(graph);
+
+        const node = await svc.createNode('p1', {
+          type: 'package', name: 'core', path: '/x', repositoryId: 'repo1',
+        } as never, MOCK_USER) as { id: string; projectId: string; isManual: boolean; isCurrent: boolean };
+
+        expect(graph.run).toHaveBeenCalledTimes(1);
+        const [cypher, params, opts] = graph.run.mock.calls[0];
+        expect(cypher).toMatch(/MERGE \(n:Package \{id: \$id\}\)/);
+        expect(opts).toEqual({ mode: 'write' });
+        expect(params.id).toBeTruthy();
+        expect(node.id).toBe(params.id);
+        expect(node.projectId).toBe('p1');
+        expect(node.isManual).toBe(true);
+        expect(node.isCurrent).toBe(true);
+
+        expect(prisma.architectureNode.create).not.toHaveBeenCalled();
+        expect(sync.upsertNode).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'node.created', 'architecture_node', node.id, 'p1', expect.any(Object),
+        );
+      });
+
+
+      it('flag OFF keeps Prisma + sync path (zero regression)', async () => {
+
+        prisma.architectureNode.create.mockResolvedValue({ id: 'n1', projectId: 'p1', type: 'package', name: 'x' });
+
+        const graph = makeGraph();
+        const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+        await svc.createNode('p1', { type: 'package', name: 'x' } as never, MOCK_USER);
+
+        expect(graph.run).not.toHaveBeenCalled();
+        expect(prisma.architectureNode.create).toHaveBeenCalled();
+        expect(sync.upsertNode).toHaveBeenCalled();
+      });
+    });
+
+
+    describe('updateNode', () => {
+
+      it('flag ON updates via Cypher and audits the diff', async () => {
+
+        const graph = makeGraph((cypher: string) => {
+          if ((cypher as string).includes('MATCH (n {id: $id})')) {
+
+            if ((cypher as string).includes('SET n.name = coalesce')) {
+              return Promise.resolve([{ id: 'n1', projectId: 'p1', name: 'renamed' }]);
+            }
+          }
+          return Promise.resolve([]);
+        });
+        const svc = makeWriteService(graph);
+
+        // getNode (read flag OFF) reads existing from Prisma.
+        prisma.architectureNode.findUnique.mockResolvedValue({
+          id: 'n1', projectId: 'p1', name: 'old', description: null, domainGroup: null,
+          ownerUserId: null, ownerTeamId: null, annotations: [], links: [],
+        });
+
+        await svc.updateNode('n1', { name: 'renamed' } as never, MOCK_USER);
+
+        // One write Cypher with the SET clause.
+        const writeCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('SET n.name = coalesce'));
+        expect(writeCall).toBeDefined();
+        expect(writeCall![2]).toEqual({ mode: 'write' });
+        expect(prisma.architectureNode.update).not.toHaveBeenCalled();
+        expect(sync.upsertNode).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'node.updated', 'architecture_node', 'n1', 'p1', expect.any(Object),
+        );
+      });
+    });
+
+
+    describe('deleteNode', () => {
+
+      it('flag ON deletes via Cypher, preserves isManual guard', async () => {
+
+        prisma.architectureNode.findUnique.mockResolvedValue({
+          id: 'n1', projectId: 'p1', isManual: false, name: 'x', type: 'package', annotations: [], links: [],
+        });
+
+        const graph = makeGraph();
+        const svc = makeWriteService(graph);
+
+        await expect(svc.deleteNode('n1', MOCK_USER)).rejects.toThrow(/auto-generated/i);
+        expect(graph.run).not.toHaveBeenCalled();
+      });
+
+
+      it('flag ON deletes a manual node via Cypher, skips Prisma delete', async () => {
+
+        prisma.architectureNode.findUnique.mockResolvedValue({
+          id: 'n1', projectId: 'p1', isManual: true, name: 'x', type: 'package', annotations: [], links: [],
+        });
+
+        const graph = makeGraph();
+        const svc = makeWriteService(graph);
+
+        await svc.deleteNode('n1', MOCK_USER);
+
+        expect(graph.run).toHaveBeenCalledTimes(1);
+        const [cypher, params, opts] = graph.run.mock.calls[0];
+        expect(cypher).toMatch(/DETACH DELETE n/);
+        expect(params).toEqual({ id: 'n1', pid: 'p1' });
+        expect(opts).toEqual({ mode: 'write' });
+        expect(prisma.architectureNode.delete).not.toHaveBeenCalled();
+        expect(sync.deleteNode).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'node.deleted', 'architecture_node', 'n1', 'p1', expect.any(Object),
+        );
+      });
+    });
+
+
+    describe('createEdge', () => {
+
+      it('flag ON writes via Cypher MERGE and audits', async () => {
+
+        const graph = makeGraph(() => Promise.resolve([{ created: 1 }]));
+        const svc = makeWriteService(graph);
+
+        const edge = await svc.createEdge('p1', {
+          fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on',
+        } as never, MOCK_USER) as { id: string; fromNodeId: string; toNodeId: string; edgeType: string };
+
+        expect(graph.run).toHaveBeenCalledTimes(1);
+        const [cypher, , opts] = graph.run.mock.calls[0];
+        expect(cypher).toMatch(/MERGE \(a\)-\[r:DEPENDS_ON \{id: \$id\}\]->\(b\)/);
+        expect(opts).toEqual({ mode: 'write' });
+        expect(edge.fromNodeId).toBe('a');
+        expect(edge.toNodeId).toBe('b');
+        expect(edge.edgeType).toBe('depends_on');
+        expect(prisma.architectureEdge.create).not.toHaveBeenCalled();
+        expect(sync.upsertEdge).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'edge.created', 'architecture_edge', edge.id, 'p1', expect.any(Object),
+        );
+      });
+
+
+      it('flag ON raises NotFoundException when a node endpoint is missing (Decision 7, no silent no-op)', async () => {
+
+        const graph = makeGraph(() => Promise.resolve([{ created: 0 }]));
+        const svc = makeWriteService(graph);
+
+        await expect(svc.createEdge('p1', {
+          fromNodeId: 'a', toNodeId: 'missing', edgeType: 'depends_on',
+        } as never, MOCK_USER)).rejects.toBeInstanceOf(NotFoundException);
+
+        expect(audit.recordForUser).not.toHaveBeenCalled();
+      });
+    });
+
+
+    describe('deleteEdge', () => {
+
+      it('flag ON reads from Memgraph, deletes via Cypher, audits metadata', async () => {
+
+        const graph = makeGraph((cypher: string) => {
+
+          if ((cypher as string).includes('RETURN r.id AS id')) {
+            return Promise.resolve([{
+              id: 'e1', projectId: 'p1', fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on', isManual: true,
+            }]);
+          }
+          return Promise.resolve([]);
+        });
+        const svc = makeWriteService(graph);
+
+        await svc.deleteEdge('e1', MOCK_USER);
+
+        const deleteCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('DELETE r'));
+        expect(deleteCall).toBeDefined();
+        expect(deleteCall![1]).toEqual({ id: 'e1', pid: 'p1' });
+        expect(prisma.architectureEdge.findUnique).not.toHaveBeenCalled();
+        expect(prisma.architectureEdge.delete).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'edge.deleted', 'architecture_edge', 'e1', 'p1',
+          expect.objectContaining({ fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on' }),
+        );
+      });
+
+
+      it('flag ON raises NotFoundException when edge absent in Memgraph', async () => {
+
+        const graph = makeGraph(() => Promise.resolve([]));
+        const svc = makeWriteService(graph);
+
+        await expect(svc.deleteEdge('missing', MOCK_USER)).rejects.toBeInstanceOf(NotFoundException);
+      });
+
+
+      it('flag ON preserves the isManual guard via Memgraph read', async () => {
+
+        const graph = makeGraph(() => Promise.resolve([{
+          id: 'e1', projectId: 'p1', fromNodeId: 'a', toNodeId: 'b', edgeType: 'depends_on', isManual: false,
+        }]));
+        const svc = makeWriteService(graph);
+
+        await expect(svc.deleteEdge('e1', MOCK_USER)).rejects.toThrow(/auto-generated/i);
+      });
+    });
+
+
+    describe('createLink', () => {
+
+      it('flag ON validates node via getNode, writes link via Cypher, audits', async () => {
+
+        prisma.architectureNode.findUnique.mockResolvedValue({ id: 'n1', isManual: true, annotations: [], links: [] });
+
+        const graph = makeGraph();
+        const svc = makeWriteService(graph);
+
+        const link = await svc.createLink('n1', 'p1', {
+          entityType: 'task', entityId: 't1', linkType: 'mentions',
+        } as never, MOCK_USER) as { id: string; nodeId: string };
+
+        const writeCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('MERGE (l:Link'));
+        expect(writeCall).toBeDefined();
+        expect(writeCall![2]).toEqual({ mode: 'write' });
+        expect(link.nodeId).toBe('n1');
+        expect(prisma.architectureLink.create).not.toHaveBeenCalled();
+        expect(sync.upsertLink).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'link.created', 'architecture_link', link.id, 'p1', expect.any(Object),
+        );
+      });
+    });
+
+
+    describe('deleteLink', () => {
+
+      it('flag ON reads link from Memgraph, deletes via Cypher, audits', async () => {
+
+        const graph = makeGraph((cypher: string) => {
+
+          if ((cypher as string).includes('MATCH (l:Link {id: $id})')) {
+            return Promise.resolve([{
+              id: 'l1', projectId: 'p1', nodeId: 'n1', entityType: 'task', entityId: 't1', linkType: 'mentions',
+            }]);
+          }
+          return Promise.resolve([]);
+        });
+        const svc = makeWriteService(graph);
+
+        await svc.deleteLink('l1', MOCK_USER);
+
+        const deleteCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('DETACH DELETE l'));
+        expect(deleteCall).toBeDefined();
+        expect(deleteCall![1]).toEqual({ id: 'l1', pid: 'p1' });
+        expect(prisma.architectureLink.findUnique).not.toHaveBeenCalled();
+        expect(prisma.architectureLink.delete).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'link.deleted', 'architecture_link', 'l1', 'p1', expect.any(Object),
+        );
+      });
+
+
+      it('flag ON raises NotFoundException when link absent in Memgraph', async () => {
+
+        const graph = makeGraph(() => Promise.resolve([]));
+        const svc = makeWriteService(graph);
+
+        await expect(svc.deleteLink('missing', MOCK_USER)).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+
+    describe('createAnnotation', () => {
+
+      it('flag ON validates node via getNode, writes annotation via Cypher, audits', async () => {
+
+        prisma.architectureNode.findUnique.mockResolvedValue({ id: 'n1', isManual: true, annotations: [], links: [] });
+
+        const graph = makeGraph();
+        const svc = makeWriteService(graph);
+
+        const ann = await svc.createAnnotation('n1', 'p1', { content: 'note' } as never, MOCK_USER) as { id: string; nodeId: string };
+
+        const writeCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('MERGE (a:Annotation'));
+        expect(writeCall).toBeDefined();
+        expect(writeCall![2]).toEqual({ mode: 'write' });
+        expect(ann.nodeId).toBe('n1');
+        expect(prisma.architectureAnnotation.create).not.toHaveBeenCalled();
+        expect(sync.upsertAnnotation).not.toHaveBeenCalled();
+        expect(audit.recordForUser).toHaveBeenCalledWith(
+          MOCK_USER, 'annotation.created', 'architecture_annotation', ann.id, 'p1', expect.any(Object),
+        );
+      });
+    });
+
+
+    describe('resetProject', () => {
+
+      it('flag ON counts then deletes graph entities via Cypher, still cleans codeRepository in Postgres, returns exact counts', async () => {
+
+        const graph = makeGraph((cypher: string) => {
+
+          if ((cypher as string).includes('RETURN nodeCount')) {
+            return Promise.resolve([{ nodeCount: 4, edgeCount: 7 }]);
+          }
+          return Promise.resolve([]);
+        });
+        const svc = makeWriteService(graph);
+        prisma.codeRepository.deleteMany.mockResolvedValue({ count: 0 });
+
+        const result = await svc.resetProject('p1') as { deletedNodes: number; deletedEdges: number };
+
+        expect(result).toEqual({ deletedNodes: 4, deletedEdges: 7 });
+
+        const deleteCall = graph.run.mock.calls.find((c) => (c[0] as string).includes('DETACH DELETE n'));
+        expect(deleteCall).toBeDefined();
+        expect(deleteCall![1]).toEqual({ pid: 'p1' });
+
+        // codeRepository cleanup survives (Decision 2).
+        expect(prisma.codeRepository.deleteMany).toHaveBeenCalledWith({ where: { projectId: 'p1' } });
+        // No graph-table writes in Postgres, no inline sync.
+        expect(prisma.architectureNode.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.architectureEdge.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(sync.resetProject).not.toHaveBeenCalled();
+      });
+    });
+  });
 });

@@ -32,7 +32,7 @@
 - [x] CF-GDB-03b-A — Pre-mirror extension (Link/Annotation + node fields + backfill)
 - [x] CF-GDB-03b-B — Impact read swap (flag-gated, Cypher reverse-BFS)
 - [x] CF-GDB-03b-C — Getter cutover (getNode/getGraph/getSnapshot flag-gated Cypher) — retire bloccato, vedi D/E
-- [ ] CF-GDB-03b-D — Write path Memgraph-direct (flag-gated)
+- [x] CF-GDB-03b-D — Write path Memgraph-direct (flag-gated)
 - [ ] CF-GDB-03b-E — Retire Postgres tables + GraphSyncService (stop-point gated)
 
 ## Project Visibility — Per-User Archive & Card UX

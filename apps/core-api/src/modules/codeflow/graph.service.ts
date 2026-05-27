@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@roadboard/database';
 import { optionalEnv } from '@roadboard/config';
-import { GraphDbClient } from '@roadboard/graph-db';
+import { GraphDbClient, labelFromType } from '@roadboard/graph-db';
 
 import type { AuthUser } from '../../common/auth-user';
 import { AuditService } from '../audit/audit.service';
@@ -50,6 +51,7 @@ export class GraphService {
   private readonly useMemgraphNode: boolean;
   private readonly useMemgraphGraph: boolean;
   private readonly useMemgraphSnapshot: boolean;
+  private readonly useMemgraphWrite: boolean;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -63,6 +65,7 @@ export class GraphService {
     this.useMemgraphNode = optionalEnv('GRAPH_READ_USE_MEMGRAPH_NODE', 'false') === 'true';
     this.useMemgraphGraph = optionalEnv('GRAPH_READ_USE_MEMGRAPH_GRAPH', 'false') === 'true';
     this.useMemgraphSnapshot = optionalEnv('GRAPH_READ_USE_MEMGRAPH_SNAPSHOT', 'false') === 'true';
+    this.useMemgraphWrite = optionalEnv('GRAPH_WRITE_USE_MEMGRAPH', 'false') === 'true';
   }
 
 
@@ -88,6 +91,26 @@ export class GraphService {
 
   isMemgraphSnapshotMode(): boolean {
     return this.useMemgraphSnapshot;
+  }
+
+
+  isMemgraphWriteMode(): boolean {
+    return this.useMemgraphWrite;
+  }
+
+
+  /**
+   * Returns the Memgraph client or throws when the write flag is ON but no
+   * client was injected. Fail-closed: a misconfigured write path must error
+   * rather than silently fall back to Postgres.
+   */
+  private requireGraph(): GraphDbClient {
+
+    if (!this.graph) {
+      throw new Error('GRAPH_WRITE_USE_MEMGRAPH is enabled but GraphDbClient is not available');
+    }
+
+    return this.graph;
   }
 
 
@@ -184,6 +207,17 @@ export class GraphService {
 
 
   async resetProject(projectId: string): Promise<{ deletedNodes: number; deletedEdges: number }> {
+
+    if (this.useMemgraphWrite) {
+      // Decision 2/3: graph entities (node/edge/link/annotation/snapshot mirror)
+      // are deleted from Memgraph with EXACT pre-delete counts, while the
+      // non-graph relational table `codeRepository` is still cleaned up in
+      // Postgres exactly as before.
+      const result = await this.resetProjectInMemgraph(projectId);
+      await this.prisma.codeRepository.deleteMany({ where: { projectId } });
+
+      return result;
+    }
 
     // FK-safe order: edges → links → annotations → nodes → snapshots → repositories.
     // Wrap in $transaction so a crash midway leaves Postgres consistent (CF-GDB-03a-2).
@@ -423,6 +457,18 @@ ORDER BY id`;
 
   async createNode(projectId: string, dto: CreateNodeDto, user: AuthUser): Promise<unknown> {
 
+    if (this.useMemgraphWrite) {
+      const node = await this.createNodeInMemgraph(projectId, dto);
+
+      await this.audit.recordForUser(user, 'node.created', 'architecture_node', node.id, node.projectId, {
+        type: node.type,
+        name: node.name,
+        path: node.path,
+      });
+
+      return node;
+    }
+
     const data = {
       projectId,
       repositoryId: dto.repositoryId,
@@ -498,6 +544,451 @@ ORDER BY id`;
       id: edge.id, projectId: edge.projectId, fromNodeId: edge.fromNodeId,
       toNodeId: edge.toNodeId, edgeType: edge.edgeType, weight: edge.weight,
     } as const;
+  }
+
+
+  // ── Memgraph-direct write helpers (CF-GDB-03b-D) ─────
+  //
+  // These run when GRAPH_WRITE_USE_MEMGRAPH is ON. Unlike GraphSyncService
+  // (best-effort mirror), they are fail-closed: errors propagate so the
+  // write API fails instead of reporting a fake success. Memgraph does not
+  // generate ids/timestamps/defaults, so each create* helper materialises
+  // them explicitly to keep the REST response shape identical to Prisma.
+
+  /**
+   * Generates a fresh entity id. Postgres uses Prisma `@default(cuid())`,
+   * generated engine-side; no JS cuid generator is bundled, so we use an
+   * opaque randomUUID — the id is never parsed by clients.
+   */
+  private newId(): string {
+    return randomUUID();
+  }
+
+
+  private async createNodeInMemgraph(projectId: string, dto: CreateNodeDto): Promise<{
+    id: string; projectId: string; repositoryId: string; snapshotId: string | null;
+    domainGroupId: string | null; type: string; name: string; path: string | null;
+    description: string | null; domainGroup: string | null; isManual: boolean;
+    isCurrent: boolean; metadata: Record<string, unknown>; ownerUserId: string | null;
+    ownerTeamId: string | null; createdAt: Date; updatedAt: Date;
+  }> {
+
+    const graph = this.requireGraph();
+    const now = new Date();
+
+    const node = {
+      id: this.newId(),
+      projectId,
+      repositoryId: dto.repositoryId,
+      snapshotId: null,
+      domainGroupId: null,
+      type: dto.type,
+      name: dto.name,
+      path: dto.path ?? null,
+      description: dto.description ?? null,
+      domainGroup: dto.domainGroup ?? null,
+      isManual: dto.isManual ?? true,
+      isCurrent: true,
+      metadata: {} as Record<string, unknown>,
+      ownerUserId: dto.ownerUserId ?? null,
+      ownerTeamId: dto.ownerTeamId ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const label = labelFromType(node.type);
+
+    await graph.run(
+      `MERGE (n:${label} {id: $id})
+       SET n.projectId = $projectId,
+           n.type = $type,
+           n.name = $name,
+           n.path = $path,
+           n.domainGroup = $domainGroup,
+           n.description = $description,
+           n.metadata = $metadata,
+           n.ownerUserId = $ownerUserId,
+           n.ownerTeamId = $ownerTeamId,
+           n.isManual = $isManual,
+           n.isCurrent = $isCurrent`,
+      {
+        id: node.id,
+        projectId: node.projectId,
+        type: node.type,
+        name: node.name,
+        path: node.path,
+        domainGroup: node.domainGroup,
+        description: node.description,
+        metadata: JSON.stringify(node.metadata),
+        ownerUserId: node.ownerUserId,
+        ownerTeamId: node.ownerTeamId,
+        isManual: node.isManual,
+        isCurrent: node.isCurrent,
+      },
+      { mode: 'write' },
+    );
+
+    return node;
+  }
+
+
+  private async updateNodeInMemgraph(
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<{
+    id: string; projectId: string; type: string | null; name: string | null;
+    path: string | null; domainGroup: string | null; description: string | null;
+    metadata: unknown; ownerUserId: string | null; ownerTeamId: string | null;
+    isManual: boolean | null; isCurrent: boolean | null; updatedAt: string;
+  }> {
+
+    const graph = this.requireGraph();
+
+    const records = await graph.run<{
+      id: string; projectId: string; type: string | null; name: string | null;
+      path: string | null; domainGroup: string | null; description: string | null;
+      metadata: unknown; ownerUserId: string | null; ownerTeamId: string | null;
+      isManual: boolean | null; isCurrent: boolean | null; updatedAt: string;
+    }>(
+      `MATCH (n {id: $id})
+       WHERE NOT n:Link AND NOT n:Annotation
+       SET n.name = coalesce($name, n.name),
+           n.description = $description,
+           n.domainGroup = $domainGroup,
+           n.ownerUserId = $ownerUserId,
+           n.ownerTeamId = $ownerTeamId,
+           n.updatedAt = $updatedAt
+       RETURN n.id AS id,
+              n.projectId AS projectId,
+              n.type AS type,
+              n.name AS name,
+              n.path AS path,
+              n.domainGroup AS domainGroup,
+              n.description AS description,
+              n.metadata AS metadata,
+              n.ownerUserId AS ownerUserId,
+              n.ownerTeamId AS ownerTeamId,
+              n.isManual AS isManual,
+              n.isCurrent AS isCurrent,
+              n.updatedAt AS updatedAt`,
+      {
+        id,
+        name: (data['name'] as string | undefined) ?? null,
+        description: (data['description'] as string | null | undefined) ?? null,
+        domainGroup: (data['domainGroup'] as string | null | undefined) ?? null,
+        ownerUserId: (data['ownerUserId'] as string | null | undefined) ?? null,
+        ownerTeamId: (data['ownerTeamId'] as string | null | undefined) ?? null,
+        updatedAt: new Date().toISOString(),
+      },
+      { mode: 'write' },
+    );
+
+    if (records.length === 0) {
+      throw new NotFoundException(`ArchitectureNode ${id} not found`);
+    }
+
+    return records[0];
+  }
+
+
+  private async deleteNodeInMemgraph(id: string, projectId: string): Promise<void> {
+
+    const graph = this.requireGraph();
+
+    await graph.run(
+      'MATCH (n {id: $id, projectId: $pid}) DETACH DELETE n',
+      { id, pid: projectId },
+      { mode: 'write' },
+    );
+  }
+
+
+  private async createEdgeInMemgraph(projectId: string, dto: CreateEdgeDto): Promise<{
+    id: string; projectId: string; snapshotId: string | null; fromNodeId: string;
+    toNodeId: string; edgeType: string; weight: number; isManual: boolean;
+    isCurrent: boolean; metadata: Record<string, unknown>; createdAt: Date;
+  }> {
+
+    const graph = this.requireGraph();
+
+    const edge = {
+      id: this.newId(),
+      projectId,
+      snapshotId: null,
+      fromNodeId: dto.fromNodeId,
+      toNodeId: dto.toNodeId,
+      edgeType: dto.edgeType,
+      weight: dto.weight ?? 1.0,
+      isManual: dto.isManual ?? true,
+      isCurrent: true,
+      metadata: {} as Record<string, unknown>,
+      createdAt: new Date(),
+    };
+
+    const relType = edge.edgeType.toUpperCase();
+
+    // Existence check (Decision 7): a MERGE that matches no node creates zero
+    // relationships silently. We MATCH both nodes, count the created/matched
+    // relationship, and raise NotFoundException when either endpoint is absent
+    // — preserving the FK-violation semantics of the Prisma path.
+    const records = await graph.run<{ created: number }>(
+      `MATCH (a {id: $fromId}), (b {id: $toId})
+       MERGE (a)-[r:${relType} {id: $id}]->(b)
+       SET r.projectId = $projectId,
+           r.weight = $weight,
+           r.edgeType = $edgeType,
+           r.isManual = $isManual,
+           r.isCurrent = $isCurrent
+       RETURN count(r) AS created`,
+      {
+        id: edge.id,
+        fromId: edge.fromNodeId,
+        toId: edge.toNodeId,
+        projectId: edge.projectId,
+        weight: edge.weight,
+        edgeType: edge.edgeType,
+        isManual: edge.isManual,
+        isCurrent: edge.isCurrent,
+      },
+      { mode: 'write' },
+    );
+
+    const created = records.length > 0 ? Number(records[0].created) : 0;
+
+    if (created === 0) {
+      throw new NotFoundException(
+        `ArchitectureEdge endpoints not found: fromNodeId=${edge.fromNodeId}, toNodeId=${edge.toNodeId}`,
+      );
+    }
+
+    return edge;
+  }
+
+
+  /**
+   * Reads an edge from Memgraph for the delete guard/audit metadata path.
+   * Returns null when the relationship does not exist (caller raises 404).
+   */
+  private async getEdgeFromMemgraph(id: string): Promise<{
+    id: string; projectId: string; fromNodeId: string; toNodeId: string;
+    edgeType: string; isManual: boolean;
+  } | null> {
+
+    const graph = this.requireGraph();
+
+    const records = await graph.run<{
+      id: string; projectId: string; fromNodeId: string; toNodeId: string;
+      edgeType: string; isManual: boolean | null;
+    }>(
+      `MATCH (a)-[r {id: $id}]->(b)
+       RETURN r.id AS id,
+              r.projectId AS projectId,
+              a.id AS fromNodeId,
+              b.id AS toNodeId,
+              coalesce(r.edgeType, toLower(type(r))) AS edgeType,
+              coalesce(r.isManual, false) AS isManual
+       LIMIT 1`,
+      { id },
+      { mode: 'read' },
+    );
+
+    if (records.length === 0) return null;
+
+    const r = records[0];
+
+    return {
+      id: r.id,
+      projectId: r.projectId,
+      fromNodeId: r.fromNodeId,
+      toNodeId: r.toNodeId,
+      edgeType: r.edgeType,
+      isManual: Boolean(r.isManual),
+    };
+  }
+
+
+  private async deleteEdgeInMemgraph(id: string, projectId: string): Promise<void> {
+
+    const graph = this.requireGraph();
+
+    await graph.run(
+      'MATCH ()-[r {id: $id, projectId: $pid}]->() DELETE r',
+      { id, pid: projectId },
+      { mode: 'write' },
+    );
+  }
+
+
+  private async createLinkInMemgraph(
+    nodeId: string,
+    projectId: string,
+    dto: CreateLinkDto,
+    user: AuthUser,
+  ): Promise<{
+    id: string; nodeId: string; projectId: string; entityType: string;
+    entityId: string; linkType: string; createdByUserId: string;
+    note: string | null; createdAt: Date;
+  }> {
+
+    const graph = this.requireGraph();
+
+    const link = {
+      id: this.newId(),
+      nodeId,
+      projectId,
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+      linkType: dto.linkType,
+      createdByUserId: user.userId,
+      note: dto.note ?? null,
+      createdAt: new Date(),
+    };
+
+    await graph.run(
+      `MERGE (l:Link {id: $id})
+       SET l.projectId = $projectId,
+           l.nodeId = $nodeId,
+           l.entityType = $entityType,
+           l.entityId = $entityId,
+           l.linkType = $linkType,
+           l.note = $note
+       WITH l
+       MATCH (n {id: $nodeId, projectId: $projectId})
+       MERGE (l)-[:LINKED_TO]->(n)`,
+      {
+        id: link.id,
+        projectId: link.projectId,
+        nodeId: link.nodeId,
+        entityType: link.entityType,
+        entityId: link.entityId,
+        linkType: link.linkType,
+        note: link.note,
+      },
+      { mode: 'write' },
+    );
+
+    return link;
+  }
+
+
+  /**
+   * Reads a link from Memgraph for the delete guard/audit metadata path.
+   * Returns null when the link node does not exist (caller raises 404).
+   */
+  private async getLinkFromMemgraph(id: string): Promise<{
+    id: string; projectId: string; nodeId: string; entityType: string;
+    entityId: string; linkType: string;
+  } | null> {
+
+    const graph = this.requireGraph();
+
+    const records = await graph.run<{
+      id: string; projectId: string; nodeId: string; entityType: string;
+      entityId: string; linkType: string;
+    }>(
+      `MATCH (l:Link {id: $id})
+       RETURN l.id AS id,
+              l.projectId AS projectId,
+              l.nodeId AS nodeId,
+              l.entityType AS entityType,
+              l.entityId AS entityId,
+              l.linkType AS linkType
+       LIMIT 1`,
+      { id },
+      { mode: 'read' },
+    );
+
+    return records.length > 0 ? records[0] : null;
+  }
+
+
+  private async deleteLinkInMemgraph(id: string, projectId: string): Promise<void> {
+
+    const graph = this.requireGraph();
+
+    await graph.run(
+      'MATCH (l:Link {id: $id, projectId: $pid}) DETACH DELETE l',
+      { id, pid: projectId },
+      { mode: 'write' },
+    );
+  }
+
+
+  private async createAnnotationInMemgraph(
+    nodeId: string,
+    projectId: string,
+    dto: CreateAnnotationDto,
+    user: AuthUser,
+  ): Promise<{
+    id: string; nodeId: string; projectId: string; content: string;
+    createdByUserId: string; createdAt: Date; updatedAt: Date;
+  }> {
+
+    const graph = this.requireGraph();
+    const now = new Date();
+
+    const ann = {
+      id: this.newId(),
+      nodeId,
+      projectId,
+      content: dto.content,
+      createdByUserId: user.userId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await graph.run(
+      `MERGE (a:Annotation {id: $id})
+       SET a.projectId = $projectId,
+           a.nodeId = $nodeId,
+           a.content = $content
+       WITH a
+       MATCH (n {id: $nodeId, projectId: $projectId})
+       MERGE (a)-[:ANNOTATES]->(n)`,
+      {
+        id: ann.id,
+        projectId: ann.projectId,
+        nodeId: ann.nodeId,
+        content: ann.content,
+      },
+      { mode: 'write' },
+    );
+
+    return ann;
+  }
+
+
+  private async resetProjectInMemgraph(
+    projectId: string,
+  ): Promise<{ deletedNodes: number; deletedEdges: number }> {
+
+    const graph = this.requireGraph();
+
+    // Count graph entities BEFORE deleting so the response matches the
+    // Prisma path (Decision 3): nodes exclude Link/Annotation mirror nodes;
+    // edges exclude LINKED_TO/ANNOTATES mirror relationships.
+    const countRecords = await graph.run<{ nodeCount: number; edgeCount: number }>(
+      `OPTIONAL MATCH (n {projectId: $pid})
+       WHERE NOT n:Link AND NOT n:Annotation
+       WITH count(DISTINCT n) AS nodeCount
+       OPTIONAL MATCH (a {projectId: $pid})-[r]->(b {projectId: $pid})
+       WHERE type(r) <> 'LINKED_TO' AND type(r) <> 'ANNOTATES'
+         AND r.id IS NOT NULL
+       RETURN nodeCount, count(DISTINCT r) AS edgeCount`,
+      { pid: projectId },
+      { mode: 'read' },
+    );
+
+    const deletedNodes = countRecords.length > 0 ? Number(countRecords[0].nodeCount) : 0;
+    const deletedEdges = countRecords.length > 0 ? Number(countRecords[0].edgeCount) : 0;
+
+    await graph.run(
+      'MATCH (n {projectId: $pid}) DETACH DELETE n',
+      { pid: projectId },
+      { mode: 'write' },
+    );
+
+    return { deletedNodes, deletedEdges };
   }
 
 
@@ -617,9 +1108,11 @@ LIMIT 1`;
       data['domainGroupId'] = dto.domainGroupId ?? null;
     }
 
-    let updated: Awaited<ReturnType<typeof this.prisma.architectureNode.update>>;
+    let updated: { id: string; projectId: string };
 
-    if (this.useOutbox) {
+    if (this.useMemgraphWrite) {
+      updated = await this.updateNodeInMemgraph(id, data) as { id: string; projectId: string };
+    } else if (this.useOutbox) {
       updated = await this.prisma.$transaction(async (tx) => {
         const u = await tx.architectureNode.update({ where: { id }, data });
         await tx.graphSyncEvent.create({
@@ -634,8 +1127,9 @@ LIMIT 1`;
         return u;
       });
     } else {
-      updated = await this.prisma.architectureNode.update({ where: { id }, data });
-      await this.sync.upsertNode(this.nodeProjection(updated) as Parameters<typeof this.sync.upsertNode>[0]);
+      const u = await this.prisma.architectureNode.update({ where: { id }, data });
+      await this.sync.upsertNode(this.nodeProjection(u) as Parameters<typeof this.sync.upsertNode>[0]);
+      updated = u;
     }
 
     const changedFields: Record<string, { from: unknown; to: unknown }> = {};
@@ -673,7 +1167,10 @@ LIMIT 1`;
 
     let deleted: unknown;
 
-    if (this.useOutbox) {
+    if (this.useMemgraphWrite) {
+      await this.deleteNodeInMemgraph(id, node.projectId);
+      deleted = { id: node.id, projectId: node.projectId };
+    } else if (this.useOutbox) {
       deleted = await this.prisma.$transaction(async (tx) => {
         const d = await tx.architectureNode.delete({ where: { id } });
         await tx.graphSyncEvent.create({
@@ -704,6 +1201,18 @@ LIMIT 1`;
   // ── Edges ────────────────────────────────────────────
 
   async createEdge(projectId: string, dto: CreateEdgeDto, user: AuthUser): Promise<unknown> {
+
+    if (this.useMemgraphWrite) {
+      const edge = await this.createEdgeInMemgraph(projectId, dto);
+
+      await this.audit.recordForUser(user, 'edge.created', 'architecture_edge', edge.id, edge.projectId, {
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        edgeType: edge.edgeType,
+      });
+
+      return edge;
+    }
 
     const data = {
       projectId,
@@ -747,7 +1256,9 @@ LIMIT 1`;
 
   async deleteEdge(id: string, user: AuthUser): Promise<unknown> {
 
-    const edge = await this.prisma.architectureEdge.findUnique({ where: { id } });
+    const edge = this.useMemgraphWrite
+      ? await this.getEdgeFromMemgraph(id)
+      : await this.prisma.architectureEdge.findUnique({ where: { id } });
 
     if (!edge) {
       throw new NotFoundException(`ArchitectureEdge ${id} not found`);
@@ -759,7 +1270,10 @@ LIMIT 1`;
 
     let deleted: unknown;
 
-    if (this.useOutbox) {
+    if (this.useMemgraphWrite) {
+      await this.deleteEdgeInMemgraph(id, edge.projectId);
+      deleted = { id: edge.id, projectId: edge.projectId };
+    } else if (this.useOutbox) {
       deleted = await this.prisma.$transaction(async (tx) => {
         const d = await tx.architectureEdge.delete({ where: { id } });
         await tx.graphSyncEvent.create({
@@ -793,6 +1307,19 @@ LIMIT 1`;
   async createLink(nodeId: string, projectId: string, dto: CreateLinkDto, user: AuthUser) {
 
     await this.getNode(nodeId);
+
+    if (this.useMemgraphWrite) {
+      const link = await this.createLinkInMemgraph(nodeId, projectId, dto, user);
+
+      await this.audit.recordForUser(user, 'link.created', 'architecture_link', link.id, link.projectId, {
+        nodeId: link.nodeId,
+        entityType: link.entityType,
+        entityId: link.entityId,
+        linkType: link.linkType,
+      });
+
+      return link;
+    }
 
     const data = {
       nodeId,
@@ -861,7 +1388,9 @@ LIMIT 1`;
 
   async deleteLink(id: string, user: AuthUser) {
 
-    const link = await this.prisma.architectureLink.findUnique({ where: { id } });
+    const link = this.useMemgraphWrite
+      ? await this.getLinkFromMemgraph(id)
+      : await this.prisma.architectureLink.findUnique({ where: { id } });
 
     if (!link) {
       throw new NotFoundException(`ArchitectureLink ${id} not found`);
@@ -869,7 +1398,10 @@ LIMIT 1`;
 
     let deleted: unknown;
 
-    if (this.useOutbox) {
+    if (this.useMemgraphWrite) {
+      await this.deleteLinkInMemgraph(id, link.projectId);
+      deleted = { id: link.id, projectId: link.projectId };
+    } else if (this.useOutbox) {
       deleted = await this.prisma.$transaction(async (tx) => {
         const d = await tx.architectureLink.delete({ where: { id } });
         await tx.graphSyncEvent.create({
@@ -904,6 +1436,16 @@ LIMIT 1`;
   async createAnnotation(nodeId: string, projectId: string, dto: CreateAnnotationDto, user: AuthUser) {
 
     await this.getNode(nodeId);
+
+    if (this.useMemgraphWrite) {
+      const ann = await this.createAnnotationInMemgraph(nodeId, projectId, dto, user);
+
+      await this.audit.recordForUser(user, 'annotation.created', 'architecture_annotation', ann.id, ann.projectId, {
+        nodeId: ann.nodeId,
+      });
+
+      return ann;
+    }
 
     const data = {
       nodeId,
