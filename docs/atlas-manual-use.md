@@ -9,7 +9,8 @@ This document covers:
 3. [Populating the graph via API (curl / MCP)](#3-populating-the-graph-via-api-curl--mcp)
 4. [Using the UI: canvas, search, filter, drawer](#4-using-the-ui)
 5. [Linking a node to Tasks, Decisions, Memory](#5-linking-nodes-to-rb-entities)
-6. [Known limitations (what Wave 5.2 / 5.3 will add)](#6-known-limitations)
+6. [Agent Context: the compact snapshot for AI agents](#6-agent-context)
+7. [Known limitations (what Wave 5.2 / 5.3 will add)](#7-known-limitations)
 
 ---
 
@@ -165,7 +166,50 @@ Click **Rimuovi** next to any link row.
 
 ---
 
-## 6. Known limitations
+## 6. Agent Context
+
+The **Agent Context** sub-view (Atlas sub-nav) renders a compact architecture snapshot designed to fit an AI agent's context window — the payload is always **≤ 8 KB**. It is the architectural "business card" of the project, optimized for consumption by AI agents rather than humans.
+
+Served by `GET /projects/:projectId/codeflow/graph/snapshot/compact` and exposed to agents as the MCP tool `get_architecture_snapshot`.
+
+### What the snapshot contains
+
+| Field | Meaning |
+|---|---|
+| `projectId` | the project id |
+| `generatedAt` | ISO timestamp, recomputed on every request (never cached) |
+| `nodeCount` | number of current nodes (`isCurrent = true`) |
+| `edgeCount` | number of current edges |
+| `summary.nodesByType` | histogram of nodes by type, e.g. `{app: 6, package: 11}` |
+| `summary.edgesByType` | histogram of edges by type, e.g. `{depends_on: 23}` |
+| `topImpactNodes` | the 5 highest fan-in nodes (see below) |
+| `recentAnnotations` | the 10 most recent annotations, each with the annotated node's name |
+
+### Reading `topImpactNodes`
+
+For every `depends_on` edge, the node it points *to* scores one point. `directDependants` is therefore the **fan-in**: how many nodes depend *on* this one. The list is sorted descending and capped at 5.
+
+Operationally this is a change-risk proxy: a node with `directDependants: 7` means "touch this and 7 components may break". On the Roadboard monorepo the top nodes are `domain` (7), `config` (6), `database` (3).
+
+### Three ways it is consumed
+
+1. **MCP tool `get_architecture_snapshot(projectId)`** — the primary use. An AI agent opening a session calls this tool to load the architectural picture in a single call, instead of walking the graph node by node. Requires the `codeflow.read` grant.
+
+2. **Copy JSON button (UI)** — copies the full payload to the clipboard, to paste into a chat with an AI that has no MCP access to Roadboard (e.g. ChatGPT, Gemini). Each top-impact node also has a **Focus node** button that jumps to the Architecture Map centred on that node.
+
+3. **Auto-attach in `create_handoff`** — when an agent closes a session via the `create_handoff` MCP tool, the snapshot is embedded in the handoff body by default (disable with `attachArchitecture: false`). The next session that reads the handoff starts already knowing the architecture. If the snapshot fetch fails, the handoff is still created without it (graceful fallback).
+
+### Empty state
+
+If the project has no architecture graph yet, the view shows *"No snapshot available. Run a repository scan first."* Populate the graph first (sections 2–3).
+
+### Current limitation
+
+With only macro nodes (apps/packages), `topImpactNodes` is dominated by the base packages. It becomes discriminating once Wave 6 (Deep Code Map) adds File/Symbol nodes, pushing fan-in down to the individual class/function level.
+
+---
+
+## 7. Known limitations
 
 These features appear in the sub-nav but their content is a placeholder until the corresponding Wave lands:
 
@@ -175,7 +219,7 @@ These features appear in the sub-nav but their content is a placeholder until th
 | Node drawer | Active (CF-11) | — |
 | Impatto cambiamenti | Placeholder "In arrivo" | CF-14, CF-17 (Wave 5.2) |
 | Grafo decisioni | Placeholder "In arrivo" | CF-20 (Wave 5.3) |
-| Agent context | Placeholder "In arrivo" | CF-19, CF-21 (Wave 5.3) |
+| Agent context | Active (CF-19, CF-21) — see section 6 | — |
 
 ### Other limitations
 
