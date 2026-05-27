@@ -248,6 +248,7 @@ model ActivityEvent {
   actorType   String   @map("actor_type")
   actorId     String   @map("actor_id")
   actorUserId String?  @map("actor_user_id")
+  mcpTokenId  String?  @map("mcp_token_id")
   source      String   @default("web")
   eventType   String   @map("event_type")
   targetType  String   @map("target_type")
@@ -261,6 +262,7 @@ model ActivityEvent {
   @@index([eventType])
   @@index([createdAt])
   @@index([actorUserId])
+  @@index([mcpTokenId])
   @@map("activity_events")
 }
 
