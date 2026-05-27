@@ -6,6 +6,7 @@ import { useToast } from '@/lib/toast-context';
 import { withToast } from '@/lib/with-toast';
 import { addDeveloperAction, removeDeveloperAction } from '@/app/settings/actions';
 import type { User, Grant } from '@/lib/api';
+import type { EffectiveContributor, GrantOrigin } from './contributors-effective';
 
 
 interface ContributorsTabProps {
@@ -14,10 +15,18 @@ interface ContributorsTabProps {
   isOwner: boolean;
   users: User[];
   initialGrants: Grant[];
+  effectiveContributors: EffectiveContributor[];
 }
 
 
-export function ContributorsTab({ projectId, currentUserId, isOwner, users, initialGrants }: ContributorsTabProps) {
+export function ContributorsTab({
+  projectId,
+  currentUserId,
+  isOwner,
+  users,
+  initialGrants,
+  effectiveContributors,
+}: ContributorsTabProps) {
 
   const dict = useDict();
   const { showToast } = useToast();
@@ -34,6 +43,8 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
   const addableUsers = users.filter(
     (u) => u.id !== ownerGrant?.subjectId && !developerIds.has(u.id),
   );
+
+  const noAccessContributors = effectiveContributors.filter((ec) => ec.noAccess);
 
   async function handleAdd() {
 
@@ -107,20 +118,30 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
 
               const isSelf = dev.id === currentUserId;
               const canRemoveThis = isOwner || isSelf;
+              const ec = effectiveContributors.find((c) => c.userId === dev.id);
 
               return (
                 <div key={g.id} className="flex items-center justify-between py-3 first:pt-0">
-                  <div>
-                    <p className="text-sm text-white font-medium">
-                      {dev.displayName}
-                      {isSelf && <span className="ml-2 text-xs text-indigo-400">({dict.settings.members.you})</span>}
-                    </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm text-white font-medium">
+                        {dev.displayName}
+                        {isSelf && <span className="ml-2 text-xs text-indigo-400">({dict.settings.members.you})</span>}
+                      </p>
+                      {ec && ec.effectiveGrants.length > 0 && (
+                        <div className="flex gap-1 flex-wrap">
+                          {ec.effectiveGrants.map((eg, i) => (
+                            <GrantBadge key={i} grantType={eg.grantType} origin={eg.origin} dict={dict.settings.members} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-500 mt-0.5">@{dev.username}</p>
                   </div>
                   {canRemoveThis && (
                     <button
                       onClick={() => void handleRemove(dev.id)}
-                      className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors ml-3 shrink-0"
                     >
                       {isSelf ? dict.settings.members.leave : dict.settings.members.remove}
                     </button>
@@ -156,10 +177,94 @@ export function ContributorsTab({ projectId, currentUserId, isOwner, users, init
           </div>
         )}
       </Card>
+
+      {noAccessContributors.length > 0 && (
+        <Card title={dict.settings.members.teamMembers}>
+          <div className="divide-y divide-white/[0.06]">
+            {noAccessContributors.map((ec) => {
+
+              const user = users.find((u) => u.id === ec.userId);
+
+              if (!user) return null;
+
+              return (
+                <div key={ec.userId} className="flex items-center justify-between py-3 first:pt-0">
+                  <div>
+                    <p className="text-sm text-white font-medium">{user.displayName}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">@{user.username}</p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded border text-orange-400 bg-orange-500/10 border-orange-500/20">
+                    {dict.settings.members.noAccess}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }
 
+
+// ─── Grant badge ─────────────────────────────────────────────────────────────
+
+interface GrantBadgeProps {
+  grantType: string;
+  origin: GrantOrigin;
+  dict: {
+    grantOriginDirect: string;
+    grantOriginTeamInherited: string;
+    grantOriginAdminExpanded: string;
+    grantOriginDowngraded: string;
+  };
+}
+
+
+function GrantBadge({ grantType, origin, dict }: GrantBadgeProps) {
+
+  const originLabel = originToLabel(origin, dict);
+
+  const colorClass =
+    origin === 'direct' || origin === 'admin-expanded'
+      ? 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20'
+      : origin === 'downgraded'
+        ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+        : 'text-sky-400 bg-sky-500/10 border-sky-500/20';
+
+  return (
+    <span
+      className={`text-xs px-1.5 py-0.5 rounded border font-mono ${colorClass}`}
+      title={`${grantType} (${originLabel})`}
+    >
+      {grantType}
+      <span className="ml-1 opacity-60">({originLabel})</span>
+    </span>
+  );
+}
+
+
+function originToLabel(
+  origin: GrantOrigin,
+  dict: {
+    grantOriginDirect: string;
+    grantOriginTeamInherited: string;
+    grantOriginAdminExpanded: string;
+    grantOriginDowngraded: string;
+  },
+): string {
+
+  if (origin === 'direct') return dict.grantOriginDirect;
+
+  if (origin === 'team-inherited') return dict.grantOriginTeamInherited;
+
+  if (origin === 'admin-expanded') return dict.grantOriginAdminExpanded;
+
+  return dict.grantOriginDowngraded;
+}
+
+
+// ─── Card ─────────────────────────────────────────────────────────────────────
 
 function Card({ title, children }: { title?: string; children: React.ReactNode }) {
 
