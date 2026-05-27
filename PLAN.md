@@ -1,5 +1,21 @@
 # PLAN.md — Roadboard 2.0
 
+## AI Workflow Loop (Wave 2)
+
+- [x] feat-workflow-role-config — Per-role adapter config + briefing templates
+- [x] feat-workflow-loop-runner — Loop runner run --slug (Analyst↔Architect)
+
+## AI Workflow
+
+- [x] feat-ai-workflow-templates — Intake folders and templates
+- [x] feat-agent-workflow-cli — Workflow CLI (status, intake, lint stub, report stub, ready stub)
+- [x] feat-agent-workflow-lint-ready — Lint validation + ready gate
+- [x] feat-agent-workflow-report — Final report packaging
+- [x] feat-agent-workflow-queue-sync — Queue sync and TASK_LIST integration
+- [x] docs-agent-workflow-protocol — Documentation and operating protocol
+- [x] feat-agent-workflow-cli-adapters — Optional model CLI adapters
+- [x] enh-agent-workflow-version-flag — `--version` flag on root CLI
+
 ## Docs / MCP guide
 
 - [x] feat-mcp-guide-refresh — Refresh schema Zed/VSCode/Claude Code in /mcp-guide page
@@ -25,6 +41,7 @@
 ## Deep Code Map (Wave 6)
 
 - [x] feat-deep-code-map-adr-schema — ADR schema Memgraph File/Symbol
+- [x] BullMQ job deep-code-scan in worker-jobs (ts-morph walker)
 
 ### Atlas / Domain grouping
 
