@@ -87,3 +87,16 @@ The Architect has already produced Worker prompts in `tasks/todo/`. Your job is:
    - Write your concerns to `tasks/for-analyst/<slug>-q<N>.md`.
    - Do NOT write the convergence file.
    - The loop will pass your concerns back to the Architect.
+
+### When to sign off vs block
+
+Sign off (write the convergence file) as soon as the prompts are **executable and correct** — a Worker could pick them up and implement them successfully. Perfection is not the bar.
+
+Block convergence (write a for-analyst note instead) ONLY for **material** defects:
+- a wrong, missing, or contradictory decision that would make the Worker implement the wrong thing or fail;
+- a scope error (in-scope/out-of-scope boundary that would cause incorrect work);
+- a factual error verified against the codebase (wrong file, wrong symbol, wrong flag).
+
+Do NOT block on cosmetic issues: wording, phrasing, formatting, markdown checkbox state (`- [ ]` vs `- [x]`), section ordering, or stylistic preferences. If your only remaining concern is cosmetic, SIGN OFF.
+
+If you have raised the same concern in a previous review pass and the Architect addressed it, do not re-open it.

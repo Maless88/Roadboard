@@ -1401,12 +1401,115 @@ describe("runLoop", () => {
       promptFn: () => "s",
       pauseEvery: 2,
       maxIterations: 50,
+      isInteractive: () => true,
       logFn: () => undefined,
     });
 
     expect(result.stoppedByUser).toBe(true);
     expect(result.converged).toBe(false);
     expect(result.iterations).toBe(2);
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
+  it("stops at pause checkpoint when non-interactive (no TTY)", () => {
+    const slug = "no-tty";
+    const h = makeLoopHarness(slug);
+
+    const execFn = (binary: string): string => {
+      if (binary === "fake-analyst") {
+        const briefs = fs
+          .readdirSync(h.briefsDir)
+          .filter((f) => f.startsWith(`${slug}-brief-`)).length;
+        fs.writeFileSync(
+          path.join(h.briefsDir, `${slug}-brief-v${briefs + 1}.md`),
+          "# brief\n",
+          "utf-8",
+        );
+      }
+
+      if (binary === "fake-architect") {
+        // Always writes a NEW for-analyst question so architectTurnCompleted
+        // stays false and the review cap never triggers.
+        const qs = fs
+          .readdirSync(h.forAnalystDir)
+          .filter((f) => f.endsWith(".md")).length;
+        fs.writeFileSync(
+          path.join(h.forAnalystDir, `${slug}-q${qs + 1}.md`),
+          "# question\n",
+          "utf-8",
+        );
+      }
+
+      return "";
+    };
+
+    const result = runLoop(slug, {
+      tasksDir: h.tasksDir,
+      configPath: h.configPath,
+      templatesDir: h.templatesDir,
+      execFn,
+      promptFn: () => "c",
+      pauseEvery: 2,
+      isInteractive: () => false,
+      maxIterations: 50,
+      logFn: () => undefined,
+    });
+
+    expect(result.stoppedByUser).toBe(true);
+    expect(result.converged).toBe(false);
+    expect(result.reason).toContain("non-interactive");
+    expect(result.iterations).toBe(2);
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
+  it("stops when review-round cap is reached without Analyst sign-off", () => {
+    const slug = "review-cap";
+    const h = makeLoopHarness(slug);
+    let analystCalls = 0;
+
+    const execFn = (binary: string): string => {
+      if (binary === "fake-analyst") {
+        analystCalls += 1;
+        // Always writes a brief, NEVER the convergence file (always an issue).
+        fs.writeFileSync(
+          path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`),
+          "# brief\n",
+          "utf-8",
+        );
+      }
+
+      if (binary === "fake-architect") {
+        // Always writes prompts and a convergence file → review pass each round.
+        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
+        fs.writeFileSync(
+          path.join(h.tasksDir, `.convergence-${slug}`),
+          JSON.stringify({ slug, iteration: analystCalls, role: "architect" }),
+          "utf-8",
+        );
+      }
+
+      return "";
+    };
+
+    const result = runLoop(slug, {
+      tasksDir: h.tasksDir,
+      configPath: h.configPath,
+      templatesDir: h.templatesDir,
+      execFn,
+      promptFn: () => "c",
+      maxReviewRounds: 2,
+      isInteractive: () => true,
+      pauseEvery: 100,
+      maxIterations: 50,
+      logFn: () => undefined,
+    });
+
+    expect(result.converged).toBe(false);
+    expect(result.stoppedByUser).toBe(false);
+    expect(result.iterations).toBe(3);
+    expect(result.reason).toContain("review round cap");
 
     fs.rmSync(h.tmpDir, { recursive: true });
   });
