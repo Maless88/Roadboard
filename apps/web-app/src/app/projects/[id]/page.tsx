@@ -14,10 +14,12 @@ import {
   listUsers,
   listGrants,
   listMyMemberships,
+  listMemberships,
   getDashboardSnapshot,
   validateSession,
   listProjectRepositories,
 } from '@/lib/api';
+import { computeEffectiveContributors } from './contributors-effective';
 import type { Dictionary } from '@/lib/i18n';
 import { AppShell } from '@/components/app-shell';
 import { AutoRefresh } from '@/components/auto-refresh';
@@ -555,14 +557,15 @@ async function ContributorsTabLoader({
   token: string;
   projectId: string;
   session: { userId: string; role: string };
-  project: { ownerUserId: string | null; homeUrl?: string | null; thumbnailUrl?: string | null };
+  project: { ownerUserId: string | null; ownerTeamId: string; homeUrl?: string | null; thumbnailUrl?: string | null };
   dict: Dictionary;
 }) {
 
-  const [users, grants, myMemberships] = await Promise.all([
+  const [users, grants, myMemberships, ownerTeamMembers] = await Promise.all([
     listUsers(token).catch(() => []),
     listGrants(token, projectId).catch(() => []),
     listMyMemberships(token, session.userId).catch(() => []),
+    listMemberships(token, project.ownerTeamId).catch(() => []),
   ]);
 
   const isAdmin = session.role === 'admin';
@@ -575,6 +578,23 @@ async function ContributorsTabLoader({
   );
   const isOwner = isAdmin || project.ownerUserId === session.userId || isProjectAdmin;
 
+  // Build TeamMember list from ownerTeam memberships (only active members)
+  const teamMembers = ownerTeamMembers
+    .filter((m) => m.status === 'active')
+    .map((m) => ({ userId: m.userId, role: m.role }));
+
+  // Collect team-scoped grant types for this project
+  const teamGrantTypes = grants
+    .filter((g) => g.subjectType === 'team' && g.subjectId === project.ownerTeamId)
+    .map((g) => g.grantType);
+
+  const effectiveContributors = computeEffectiveContributors({
+    projectId,
+    grants,
+    teamMembers,
+    teamGrantTypes,
+  });
+
   return (
     <div className="space-y-6">
       <div className="space-y-3">
@@ -585,6 +605,7 @@ async function ContributorsTabLoader({
           isOwner={isOwner}
           users={users}
           initialGrants={grants}
+          effectiveContributors={effectiveContributors}
         />
       </div>
       {isOwner && (
