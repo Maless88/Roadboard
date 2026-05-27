@@ -1,6 +1,13 @@
-import { Controller, Post, Get, Body, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpCode, BadRequestException } from '@nestjs/common';
 
 import { JobsService } from './jobs.service';
+
+
+export interface DeepCodeScanRequestDto {
+  projectId: string;
+  repoPath: string;
+  delta?: string[];
+}
 
 
 @Controller('jobs')
@@ -49,6 +56,32 @@ export class JobsController {
 
     await this.jobs.enqueueCleanup();
     return { queued: true };
+  }
+
+
+  @Post('deep-code-scan')
+  @HttpCode(202)
+  async triggerDeepCodeScan(@Body() body: DeepCodeScanRequestDto): Promise<{ queued: boolean; jobId: string }> {
+
+    if (!body?.projectId || typeof body.projectId !== 'string') {
+      throw new BadRequestException('projectId is required');
+    }
+
+    if (!body?.repoPath || typeof body.repoPath !== 'string') {
+      throw new BadRequestException('repoPath is required');
+    }
+
+    if (body.delta !== undefined && !Array.isArray(body.delta)) {
+      throw new BadRequestException('delta must be an array of file paths');
+    }
+
+    const { jobId } = await this.jobs.enqueueDeepCodeScan({
+      projectId: body.projectId,
+      repoPath: body.repoPath,
+      delta: body.delta,
+    });
+
+    return { queued: true, jobId };
   }
 
 

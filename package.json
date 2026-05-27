@@ -19,7 +19,8 @@
     "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
     "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
     "bootstrap": "pnpm install && pnpm docker:up && pnpm db:migrate && pnpm db:generate && pnpm db:seed",
-    "tasks:list": "tsx scripts/tasks-list.ts"
+    "tasks:list": "tsx scripts/tasks-list.ts",
+    "agent:workflow": "tsx scripts/agent-workflow.ts"
   },
   "devDependencies": {
     "turbo": "^2.9.4",
