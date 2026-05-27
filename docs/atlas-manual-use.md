@@ -31,6 +31,8 @@ Grants required to modify:
 - `codeflow.write` for creating nodes, edges, links
 - `codeflow.scan` for triggering scans (Wave 5.2)
 
+For a full explanation of how MCP scopes and project grants interact, and how to diagnose a 403 when calling Atlas tools via MCP, see [`docs/mcp-permissions.md`](./mcp-permissions.md).
+
 ---
 
 ## 2. Populating the graph via the seed script
