@@ -7,14 +7,22 @@ import { DashboardRefreshProcessor } from './processors/dashboard-refresh.proces
 import { SummaryGenerationProcessor } from './processors/summary-generation.processor';
 import { CleanupProcessor } from './processors/cleanup.processor';
 import { ThumbnailRefreshProcessor } from './processors/thumbnail-refresh.processor';
+import { DeepCodeScanProcessor } from './processors/deep-code-scan.processor';
 import {
   QUEUE_DASHBOARD_REFRESH,
   QUEUE_SUMMARY_GENERATION,
   QUEUE_CLEANUP,
   QUEUE_THUMBNAIL_REFRESH,
+  QUEUE_DEEP_CODE_SCAN,
 } from './queue-names';
 
-export { QUEUE_DASHBOARD_REFRESH, QUEUE_SUMMARY_GENERATION, QUEUE_CLEANUP, QUEUE_THUMBNAIL_REFRESH };
+export {
+  QUEUE_DASHBOARD_REFRESH,
+  QUEUE_SUMMARY_GENERATION,
+  QUEUE_CLEANUP,
+  QUEUE_THUMBNAIL_REFRESH,
+  QUEUE_DEEP_CODE_SCAN,
+};
 
 
 @Module({
@@ -24,6 +32,7 @@ export { QUEUE_DASHBOARD_REFRESH, QUEUE_SUMMARY_GENERATION, QUEUE_CLEANUP, QUEUE
       { name: QUEUE_SUMMARY_GENERATION },
       { name: QUEUE_CLEANUP },
       { name: QUEUE_THUMBNAIL_REFRESH },
+      { name: QUEUE_DEEP_CODE_SCAN },
     ),
   ],
   controllers: [JobsController],
@@ -33,6 +42,7 @@ export { QUEUE_DASHBOARD_REFRESH, QUEUE_SUMMARY_GENERATION, QUEUE_CLEANUP, QUEUE
     SummaryGenerationProcessor,
     CleanupProcessor,
     ThumbnailRefreshProcessor,
+    DeepCodeScanProcessor,
   ],
 })
 export class JobsModule {}
