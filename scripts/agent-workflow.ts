@@ -828,6 +828,8 @@ export interface RunLoopOptions {
   planningOnly?: boolean;
   maxIterations?: number;
   pauseEvery?: number;
+  maxReviewRounds?: number;
+  isInteractive?: () => boolean;
   logFn?: (msg: string) => void;
 }
 
@@ -1012,6 +1014,8 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
   const planningOnly = options.planningOnly ?? false;
   const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
   const pauseEvery = options.pauseEvery ?? DEFAULT_PAUSE_EVERY;
+  const maxReviewRounds = options.maxReviewRounds ?? 3;
+  const isInteractive = options.isInteractive ?? (() => Boolean(process.stdin.isTTY));
 
   // --- 1. Validate intake ----------------------------------------------------
   const intakePath = path.join(tasksDir, "intake", `${slug}-intake.md`);
@@ -1075,12 +1079,17 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
   let stoppedByUser = false;
   let reason = "";
   let architectTurnCompleted = false;
+  let reviewRounds = 0;
 
   let prevTodoCount = listFilesMatching(todoDir, /\.md$/).length;
   let prevForAnalystCount = listFilesMatching(forAnalystDir, forAnalystPattern).length;
 
   while (iteration < maxIterations) {
     iteration += 1;
+
+    const isReviewPass = architectTurnCompleted;
+
+    if (isReviewPass) reviewRounds += 1;
 
     // --- Analyst turn -------------------------------------------------------
     const forAnalystFiles = listFilesMatching(forAnalystDir, forAnalystPattern);
@@ -1136,6 +1145,12 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
       }
 
       log(`[iter ${iteration}] Analyst signalled brief ready, proceeding to Architect`);
+    }
+
+    // --- Review-round cap backstop ------------------------------------------
+    if (isReviewPass && reviewRounds >= maxReviewRounds) {
+      reason = `review round cap reached (${reviewRounds} review pass(es) without Analyst sign-off) — developer triage needed`;
+      break;
     }
 
     // --- Architect turn -----------------------------------------------------
@@ -1207,6 +1222,12 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
 
     // --- Interactive pause --------------------------------------------------
     if (iteration % pauseEvery === 0) {
+      if (!isInteractive()) {
+        reason = `paused at iteration ${iteration} in non-interactive mode (no TTY) — re-run in a terminal to continue`;
+        stoppedByUser = true;
+        break;
+      }
+
       const briefsNow = listFilesMatching(briefsDir, briefPattern).length;
       const forAnalystNow = listFilesMatching(forAnalystDir, forAnalystPattern).length;
       const todoNow = listFilesMatching(todoDir, /\.md$/).length;
