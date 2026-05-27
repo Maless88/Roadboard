@@ -14,6 +14,21 @@ import { GraphSyncService } from './graph-sync.service';
 
 
 /**
+ * Safely parse a JSON string. Mirror writes store node `metadata` as a JSON
+ * string (Memgraph properties accept primitives/strings only). Returns the
+ * original value if it cannot be parsed.
+ */
+function safeJsonParse(value: string): unknown {
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+
+/**
  * Internal helper type for outbox events emitted alongside a Postgres write.
  * The actual `graphSyncEvent` Prisma model is the persistent counterpart.
  */
@@ -32,6 +47,9 @@ export class GraphService {
   private readonly logger = new Logger(GraphService.name);
   private readonly useOutbox: boolean;
   private readonly useMemgraphImpact: boolean;
+  private readonly useMemgraphNode: boolean;
+  private readonly useMemgraphGraph: boolean;
+  private readonly useMemgraphSnapshot: boolean;
 
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
@@ -42,6 +60,9 @@ export class GraphService {
 
     this.useOutbox = optionalEnv('GRAPH_SYNC_USE_OUTBOX', 'false') === 'true';
     this.useMemgraphImpact = optionalEnv('GRAPH_READ_USE_MEMGRAPH_IMPACT', 'false') === 'true';
+    this.useMemgraphNode = optionalEnv('GRAPH_READ_USE_MEMGRAPH_NODE', 'false') === 'true';
+    this.useMemgraphGraph = optionalEnv('GRAPH_READ_USE_MEMGRAPH_GRAPH', 'false') === 'true';
+    this.useMemgraphSnapshot = optionalEnv('GRAPH_READ_USE_MEMGRAPH_SNAPSHOT', 'false') === 'true';
   }
 
 
@@ -52,6 +73,21 @@ export class GraphService {
 
   isMemgraphImpactMode(): boolean {
     return this.useMemgraphImpact;
+  }
+
+
+  isMemgraphNodeMode(): boolean {
+    return this.useMemgraphNode;
+  }
+
+
+  isMemgraphGraphMode(): boolean {
+    return this.useMemgraphGraph;
+  }
+
+
+  isMemgraphSnapshotMode(): boolean {
+    return this.useMemgraphSnapshot;
   }
 
 
@@ -190,6 +226,21 @@ export class GraphService {
 
   async getGraph(projectId: string): Promise<unknown> {
 
+    if (this.useMemgraphGraph && this.graph) {
+
+      try {
+        return await this.getGraphFromMemgraph(projectId);
+      } catch (err) {
+        this.logger.warn({
+          op: 'getGraph',
+          source: 'memgraph',
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        // Fall through to Postgres path.
+      }
+    }
+
     const [nodes, edges, latestSnapshot] = await Promise.all([
       this.prisma.architectureNode.findMany({
         where: { projectId, isCurrent: true },
@@ -236,6 +287,115 @@ export class GraphService {
         edgeType: e.edgeType,
         weight: e.weight,
         isManual: e.isManual,
+      })),
+    };
+  }
+
+
+  /**
+   * Memgraph-backed getGraph (CF-GDB-03b-C).
+   *
+   * Reads current nodes + outgoing edges from Memgraph along with aggregate
+   * counts (linked tasks, decisions, annotations). The snapshot metadata
+   * (snapshotId/status/lastScannedAt) still comes from Postgres until the
+   * snapshot table is retired in Phase 2.
+   */
+  private async getGraphFromMemgraph(projectId: string): Promise<unknown> {
+
+    if (!this.graph) {
+      throw new Error('GraphDbClient not available');
+    }
+
+    const nodesCypher = `MATCH (n {projectId: $projectId})
+WHERE NOT n:Link AND NOT n:Annotation
+  AND (n.isCurrent IS NULL OR n.isCurrent = true)
+OPTIONAL MATCH (lTask:Link {entityType: 'task'})-[:LINKED_TO]->(n)
+WITH n, count(DISTINCT lTask) AS taskCount
+OPTIONAL MATCH (lDec:Link {entityType: 'decision'})-[:LINKED_TO]->(n)
+WITH n, taskCount, count(DISTINCT lDec) AS decisionCount
+OPTIONAL MATCH (a:Annotation)-[:ANNOTATES]->(n)
+WITH n, taskCount, decisionCount, count(DISTINCT a) AS annotationCount
+RETURN n.id AS id,
+       n.type AS type,
+       n.name AS name,
+       n.path AS path,
+       n.domainGroup AS domainGroup,
+       n.isManual AS isManual,
+       n.ownerUserId AS ownerUserId,
+       n.ownerTeamId AS ownerTeamId,
+       n.metadata AS metadata,
+       taskCount,
+       decisionCount,
+       annotationCount
+ORDER BY id`;
+
+    const edgesCypher = `MATCH (a {projectId: $projectId})-[r]->(b {projectId: $projectId})
+WHERE type(r) <> 'LINKED_TO' AND type(r) <> 'ANNOTATES'
+  AND r.id IS NOT NULL
+  AND (a.isCurrent IS NULL OR a.isCurrent = true)
+  AND (b.isCurrent IS NULL OR b.isCurrent = true)
+RETURN r.id AS id,
+       a.id AS fromNodeId,
+       b.id AS toNodeId,
+       coalesce(r.edgeType, toLower(type(r))) AS edgeType,
+       coalesce(r.weight, 1.0) AS weight,
+       coalesce(r.isManual, false) AS isManual
+ORDER BY id`;
+
+    const [nodeRecords, edgeRecords, latestSnapshot] = await Promise.all([
+      this.graph.run<{
+        id: string;
+        type: string | null;
+        name: string | null;
+        path: string | null;
+        domainGroup: string | null;
+        isManual: boolean | null;
+        ownerUserId: string | null;
+        ownerTeamId: string | null;
+        metadata: unknown;
+        taskCount: number;
+        decisionCount: number;
+        annotationCount: number;
+      }>(nodesCypher, { projectId }, { mode: 'read' }),
+      this.graph.run<{
+        id: string;
+        fromNodeId: string;
+        toNodeId: string;
+        edgeType: string;
+        weight: number;
+        isManual: boolean;
+      }>(edgesCypher, { projectId }, { mode: 'read' }),
+      this.prisma.architectureSnapshot.findFirst({
+        where: { projectId },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    return {
+      snapshotId: latestSnapshot?.id ?? null,
+      snapshotStatus: latestSnapshot?.status ?? null,
+      lastScannedAt: latestSnapshot?.completedAt ?? null,
+      nodes: nodeRecords.map((n) => ({
+        id: n.id,
+        type: n.type ?? '',
+        name: n.name ?? n.id,
+        path: n.path,
+        domainGroup: n.domainGroup,
+        isManual: n.isManual ?? false,
+        ownerUserId: n.ownerUserId,
+        ownerTeamId: n.ownerTeamId,
+        openTaskCount: Number(n.taskCount ?? 0),
+        decisionCount: Number(n.decisionCount ?? 0),
+        annotationCount: Number(n.annotationCount ?? 0),
+        metadata: typeof n.metadata === 'string' ? safeJsonParse(n.metadata) : n.metadata ?? null,
+      })),
+      edges: edgeRecords.map((e) => ({
+        id: e.id,
+        fromNodeId: e.fromNodeId,
+        toNodeId: e.toNodeId,
+        edgeType: e.edgeType,
+        weight: Number(e.weight ?? 1),
+        isManual: Boolean(e.isManual),
       })),
     };
   }
@@ -343,6 +503,25 @@ export class GraphService {
 
   async getNode(id: string): Promise<unknown> {
 
+    if (this.useMemgraphNode && this.graph) {
+
+      try {
+        const fromMg = await this.getNodeFromMemgraph(id);
+
+        if (fromMg) return fromMg;
+        // Node not found in Memgraph — fall through to Postgres which will
+        // either return the node (drift) or raise NotFoundException.
+      } catch (err) {
+        this.logger.warn({
+          op: 'getNode',
+          source: 'memgraph',
+          nodeId: id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        // Fall through to Postgres path.
+      }
+    }
+
     const node = await this.prisma.architectureNode.findUnique({
       where: { id },
       include: {
@@ -356,6 +535,64 @@ export class GraphService {
     }
 
     return node;
+  }
+
+
+  /**
+   * Memgraph-backed getNode (CF-GDB-03b-C).
+   *
+   * Reads the node + its outgoing Link/Annotation mirror entities. Mirror
+   * relationships from GraphSyncService:
+   *   - (l:Link)-[:LINKED_TO]->(n)
+   *   - (a:Annotation)-[:ANNOTATES]->(n)
+   *
+   * Returns null if the node does not exist in Memgraph (caller falls back
+   * to Postgres). Shape matches the Prisma `findUnique({ include })` result
+   * so the REST contract is unchanged.
+   */
+  private async getNodeFromMemgraph(id: string): Promise<Record<string, unknown> | null> {
+
+    if (!this.graph) {
+      throw new Error('GraphDbClient not available');
+    }
+
+    const cypher = `MATCH (n {id: $id})
+WHERE NOT n:Link AND NOT n:Annotation
+OPTIONAL MATCH (l:Link)-[:LINKED_TO]->(n)
+WITH n, collect(DISTINCT l) AS links
+OPTIONAL MATCH (a:Annotation)-[:ANNOTATES]->(n)
+WITH n, links, collect(DISTINCT a) AS annotations
+RETURN n, links, annotations
+LIMIT 1`;
+
+    const records = await this.graph.run<{
+      n: Record<string, unknown> | null;
+      links: Array<Record<string, unknown>>;
+      annotations: Array<Record<string, unknown>>;
+    }>(cypher, { id }, { mode: 'read' });
+
+    if (records.length === 0 || !records[0].n) return null;
+
+    const { n, links, annotations } = records[0];
+
+    return {
+      ...n,
+      annotations: (annotations ?? []).map((a) => ({
+        id: a.id,
+        projectId: a.projectId,
+        nodeId: a.nodeId,
+        content: a.content,
+      })),
+      links: (links ?? []).map((l) => ({
+        id: l.id,
+        projectId: l.projectId,
+        nodeId: l.nodeId,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        linkType: l.linkType,
+        note: l.note ?? null,
+      })),
+    };
   }
 
 
@@ -715,6 +952,21 @@ export class GraphService {
 
   async getSnapshot(projectId: string) {
 
+    if (this.useMemgraphSnapshot && this.graph) {
+
+      try {
+        return await this.getSnapshotFromMemgraph(projectId);
+      } catch (err) {
+        this.logger.warn({
+          op: 'getSnapshot',
+          source: 'memgraph',
+          projectId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        // Fall through to Postgres path.
+      }
+    }
+
     const nodes = await this.prisma.architectureNode.findMany({
       where: { projectId, isCurrent: true },
       include: {
@@ -762,6 +1014,104 @@ export class GraphService {
       })),
       edges: edges.map((e) => ({ from: e.fromNodeId, to: e.toNodeId, type: e.edgeType })),
       topImpactNodes,
+    };
+  }
+
+
+  /**
+   * Memgraph-backed getSnapshot (CF-GDB-03b-C).
+   *
+   * Returns the same shape as the Postgres version: current nodes (with
+   * total link count + annotation contents), current edges, and the top-10
+   * impact nodes ranked by incoming :DEPENDS_ON degree.
+   */
+  private async getSnapshotFromMemgraph(projectId: string): Promise<unknown> {
+
+    if (!this.graph) {
+      throw new Error('GraphDbClient not available');
+    }
+
+    const nodesCypher = `MATCH (n {projectId: $projectId})
+WHERE NOT n:Link AND NOT n:Annotation
+  AND (n.isCurrent IS NULL OR n.isCurrent = true)
+OPTIONAL MATCH (l:Link)-[:LINKED_TO]->(n)
+WITH n, count(DISTINCT l) AS linkCount
+OPTIONAL MATCH (a:Annotation)-[:ANNOTATES]->(n)
+WITH n, linkCount, collect(DISTINCT a.content) AS annotationContents
+RETURN n.id AS id,
+       n.type AS type,
+       n.name AS name,
+       n.path AS path,
+       n.domainGroup AS domainGroup,
+       linkCount,
+       annotationContents
+ORDER BY id`;
+
+    const edgesCypher = `MATCH (a {projectId: $projectId})-[r]->(b {projectId: $projectId})
+WHERE type(r) <> 'LINKED_TO' AND type(r) <> 'ANNOTATES'
+  AND r.id IS NOT NULL
+  AND (a.isCurrent IS NULL OR a.isCurrent = true)
+  AND (b.isCurrent IS NULL OR b.isCurrent = true)
+RETURN a.id AS fromNodeId,
+       b.id AS toNodeId,
+       coalesce(r.edgeType, toLower(type(r))) AS edgeType`;
+
+    const topImpactCypher = `MATCH (target {projectId: $projectId})
+WHERE NOT target:Link AND NOT target:Annotation
+  AND (target.isCurrent IS NULL OR target.isCurrent = true)
+OPTIONAL MATCH (src)-[:DEPENDS_ON]->(target)
+WHERE src.projectId = $projectId
+WITH target, count(src) AS directDependants
+WHERE directDependants > 0
+RETURN target.id AS nodeId,
+       target.name AS name,
+       directDependants
+ORDER BY directDependants DESC, nodeId
+LIMIT 10`;
+
+    const [nodeRecords, edgeRecords, topImpactRecords] = await Promise.all([
+      this.graph.run<{
+        id: string;
+        type: string | null;
+        name: string | null;
+        path: string | null;
+        domainGroup: string | null;
+        linkCount: number;
+        annotationContents: string[];
+      }>(nodesCypher, { projectId }, { mode: 'read' }),
+      this.graph.run<{
+        fromNodeId: string;
+        toNodeId: string;
+        edgeType: string;
+      }>(edgesCypher, { projectId }, { mode: 'read' }),
+      this.graph.run<{
+        nodeId: string;
+        name: string | null;
+        directDependants: number;
+      }>(topImpactCypher, { projectId }, { mode: 'read' }),
+    ]);
+
+    return {
+      projectId,
+      generatedAt: new Date().toISOString(),
+      nodeCount: nodeRecords.length,
+      edgeCount: edgeRecords.length,
+      nodes: nodeRecords.map((n) => ({
+        id: n.id,
+        type: n.type ?? '',
+        name: n.name ?? n.id,
+        path: n.path,
+        domainGroup: n.domainGroup,
+        openTaskCount: 0,
+        linkedDecisionCount: Number(n.linkCount ?? 0),
+        annotations: n.annotationContents ?? [],
+      })),
+      edges: edgeRecords.map((e) => ({ from: e.fromNodeId, to: e.toNodeId, type: e.edgeType })),
+      topImpactNodes: topImpactRecords.map((r) => ({
+        nodeId: r.nodeId,
+        name: r.name ?? r.nodeId,
+        directDependants: Number(r.directDependants),
+      })),
     };
   }
 

@@ -816,6 +816,295 @@ describe('GraphService', () => {
   });
 
 
+  describe('getNode — Memgraph swap (CF-GDB-03b-C)', () => {
+
+    afterEach(() => {
+      delete process.env.GRAPH_READ_USE_MEMGRAPH_NODE;
+    });
+
+
+    it('flag ON routes through Memgraph and returns shape with annotations + links', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_NODE = 'true';
+
+      const mgNode = {
+        id: 'n1', projectId: 'p1', type: 'package', name: 'core',
+        path: '/x', domainGroup: 'backend',
+        description: 'd', metadata: null,
+        ownerUserId: 'u1', ownerTeamId: null,
+        isManual: true, isCurrent: true,
+      };
+      const mgLinks = [
+        { id: 'l1', projectId: 'p1', nodeId: 'n1', entityType: 'task', entityId: 't1', linkType: 'mentions', note: null },
+      ];
+      const mgAnnotations = [
+        { id: 'a1', projectId: 'p1', nodeId: 'n1', content: 'hello' },
+      ];
+
+      const graph = {
+        run: vi.fn().mockResolvedValue([{ n: mgNode, links: mgLinks, annotations: mgAnnotations }]),
+      };
+
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+      const result = await svc.getNode('n1') as {
+        id: string;
+        annotations: Array<{ id: string; content: string }>;
+        links: Array<{ id: string; entityType: string }>;
+      };
+
+      expect(graph.run).toHaveBeenCalledTimes(1);
+      const [, params, opts] = graph.run.mock.calls[0];
+      expect(params).toEqual({ id: 'n1' });
+      expect(opts).toEqual({ mode: 'read' });
+
+      expect(result.id).toBe('n1');
+      expect(result.annotations).toEqual([{ id: 'a1', projectId: 'p1', nodeId: 'n1', content: 'hello' }]);
+      expect(result.links).toEqual([{ id: 'l1', projectId: 'p1', nodeId: 'n1', entityType: 'task', entityId: 't1', linkType: 'mentions', note: null }]);
+
+      // Postgres fallback must NOT be touched on success.
+      expect(prisma.architectureNode.findUnique).not.toHaveBeenCalled();
+    });
+
+
+    it('flag OFF keeps Postgres path (zero regression)', async () => {
+
+      const node = { id: 'n1', isManual: true, annotations: [], links: [] };
+      prisma.architectureNode.findUnique.mockResolvedValue(node);
+
+      const graph = { run: vi.fn() };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      const result = await svc.getNode('n1');
+
+      expect(graph.run).not.toHaveBeenCalled();
+      expect(prisma.architectureNode.findUnique).toHaveBeenCalled();
+      expect(result).toBe(node);
+    });
+
+
+    it('falls back to Postgres when Memgraph query throws', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_NODE = 'true';
+
+      const node = { id: 'n1', isManual: true, annotations: [], links: [] };
+      prisma.architectureNode.findUnique.mockResolvedValue(node);
+
+      const graph = { run: vi.fn().mockRejectedValue(new Error('memgraph down')) };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      const result = await svc.getNode('n1');
+
+      expect(graph.run).toHaveBeenCalledTimes(1);
+      expect(prisma.architectureNode.findUnique).toHaveBeenCalled();
+      expect(result).toBe(node);
+    });
+
+
+    it('falls back to Postgres when Memgraph returns no record (node not mirrored)', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_NODE = 'true';
+
+      const node = { id: 'n1', isManual: true, annotations: [], links: [] };
+      prisma.architectureNode.findUnique.mockResolvedValue(node);
+
+      const graph = { run: vi.fn().mockResolvedValue([]) };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      const result = await svc.getNode('n1');
+
+      expect(graph.run).toHaveBeenCalledTimes(1);
+      expect(prisma.architectureNode.findUnique).toHaveBeenCalled();
+      expect(result).toBe(node);
+    });
+  });
+
+
+  describe('getGraph — Memgraph swap (CF-GDB-03b-C)', () => {
+
+    afterEach(() => {
+      delete process.env.GRAPH_READ_USE_MEMGRAPH_GRAPH;
+    });
+
+
+    it('flag ON routes through Memgraph and returns shape with nodes/edges/snapshot', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_GRAPH = 'true';
+
+      const nodeRows = [
+        {
+          id: 'n1', type: 'package', name: 'core', path: '/x', domainGroup: 'backend',
+          isManual: true, ownerUserId: 'u1', ownerTeamId: null,
+          metadata: '{"foo":"bar"}',
+          taskCount: 2, decisionCount: 1, annotationCount: 3,
+        },
+      ];
+      const edgeRows = [
+        { id: 'e1', fromNodeId: 'n1', toNodeId: 'n2', edgeType: 'depends_on', weight: 1, isManual: false },
+      ];
+
+      const graph = {
+        run: vi.fn()
+          .mockResolvedValueOnce(nodeRows)
+          .mockResolvedValueOnce(edgeRows),
+      };
+
+      prisma.architectureSnapshot.findFirst.mockResolvedValue({
+        id: 'snap1', status: 'completed', completedAt: new Date('2026-05-01T00:00:00.000Z'),
+      });
+
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+      const result = await svc.getGraph('p1') as {
+        snapshotId: string | null;
+        nodes: Array<{ id: string; openTaskCount: number; decisionCount: number; annotationCount: number; metadata: unknown }>;
+        edges: Array<{ id: string; fromNodeId: string; toNodeId: string }>;
+      };
+
+      expect(graph.run).toHaveBeenCalledTimes(2);
+      expect(result.snapshotId).toBe('snap1');
+      expect(result.nodes).toHaveLength(1);
+      expect(result.nodes[0]).toMatchObject({
+        id: 'n1',
+        openTaskCount: 2,
+        decisionCount: 1,
+        annotationCount: 3,
+      });
+      expect(result.nodes[0].metadata).toEqual({ foo: 'bar' });
+      expect(result.edges).toEqual([{
+        id: 'e1', fromNodeId: 'n1', toNodeId: 'n2', edgeType: 'depends_on', weight: 1, isManual: false,
+      }]);
+
+      // Postgres reads for nodes/edges must NOT be touched.
+      expect(prisma.architectureNode.findMany).not.toHaveBeenCalled();
+      expect(prisma.architectureEdge.findMany).not.toHaveBeenCalled();
+    });
+
+
+    it('flag OFF keeps Postgres path (zero regression)', async () => {
+
+      prisma.architectureNode.findMany.mockResolvedValue([]);
+      prisma.architectureEdge.findMany.mockResolvedValue([]);
+      prisma.architectureSnapshot.findFirst.mockResolvedValue(null);
+      prisma.architectureLink.groupBy.mockResolvedValue([]);
+
+      const graph = { run: vi.fn() };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      await svc.getGraph('p1');
+
+      expect(graph.run).not.toHaveBeenCalled();
+      expect(prisma.architectureNode.findMany).toHaveBeenCalled();
+    });
+
+
+    it('falls back to Postgres when Memgraph query throws', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_GRAPH = 'true';
+
+      prisma.architectureNode.findMany.mockResolvedValue([]);
+      prisma.architectureEdge.findMany.mockResolvedValue([]);
+      prisma.architectureSnapshot.findFirst.mockResolvedValue(null);
+      prisma.architectureLink.groupBy.mockResolvedValue([]);
+
+      const graph = { run: vi.fn().mockRejectedValue(new Error('boom')) };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      const result = await svc.getGraph('p1') as { nodes: unknown[]; edges: unknown[] };
+
+      expect(graph.run).toHaveBeenCalled();
+      expect(prisma.architectureNode.findMany).toHaveBeenCalled();
+      expect(result.nodes).toEqual([]);
+      expect(result.edges).toEqual([]);
+    });
+  });
+
+
+  describe('getSnapshot — Memgraph swap (CF-GDB-03b-C)', () => {
+
+    afterEach(() => {
+      delete process.env.GRAPH_READ_USE_MEMGRAPH_SNAPSHOT;
+    });
+
+
+    it('flag ON routes through Memgraph and returns snapshot shape', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_SNAPSHOT = 'true';
+
+      const nodeRows = [
+        { id: 'n1', type: 'app', name: 'web', path: null, domainGroup: null, linkCount: 1, annotationContents: ['note'] },
+      ];
+      const edgeRows = [
+        { fromNodeId: 'n1', toNodeId: 'n2', edgeType: 'depends_on' },
+      ];
+      const topImpactRows = [
+        { nodeId: 'n2', name: 'core', directDependants: 1 },
+      ];
+
+      const graph = {
+        run: vi.fn()
+          .mockResolvedValueOnce(nodeRows)
+          .mockResolvedValueOnce(edgeRows)
+          .mockResolvedValueOnce(topImpactRows),
+      };
+
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+      const result = await svc.getSnapshot('p1') as {
+        projectId: string;
+        nodeCount: number;
+        edgeCount: number;
+        nodes: Array<{ id: string; annotations: string[]; linkedDecisionCount: number }>;
+        edges: Array<{ from: string; to: string; type: string }>;
+        topImpactNodes: Array<{ nodeId: string; name: string; directDependants: number }>;
+      };
+
+      expect(graph.run).toHaveBeenCalledTimes(3);
+      expect(result.projectId).toBe('p1');
+      expect(result.nodeCount).toBe(1);
+      expect(result.edgeCount).toBe(1);
+      expect(result.nodes[0].annotations).toEqual(['note']);
+      expect(result.nodes[0].linkedDecisionCount).toBe(1);
+      expect(result.edges[0]).toEqual({ from: 'n1', to: 'n2', type: 'depends_on' });
+      expect(result.topImpactNodes[0]).toEqual({ nodeId: 'n2', name: 'core', directDependants: 1 });
+
+      // Postgres path must NOT be touched.
+      expect(prisma.architectureNode.findMany).not.toHaveBeenCalled();
+      expect(prisma.architectureEdge.findMany).not.toHaveBeenCalled();
+    });
+
+
+    it('flag OFF keeps Postgres path (zero regression)', async () => {
+
+      prisma.architectureNode.findMany.mockResolvedValue([]);
+      prisma.architectureEdge.findMany.mockResolvedValue([]);
+
+      const graph = { run: vi.fn() };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      await svc.getSnapshot('p1');
+
+      expect(graph.run).not.toHaveBeenCalled();
+      expect(prisma.architectureNode.findMany).toHaveBeenCalled();
+    });
+
+
+    it('falls back to Postgres when Memgraph query throws', async () => {
+
+      process.env.GRAPH_READ_USE_MEMGRAPH_SNAPSHOT = 'true';
+
+      prisma.architectureNode.findMany.mockResolvedValue([]);
+      prisma.architectureEdge.findMany.mockResolvedValue([]);
+
+      const graph = { run: vi.fn().mockRejectedValue(new Error('boom')) };
+      const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
+
+      const result = await svc.getSnapshot('p1') as { nodeCount: number };
+
+      expect(graph.run).toHaveBeenCalled();
+      expect(prisma.architectureNode.findMany).toHaveBeenCalled();
+      expect(result.nodeCount).toBe(0);
+    });
+  });
+
+
   describe('getSnapshotCompact', () => {
 
     const NODES = [
