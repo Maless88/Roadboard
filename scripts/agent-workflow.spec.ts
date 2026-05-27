@@ -1219,6 +1219,90 @@ describe("runLoop", () => {
     fs.rmSync(h.tmpDir, { recursive: true });
   });
 
+  it("planning-only mode asks architect for proposals instead of Worker prompts", () => {
+    const slug = "planning";
+    const h = makeLoopHarness(slug);
+    const proposalsDir = path.join(h.tasksDir, "proposals");
+    let architectPrompt = "";
+
+    const execFn = (binary: string, args: string[]): string => {
+      if (binary === "fake-analyst") {
+        fs.writeFileSync(
+          path.join(h.briefsDir, `${slug}-brief-v1.md`),
+          "# brief v1\n",
+          "utf-8",
+        );
+      }
+
+      if (binary === "fake-architect") {
+        architectPrompt = args.join("\n");
+        fs.mkdirSync(proposalsDir, { recursive: true });
+        fs.writeFileSync(
+          path.join(proposalsDir, `${slug}-proposal-v1.md`),
+          "# proposal\n",
+          "utf-8",
+        );
+        fs.writeFileSync(
+          path.join(h.tasksDir, `.convergence-${slug}`),
+          JSON.stringify({ slug, iteration: 1, mode: "planning-only" }),
+          "utf-8",
+        );
+      }
+
+      return "";
+    };
+
+    const result = runLoop(slug, {
+      tasksDir: h.tasksDir,
+      configPath: h.configPath,
+      templatesDir: h.templatesDir,
+      execFn,
+      promptFn: () => "c",
+      planningOnly: true,
+      logFn: () => undefined,
+    });
+
+    expect(result.converged).toBe(true);
+    expect(result.iterations).toBe(1);
+    expect(result.todoFiles).toHaveLength(0);
+    expect(architectPrompt).toContain("Planning-only mode is active.");
+    expect(architectPrompt).toContain(`tasks/proposals/${slug}-proposal-v1.md`);
+    expect(architectPrompt).toContain("Do NOT write to tasks/todo/.");
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
+  it("planning-only mode fails if a new Worker prompt appears", () => {
+    const slug = "planning-violation";
+    const h = makeLoopHarness(slug);
+
+    const execFn = (binary: string): string => {
+      if (binary === "fake-analyst") {
+        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "# brief\n", "utf-8");
+      }
+
+      if (binary === "fake-architect") {
+        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
+      }
+
+      return "";
+    };
+
+    expect(() =>
+      runLoop(slug, {
+        tasksDir: h.tasksDir,
+        configPath: h.configPath,
+        templatesDir: h.templatesDir,
+        execFn,
+        promptFn: () => "c",
+        planningOnly: true,
+        logFn: () => undefined,
+      }),
+    ).toThrow(/Planning-only mode violation/);
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
   it("converges implicitly when new todo appears without new for-analyst", () => {
     const slug = "implicit";
     const h = makeLoopHarness(slug);

@@ -31,7 +31,9 @@
 
 - [x] CF-GDB-03b-A — Pre-mirror extension (Link/Annotation + node fields + backfill)
 - [x] CF-GDB-03b-B — Impact read swap (flag-gated, Cypher reverse-BFS)
-- [ ] CF-GDB-03b-C — Getter cutover and Postgres retire
+- [x] CF-GDB-03b-C — Getter cutover (getNode/getGraph/getSnapshot flag-gated Cypher) — retire bloccato, vedi D/E
+- [ ] CF-GDB-03b-D — Write path Memgraph-direct (flag-gated)
+- [ ] CF-GDB-03b-E — Retire Postgres tables + GraphSyncService (stop-point gated)
 
 ## Project Visibility — Per-User Archive & Card UX
 
@@ -81,3 +83,8 @@
 ## Observability / Audit
 
 - [x] audit-01 — Gap coverage ActivityEvent + restore tab Audit (filtri estesi)
+
+## MCP Permissions / Audit hardening (Sprint 2)
+
+- [ ] enh-contributors-effective-grants — Visibilità grant effettivi (direct + team-inherited) nella tab Contributors
+- [ ] feat-audit-mcp-token-id — Traccia `mcpTokenId` in ActivityEvent per eventi MCP (actorType `mcp_token`)
