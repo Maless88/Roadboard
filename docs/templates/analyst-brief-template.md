@@ -15,6 +15,10 @@ Examples:
 
 ## Goal
 
+## Cycle Mode
+
+`planning-only` / `worker-prompt`
+
 ## Current Repo State
 
 ## Relevant Local Sources
@@ -55,4 +59,4 @@ Consider schema/data loss, auth, permissions, privacy, API contracts, service co
 
 ## Draft Architect Handoff
 
-Use this as Analyst-prepared material, not verified repository truth. Architect must verify files, RoadBoard state, `PLAN.md`, docs, and code before creating Worker prompts.
+Use this as Analyst-prepared material, not verified repository truth. Architect must verify files, RoadBoard state, `PLAN.md`, docs, and code before creating proposals or Worker prompts. If the cycle is `planning-only`, Architect must not create files in `tasks/todo/`.

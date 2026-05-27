@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * agent-workflow.ts — CLI for the AI Workflow pipeline.
- * Subcommands: status, intake, lint, report, ready, sync, adapters
+ * Subcommands: status, intake, lint, report, ready, sync, run, adapters
  * Run via: pnpm agent:workflow <command> [options]
  */
 
@@ -853,6 +853,21 @@ function readFileIfExists(p: string): string | null {
 }
 
 
+function readConvergenceRole(filePath: string): "analyst" | "architect" | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+
+    if (parsed.role === "analyst" || parsed.role === "architect") return parsed.role as "analyst" | "architect";
+
+    return null;
+  }
+
+  catch {
+    return null;
+  }
+}
+
+
 function listFilesMatching(dir: string, pattern: RegExp): string[] {
   if (!fs.existsSync(dir)) {
     return [];
@@ -886,12 +901,38 @@ function buildAnalystPrompt(args: {
   forAnalystSnippets: { file: string; content: string }[];
   slug: string;
   iteration: number;
+  reviewMode?: boolean;
+  todoListing?: string;
 }): string {
   const exchanges = args.forAnalystSnippets.length === 0
     ? "(none)"
     : args.forAnalystSnippets
         .map((s) => `---\n# ${s.file}\n${s.content}`)
         .join("\n\n");
+
+  const instructions = args.reviewMode
+    ? [
+        "## Review mode",
+        "",
+        "The Architect has produced Worker prompts in tasks/todo/. Your job now is to review them against your brief and the intake.",
+        "",
+        "Current tasks/todo/ contents:",
+        args.todoListing ?? "(empty)",
+        "",
+        "If the prompts correctly address all risks and criteria from your brief:",
+        `  → write tasks/.convergence-${args.slug} with JSON: {"slug":"${args.slug}","iteration":${args.iteration},"role":"analyst"}`,
+        "  → this signals final sign-off and ends the loop.",
+        "",
+        "If you find issues, gaps, or missing decisions:",
+        `  → write your concerns to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
+        "  → do NOT write the convergence file in this case.",
+        "  → the loop will return to the Architect with your concerns.",
+      ]
+    : [
+        "## Instructions",
+        `Write your planning brief to: tasks/briefs/${args.slug}-brief-v${args.iteration}.md`,
+        `where N is the current iteration number (${args.iteration}).`,
+      ];
 
   return [
     args.systemPrompt,
@@ -903,9 +944,7 @@ function buildAnalystPrompt(args: {
     "## Previous Analyst↔Architect exchanges",
     exchanges,
     "",
-    "## Instructions",
-    `Write your planning brief to: tasks/briefs/${args.slug}-brief-v${args.iteration}.md`,
-    `where N is the current iteration number (${args.iteration}).`,
+    ...instructions,
   ].join("\n");
 }
 
@@ -1035,6 +1074,7 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
   let converged = false;
   let stoppedByUser = false;
   let reason = "";
+  let architectTurnCompleted = false;
 
   let prevTodoCount = listFilesMatching(todoDir, /\.md$/).length;
   let prevForAnalystCount = listFilesMatching(forAnalystDir, forAnalystPattern).length;
@@ -1049,12 +1089,22 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
       content: fs.readFileSync(path.join(forAnalystDir, f), "utf-8"),
     }));
 
+    const todoListingForAnalyst = architectTurnCompleted
+      ? (() => {
+          const list = listFilesMatching(todoDir, /\.md$/);
+
+          return list.length === 0 ? "(empty)" : list.map((f) => `- ${f}`).join("\n");
+        })()
+      : undefined;
+
     const analystPrompt = buildAnalystPrompt({
       systemPrompt: analystSystemPrompt,
       intake,
       forAnalystSnippets,
       slug,
       iteration,
+      reviewMode: architectTurnCompleted,
+      todoListing: todoListingForAnalyst,
     });
     const analystArgs = [...(analystRole.flags ?? []), analystPrompt];
 
@@ -1074,9 +1124,17 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
       log(`[iter ${iteration}] WARN: Analyst did not produce a brief in tasks/briefs/`);
     }
 
-    // Analyst wrote convergence marker → brief is ready, delete marker and proceed to Architect
+    // Analyst wrote convergence marker → brief ready, or (review pass) final sign-off
     if (fs.existsSync(convergenceFile)) {
+      const role = readConvergenceRole(convergenceFile);
       fs.unlinkSync(convergenceFile);
+
+      if (architectTurnCompleted && role === "analyst") {
+        converged = true;
+        reason = "analyst final sign-off";
+        break;
+      }
+
       log(`[iter ${iteration}] Analyst signalled brief ready, proceeding to Architect`);
     }
 
@@ -1111,9 +1169,15 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
 
     // --- Convergence check --------------------------------------------------
     if (fs.existsSync(convergenceFile)) {
-      converged = true;
-      reason = "convergence file written";
-      break;
+      if (planningOnly) {
+        converged = true;
+        reason = "convergence file written";
+        break;
+      }
+
+      fs.unlinkSync(convergenceFile);
+      architectTurnCompleted = true;
+      log(`[iter ${iteration}] Architect signalled prompts ready, returning to Analyst for final review`);
     }
 
     const currentTodoCount = listFilesMatching(todoDir, /\.md$/).length;
@@ -1126,12 +1190,10 @@ export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResu
       );
     }
 
-    // Implicit convergence: new todo file appeared, no new for-analyst file
+    // Implicit: new todo file appeared, no new for-analyst → return to Analyst for review
     if (!planningOnly && currentTodoCount > prevTodoCount && currentForAnalystCount <= prevForAnalystCount) {
-      converged = true;
-      reason = "implicit convergence (new todo without new for-analyst)";
-      log(`[iter ${iteration}] WARN: implicit convergence detected (no explicit .convergence-${slug} file)`);
-      break;
+      architectTurnCompleted = true;
+      log(`[iter ${iteration}] WARN: Architect produced prompts (no convergence file) — returning to Analyst for final review`);
     }
 
     prevTodoCount = currentTodoCount;
@@ -1445,7 +1507,7 @@ function main(): void {
     else {
       console.error(
         `Unknown command: "${command}"\n` +
-        `Usage: pnpm agent:workflow <status|intake|lint|report|ready|sync|adapters|config|run> [--slug <slug>] [--dir <dir>] [--dry-run]`,
+        `Usage: pnpm agent:workflow <status|intake|lint|report|ready|sync|adapters|config|run> [--slug <slug>] [--dir <dir>] [--dry-run] [--planning-only]`,
       );
       process.exit(1);
     }

@@ -86,5 +86,5 @@
 
 ## MCP Permissions / Audit hardening (Sprint 2)
 
-- [ ] enh-contributors-effective-grants — Visibilità grant effettivi (direct + team-inherited) nella tab Contributors
-- [ ] feat-audit-mcp-token-id — Traccia `mcpTokenId` in ActivityEvent per eventi MCP (actorType `mcp_token`)
+- [x] enh-contributors-effective-grants — Visibilità grant effettivi (direct + team-inherited) nella tab Contributors
+- [x] feat-audit-mcp-token-id — Traccia `mcpTokenId` in ActivityEvent per eventi MCP (actorType `mcp_token`)

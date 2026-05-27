@@ -33,4 +33,4 @@ Suggested filename:
 
 ## Deadline Or Blocking Context
 
-Delete this file after the Analyst response is converted into a brief, spec update, Worker prompt, or explicit decision.
+Delete this file after the Analyst response is converted into a brief, proposal, spec update, Worker prompt, or explicit decision.

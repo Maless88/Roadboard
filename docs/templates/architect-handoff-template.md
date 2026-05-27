@@ -1,6 +1,16 @@
 # Architect Handoff Template
 
-Use this when asking Architect to convert Analyst planning material into verified Worker prompts.
+Use this when asking Architect to convert Analyst planning material into a verified proposal or Worker prompts.
+
+Set the mode explicitly:
+
+- `planning-only`: Architect writes proposals/questions only; no `tasks/todo/`.
+- `worker-prompt`: Architect may create verified Worker prompts in `tasks/todo/`.
+
+## Mode
+
+- [ ] planning-only
+- [ ] worker-prompt
 
 ## Source Brief
 
@@ -33,6 +43,7 @@ Use this when asking Architect to convert Analyst planning material into verifie
 
 - [ ] Brief claims verified against repo state.
 - [ ] RoadBoard and filesystem task queue are aligned.
-- [ ] Worker prompt files created under `tasks/todo/`.
+- [ ] If planning-only: proposal written under `tasks/proposals/` and no new `tasks/todo/` files created.
+- [ ] If worker-prompt: Worker prompt files created under `tasks/todo/`.
 - [ ] Prompt files include scope, acceptance criteria, notes, verification commands, and `PLAN.md` update rules.
 - [ ] Consumed brief removed or left with a short pending note.

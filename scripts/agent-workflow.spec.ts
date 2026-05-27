@@ -1173,16 +1173,27 @@ describe("runLoop", () => {
     const slug = "conv";
     const h = makeLoopHarness(slug);
     let call = 0;
+    let analystCallCount = 0;
 
     const execFn = (binary: string, _args: string[]): string => {
       call += 1;
 
       if (binary === "fake-analyst") {
+        analystCallCount += 1;
         fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v1.md`),
-          "# brief v1\n",
+          path.join(h.briefsDir, `${slug}-brief-v${analystCallCount}.md`),
+          "# brief\n",
           "utf-8",
         );
+
+        // Second Analyst call (review pass) → final sign-off
+        if (analystCallCount === 2) {
+          fs.writeFileSync(
+            path.join(h.tasksDir, `.convergence-${slug}`),
+            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
+            "utf-8",
+          );
+        }
       }
 
       if (binary === "fake-architect") {
@@ -1193,7 +1204,7 @@ describe("runLoop", () => {
         );
         fs.writeFileSync(
           path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1 }),
+          JSON.stringify({ slug, iteration: 1, role: "architect" }),
           "utf-8",
         );
       }
@@ -1211,10 +1222,11 @@ describe("runLoop", () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(result.iterations).toBe(1);
+    expect(result.iterations).toBe(2);
+    expect(result.reason).toBe("analyst final sign-off");
     expect(result.stoppedByUser).toBe(false);
     expect(result.todoFiles).toContain(`feat-${slug}.md`);
-    expect(call).toBe(2);
+    expect(call).toBe(3); // analyst, architect, analyst-review
 
     fs.rmSync(h.tmpDir, { recursive: true });
   });
@@ -1306,10 +1318,21 @@ describe("runLoop", () => {
   it("converges implicitly when new todo appears without new for-analyst", () => {
     const slug = "implicit";
     const h = makeLoopHarness(slug);
+    let analystCalls = 0;
 
     const execFn = (binary: string): string => {
       if (binary === "fake-analyst") {
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "# brief\n", "utf-8");
+        analystCalls += 1;
+        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "# brief\n", "utf-8");
+
+        // Second call = review pass, sign off
+        if (analystCalls === 2) {
+          fs.writeFileSync(
+            path.join(h.tasksDir, `.convergence-${slug}`),
+            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
+            "utf-8",
+          );
+        }
       }
 
       if (binary === "fake-architect") {
@@ -1330,8 +1353,9 @@ describe("runLoop", () => {
     });
 
     expect(result.converged).toBe(true);
-    expect(result.reason).toContain("implicit");
-    expect(result.iterations).toBe(1);
+    expect(result.reason).toBe("analyst final sign-off");
+    expect(result.iterations).toBe(2);
+    expect(analystCalls).toBe(2);
 
     fs.rmSync(h.tmpDir, { recursive: true });
   });
@@ -1458,17 +1482,31 @@ describe("runLoop", () => {
     const slug = "order";
     const h = makeLoopHarness(slug);
     const order: string[] = [];
+    let analystCalls = 0;
 
     const execFn = (binary: string): string => {
       order.push(binary);
 
       if (binary === "fake-analyst") {
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "b\n", "utf-8");
+        analystCalls += 1;
+        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "b\n", "utf-8");
+
+        if (analystCalls === 2) {
+          fs.writeFileSync(
+            path.join(h.tasksDir, `.convergence-${slug}`),
+            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
+            "utf-8",
+          );
+        }
       }
 
       if (binary === "fake-architect") {
         fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "p\n", "utf-8");
-        fs.writeFileSync(path.join(h.tasksDir, `.convergence-${slug}`), "{}", "utf-8");
+        fs.writeFileSync(
+          path.join(h.tasksDir, `.convergence-${slug}`),
+          JSON.stringify({ slug, iteration: 1, role: "architect" }),
+          "utf-8",
+        );
       }
 
       return "";
@@ -1483,7 +1521,97 @@ describe("runLoop", () => {
       logFn: () => undefined,
     });
 
-    expect(order).toEqual(["fake-analyst", "fake-architect"]);
+    expect(order).toEqual(["fake-analyst", "fake-architect", "fake-analyst"]);
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
+  it("planning-only mode converges on architect sign-off without analyst review pass", () => {
+    const slug = "po-conv";
+    const h = makeLoopHarness(slug);
+    let analystCalls = 0;
+    const proposalsDir = path.join(h.tasksDir, "proposals");
+
+    const execFn = (binary: string): string => {
+      if (binary === "fake-analyst") {
+        analystCalls += 1;
+        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "# brief\n", "utf-8");
+      }
+
+      if (binary === "fake-architect") {
+        fs.mkdirSync(proposalsDir, { recursive: true });
+        fs.writeFileSync(path.join(proposalsDir, `${slug}-proposal-v1.md`), "# proposal\n", "utf-8");
+        fs.writeFileSync(
+          path.join(h.tasksDir, `.convergence-${slug}`),
+          JSON.stringify({ slug, iteration: 1, mode: "planning-only" }),
+          "utf-8",
+        );
+      }
+
+      return "";
+    };
+
+    const result = runLoop(slug, {
+      tasksDir: h.tasksDir,
+      configPath: h.configPath,
+      templatesDir: h.templatesDir,
+      execFn,
+      promptFn: () => "c",
+      planningOnly: true,
+      logFn: () => undefined,
+    });
+
+    expect(result.converged).toBe(true);
+    expect(result.iterations).toBe(1);
+    expect(analystCalls).toBe(1); // Analyst NOT called a second time
+
+    fs.rmSync(h.tmpDir, { recursive: true });
+  });
+
+  it("analyst review pass receives todo listing in prompt", () => {
+    const slug = "review-prompt";
+    const h = makeLoopHarness(slug);
+    let analystCalls = 0;
+    let reviewPrompt = "";
+
+    const execFn = (binary: string, args: string[]): string => {
+      if (binary === "fake-analyst") {
+        analystCalls += 1;
+        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "# brief\n", "utf-8");
+
+        if (analystCalls === 2) {
+          reviewPrompt = args.join("\n");
+          fs.writeFileSync(
+            path.join(h.tasksDir, `.convergence-${slug}`),
+            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
+            "utf-8",
+          );
+        }
+      }
+
+      if (binary === "fake-architect") {
+        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
+        fs.writeFileSync(
+          path.join(h.tasksDir, `.convergence-${slug}`),
+          JSON.stringify({ slug, iteration: 1, role: "architect" }),
+          "utf-8",
+        );
+      }
+
+      return "";
+    };
+
+    runLoop(slug, {
+      tasksDir: h.tasksDir,
+      configPath: h.configPath,
+      templatesDir: h.templatesDir,
+      execFn,
+      promptFn: () => "c",
+      logFn: () => undefined,
+    });
+
+    expect(reviewPrompt).toContain("Review mode");
+    expect(reviewPrompt).toContain(`feat-${slug}.md`);
 
     fs.rmSync(h.tmpDir, { recursive: true });
   });

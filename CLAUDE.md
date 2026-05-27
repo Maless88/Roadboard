@@ -251,6 +251,8 @@ Analyst does NOT:
 - Spawn Worker subagents.
 - Treat unverified planning notes as implementation instructions.
 
+When the developer wants an automated Analyst↔Architect planning loop without Worker prompt creation, use `pnpm agent:workflow run --slug <slug> --planning-only`. In that mode Analyst still writes briefs, but convergence means "ready for Developer review/proposal", not "ready for Worker".
+
 ### 2. Architect
 
 Designs and plans. Does not directly modify source code — implementation happens via Worker subagents.
@@ -260,6 +262,7 @@ Writes and maintains:
 - `PLAN.md` — project milestone tracker.
 - `docs/*.md` — feature specs, architecture notes, ADRs (when present).
 - Analyst review requests in `tasks/for-analyst/` when a non-trivial question or finding needs outside analysis.
+- Formal planning proposals in `tasks/proposals/` when the work needs Developer review before Worker prompt creation.
 - Prompt files for Worker in `tasks/todo/` (see §Cowork).
 
 May read source code (via Serena) to verify state, check symbol locations, or confirm a claim before writing a spec or prompt. When `tasks/briefs/` contains Analyst material, Architect verifies it before converting it into Worker prompts.
@@ -287,6 +290,8 @@ Architect does NOT:
 - State project status without verifying the filesystem first.
 - Present assumptions about third-party products or frameworks as fact — either cite a source or say *"I don't know"*.
 - Copy Analyst briefs into Worker prompts without repository verification.
+
+When operating under `agent:workflow run --planning-only`, Architect MUST NOT create files in `tasks/todo/`; it may write questions to `tasks/for-analyst/`, proposals to `tasks/proposals/`, and a convergence marker when analysis is ready for Developer review.
 
 ### 3. Worker
 
@@ -331,6 +336,7 @@ Every Worker-executable unit of work lives as a markdown prompt file under `task
 tasks/
 ├── briefs/       # Analyst planning briefs, not executable
 ├── for-analyst/  # Architect questions/findings for Analyst review
+├── proposals/    # Architect proposals, not executable
 ├── todo/         # prompts ready for Worker to pick up
 ├── run/          # prompts Worker is currently working on
 └── done/         # prompts Worker has declared complete
@@ -338,9 +344,9 @@ tasks/
 
 `tasks/` is gitignored — prompt files are working artifacts, not source. Use plain `mv` to move files between lifecycle folders.
 
-`tasks/briefs/` and `tasks/for-analyst/` are inboxes, not archives. Delete consumed files after they are converted into the next workflow artifact, unless they are intentionally kept with a short pending note.
+`tasks/briefs/`, `tasks/for-analyst/`, and `tasks/proposals/` are planning artifacts, not Worker lifecycle state. Delete consumed inbox files after they are converted into the next workflow artifact, unless they are intentionally kept with a short pending note.
 
-Files under `tasks/briefs/` and `tasks/for-analyst/` do not map to RoadBoard task status. RoadBoard/filesystem alignment rules apply only to Worker lifecycle folders: `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
+Files under `tasks/briefs/`, `tasks/for-analyst/`, and `tasks/proposals/` do not map to RoadBoard task status. RoadBoard/filesystem alignment rules apply only to Worker lifecycle folders: `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
 
 ### Transitions
 
