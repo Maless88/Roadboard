@@ -169,6 +169,8 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
   if (!session) redirect('/login');
 
+  const isOwner = session.role === 'admin' || project.ownerUserId === session.userId;
+
   const taskDone = snap?.tasks['done'] ?? 0;
   const taskTotal = snap ? Object.values(snap.tasks).reduce((a, b) => a + b, 0) : 0;
 
@@ -287,7 +289,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
       {/* Tab nav + content */}
       <main className="mx-auto max-w-5xl px-8 py-6">
-        <TabNav activeTab={tab} />
+        <TabNav activeTab={tab} isOwner={isOwner} />
 
         {tab === 'tasks' && <TasksTab token={token} projectId={id} dict={dict} />}
         {tab === 'phases' && <PhasesTab token={token} projectId={id} dict={dict} />}
@@ -313,6 +315,13 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
         )}
         {tab === 'contributors' && (
           <ContributorsTabLoader token={token} projectId={id} session={session} project={project} dict={dict} />
+        )}
+        {tab === 'settings' && isOwner && (
+          <EditThumbnailForm
+            projectId={id}
+            initialHomeUrl={project.homeUrl ?? null}
+            initialThumbnailUrl={project.thumbnailUrl ?? null}
+          />
         )}
       </main>
     </AppShell>
@@ -557,7 +566,7 @@ async function ContributorsTabLoader({
   token: string;
   projectId: string;
   session: { userId: string; role: string };
-  project: { ownerUserId: string | null; ownerTeamId: string; homeUrl?: string | null; thumbnailUrl?: string | null };
+  project: { ownerUserId: string | null; ownerTeamId: string };
   dict: Dictionary;
 }) {
 
@@ -608,13 +617,6 @@ async function ContributorsTabLoader({
           effectiveContributors={effectiveContributors}
         />
       </div>
-      {isOwner && (
-        <EditThumbnailForm
-          projectId={projectId}
-          initialHomeUrl={project.homeUrl ?? null}
-          initialThumbnailUrl={project.thumbnailUrl ?? null}
-        />
-      )}
     </div>
   );
 }
