@@ -41,6 +41,7 @@ export const enDict: Dictionary = {
     activity: 'Activity',
     contributors: 'Contributors',
     audit: 'Audit',
+    settings: 'Settings',
   },
   attribution: {
     createdBy: (name: string) => `Created by ${name}`,

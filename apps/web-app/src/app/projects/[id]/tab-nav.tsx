@@ -7,10 +7,11 @@ import { useDict } from '@/lib/i18n/locale-context';
 
 interface TabNavProps {
   activeTab: string;
+  isOwner?: boolean;
 }
 
 
-export function TabNav({ activeTab }: TabNavProps) {
+export function TabNav({ activeTab, isOwner = false }: TabNavProps) {
 
   const dict = useDict();
   const pathname = usePathname();
@@ -23,7 +24,8 @@ export function TabNav({ activeTab }: TabNavProps) {
     { key: 'codeflow', label: dict.tabs.codeflow },
     { key: 'activity', label: dict.tabs.activity },
     { key: 'contributors', label: dict.tabs.contributors },
-  ] as const;
+    ...(isOwner ? [{ key: 'settings', label: dict.tabs.settings }] : []),
+  ];
 
   return (
     <nav className="flex gap-1 border-b mb-6" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>

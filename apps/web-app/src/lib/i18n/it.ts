@@ -39,6 +39,7 @@ export const itDict = {
     activity: 'Attività',
     contributors: 'Contributors',
     audit: 'Audit',
+    settings: 'Impostazioni',
   },
   attribution: {
     createdBy: (name: string) => `Creato da ${name}`,
