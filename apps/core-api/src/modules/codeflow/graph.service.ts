@@ -610,7 +610,9 @@ ORDER BY id`;
            n.ownerUserId = $ownerUserId,
            n.ownerTeamId = $ownerTeamId,
            n.isManual = $isManual,
-           n.isCurrent = $isCurrent`,
+           n.isCurrent = $isCurrent,
+           n.createdAt = $createdAt,
+           n.updatedAt = $updatedAt`,
       {
         id: node.id,
         projectId: node.projectId,
@@ -624,6 +626,8 @@ ORDER BY id`;
         ownerTeamId: node.ownerTeamId,
         isManual: node.isManual,
         isCurrent: node.isCurrent,
+        createdAt: node.createdAt.toISOString(),
+        updatedAt: node.updatedAt.toISOString(),
       },
       { mode: 'write' },
     );
@@ -738,7 +742,8 @@ ORDER BY id`;
            r.weight = $weight,
            r.edgeType = $edgeType,
            r.isManual = $isManual,
-           r.isCurrent = $isCurrent
+           r.isCurrent = $isCurrent,
+           r.createdAt = $createdAt
        RETURN count(r) AS created`,
       {
         id: edge.id,
@@ -749,6 +754,7 @@ ORDER BY id`;
         edgeType: edge.edgeType,
         isManual: edge.isManual,
         isCurrent: edge.isCurrent,
+        createdAt: edge.createdAt.toISOString(),
       },
       { mode: 'write' },
     );
@@ -851,7 +857,9 @@ ORDER BY id`;
            l.entityType = $entityType,
            l.entityId = $entityId,
            l.linkType = $linkType,
-           l.note = $note
+           l.note = $note,
+           l.createdByUserId = $createdByUserId,
+           l.createdAt = $createdAt
        WITH l
        MATCH (n {id: $nodeId, projectId: $projectId})
        MERGE (l)-[:LINKED_TO]->(n)`,
@@ -863,6 +871,8 @@ ORDER BY id`;
         entityId: link.entityId,
         linkType: link.linkType,
         note: link.note,
+        createdByUserId: link.createdByUserId,
+        createdAt: link.createdAt.toISOString(),
       },
       { mode: 'write' },
     );
@@ -941,7 +951,10 @@ ORDER BY id`;
       `MERGE (a:Annotation {id: $id})
        SET a.projectId = $projectId,
            a.nodeId = $nodeId,
-           a.content = $content
+           a.content = $content,
+           a.createdByUserId = $createdByUserId,
+           a.createdAt = $createdAt,
+           a.updatedAt = $updatedAt
        WITH a
        MATCH (n {id: $nodeId, projectId: $projectId})
        MERGE (a)-[:ANNOTATES]->(n)`,
@@ -950,6 +963,9 @@ ORDER BY id`;
         projectId: ann.projectId,
         nodeId: ann.nodeId,
         content: ann.content,
+        createdByUserId: ann.createdByUserId,
+        createdAt: ann.createdAt.toISOString(),
+        updatedAt: ann.updatedAt.toISOString(),
       },
       { mode: 'write' },
     );
