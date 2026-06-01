@@ -8,8 +8,47 @@ import {
   createDomainGroup,
   deleteArchitectureLink,
   deleteDomainGroup,
+  listDecisions,
+  listMemory,
+  listTasks,
   updateDomainGroup,
 } from '@/lib/api';
+
+
+export interface EntityOption {
+  id: string;
+  title: string;
+}
+
+
+export async function listEntityOptionsAction(
+  projectId: string,
+  entityType: string,
+): Promise<{ items?: EntityOption[]; error?: string }> {
+
+  const token = await getToken();
+
+  if (!token) return { error: 'unauthorized' };
+
+  try {
+    let items: EntityOption[] = [];
+
+    if (entityType === 'task') {
+      const tasks = await listTasks(token, projectId);
+      items = tasks.map((t) => ({ id: t.id, title: t.title }));
+    } else if (entityType === 'decision') {
+      const decisions = await listDecisions(token, projectId);
+      items = decisions.map((d) => ({ id: d.id, title: d.title }));
+    } else if (entityType === 'memory_entry') {
+      const entries = await listMemory(token, projectId);
+      items = entries.map((m) => ({ id: m.id, title: m.title }));
+    }
+
+    return { items };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : 'unknown' };
+  }
+}
 
 
 interface ActionResult {
