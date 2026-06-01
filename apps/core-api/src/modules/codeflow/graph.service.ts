@@ -1063,43 +1063,44 @@ ORDER BY id`;
       throw new Error('GraphDbClient not available');
     }
 
+    // Use explicit projections — RETURN n gives a Neo4j Node object (properties
+    // under .properties), not a plain record, so { ...n } would lose all fields.
     const cypher = `MATCH (n {id: $id})
 WHERE NOT n:Link AND NOT n:Annotation
 OPTIONAL MATCH (l:Link)-[:LINKED_TO]->(n)
 WITH n, collect(DISTINCT l) AS links
 OPTIONAL MATCH (a:Annotation)-[:ANNOTATES]->(n)
 WITH n, links, collect(DISTINCT a) AS annotations
-RETURN n, links, annotations
+RETURN
+  n.id AS id,
+  n.projectId AS projectId,
+  n.type AS type,
+  n.name AS name,
+  n.path AS path,
+  n.domainGroup AS domainGroup,
+  n.description AS description,
+  n.metadata AS metadata,
+  n.ownerUserId AS ownerUserId,
+  n.ownerTeamId AS ownerTeamId,
+  n.isManual AS isManual,
+  n.isCurrent AS isCurrent,
+  [l IN links | {
+    id: l.id, projectId: l.projectId, nodeId: l.nodeId,
+    entityType: l.entityType, entityId: l.entityId,
+    linkType: l.linkType, note: l.note
+  }] AS links,
+  [a IN annotations | {
+    id: a.id, projectId: a.projectId, nodeId: a.nodeId, content: a.content
+  }] AS annotations
 LIMIT 1`;
 
-    const records = await this.graph.run<{
-      n: Record<string, unknown> | null;
-      links: Array<Record<string, unknown>>;
-      annotations: Array<Record<string, unknown>>;
-    }>(cypher, { id }, { mode: 'read' });
+    const records = await this.graph.run<Record<string, unknown>>(
+      cypher, { id }, { mode: 'read' },
+    );
 
-    if (records.length === 0 || !records[0].n) return null;
+    if (records.length === 0 || !records[0].id) return null;
 
-    const { n, links, annotations } = records[0];
-
-    return {
-      ...n,
-      annotations: (annotations ?? []).map((a) => ({
-        id: a.id,
-        projectId: a.projectId,
-        nodeId: a.nodeId,
-        content: a.content,
-      })),
-      links: (links ?? []).map((l) => ({
-        id: l.id,
-        projectId: l.projectId,
-        nodeId: l.nodeId,
-        entityType: l.entityType,
-        entityId: l.entityId,
-        linkType: l.linkType,
-        note: l.note ?? null,
-      })),
-    };
+    return records[0];
   }
 
 
