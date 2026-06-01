@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { ArchitectureNodeDetail, ArchitectureLink } from '@/lib/api';
 import { useDict } from '@/lib/i18n/locale-context';
-import { createNodeLinkAction, deleteNodeLinkAction } from './actions';
+import { createNodeLinkAction, deleteNodeLinkAction, listEntityOptionsAction } from './actions';
+import type { EntityOption } from './actions';
 
 
 const ENTITY_TYPES = ['task', 'decision', 'milestone', 'memory_entry'] as const;
@@ -322,6 +323,32 @@ function CreateLinkForm({ projectId, nodeId }: { projectId: string; nodeId: stri
   const [note, setNote] = useState('');
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [entityOptions, setEntityOptions] = useState<EntityOption[]>([]);
+  const [loadingEntities, setLoadingEntities] = useState(false);
+
+  useEffect(() => {
+
+    if (entityType === 'milestone') {
+      setEntityOptions([]);
+      setEntityId('');
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingEntities(true);
+    setEntityId('');
+
+    void (async () => {
+      const res = await listEntityOptionsAction(projectId, entityType);
+
+      if (!cancelled) {
+        setEntityOptions(res.items ?? []);
+        setLoadingEntities(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [entityType, projectId]);
 
   async function handleSubmit(e: React.FormEvent) {
 
@@ -370,7 +397,33 @@ function CreateLinkForm({ projectId, nodeId }: { projectId: string; nodeId: stri
         />
       </div>
 
-      <Input label={dict.codeflow.drawer.entityId} value={entityId} onChange={setEntityId} placeholder="CUID" />
+      {entityType === 'milestone' ? (
+        <Input label={dict.codeflow.drawer.entityId} value={entityId} onChange={setEntityId} placeholder="CUID" />
+      ) : (
+        <label className="block">
+          <span className="text-xs text-gray-500 mb-0.5 block">{dict.codeflow.drawer.entityId}</span>
+          <select
+            value={entityId}
+            onChange={(e) => setEntityId(e.target.value)}
+            disabled={loadingEntities}
+            className="w-full rounded-md px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-50"
+            style={{ background: 'var(--surface-overlay)', border: '1px solid var(--border)' }}
+          >
+            <option value="" style={{ background: 'var(--surface-overlay)' }}>
+              {loadingEntities
+                ? 'Caricamento…'
+                : entityOptions.length === 0
+                  ? 'Nessun elemento trovato'
+                  : '— seleziona —'}
+            </option>
+            {entityOptions.map((o) => (
+              <option key={o.id} value={o.id} style={{ background: 'var(--surface-overlay)' }}>
+                {o.title}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <Input label={dict.codeflow.drawer.note} value={note} onChange={setNote} />
 
       <button
