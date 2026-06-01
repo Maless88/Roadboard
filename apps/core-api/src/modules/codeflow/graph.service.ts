@@ -1065,12 +1065,21 @@ ORDER BY id`;
 
     // Use explicit projections — RETURN n gives a Neo4j Node object (properties
     // under .properties), not a plain record, so { ...n } would lose all fields.
+    // collect({...}) in WITH is supported; list comprehensions are not in Memgraph 2.18.
     const cypher = `MATCH (n {id: $id})
 WHERE NOT n:Link AND NOT n:Annotation
 OPTIONAL MATCH (l:Link)-[:LINKED_TO]->(n)
-WITH n, collect(DISTINCT l) AS links
+WITH n,
+  collect(DISTINCT {
+    id: l.id, projectId: l.projectId, nodeId: l.nodeId,
+    entityType: l.entityType, entityId: l.entityId,
+    linkType: l.linkType, note: l.note
+  }) AS links
 OPTIONAL MATCH (a:Annotation)-[:ANNOTATES]->(n)
-WITH n, links, collect(DISTINCT a) AS annotations
+WITH n, links,
+  collect(DISTINCT {
+    id: a.id, projectId: a.projectId, nodeId: a.nodeId, content: a.content
+  }) AS annotations
 RETURN
   n.id AS id,
   n.projectId AS projectId,
@@ -1084,14 +1093,8 @@ RETURN
   n.ownerTeamId AS ownerTeamId,
   n.isManual AS isManual,
   n.isCurrent AS isCurrent,
-  [l IN links | {
-    id: l.id, projectId: l.projectId, nodeId: l.nodeId,
-    entityType: l.entityType, entityId: l.entityId,
-    linkType: l.linkType, note: l.note
-  }] AS links,
-  [a IN annotations | {
-    id: a.id, projectId: a.projectId, nodeId: a.nodeId, content: a.content
-  }] AS annotations
+  links,
+  annotations
 LIMIT 1`;
 
     const records = await this.graph.run<Record<string, unknown>>(
