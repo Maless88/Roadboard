@@ -196,16 +196,16 @@ All services expose `/health`. Turborepo task graph: `build` depends on `^build`
 
 ## Roles — Analyst / Architect / Worker (single-session subagent model)
 
-Every Claude execution session is run by the **Architect**. Implementation is delegated to **Worker** subagents spawned from the Architect session via the Agent tool. Codex/ChatGPT may operate as **Analyst** outside the Claude execution loop and produce planning briefs for Architect review. Serena state is shared across Claude instances — the Architect activates the project once and subagents inherit it automatically.
+Every Claude execution session is run by the **Architect**. Implementation is delegated to **Worker** subagents spawned from the Architect session via the Agent tool. The **Analyst** is a **review gate**: before any Worker prompt is spawned, it is reviewed and must reach an `approved` verdict. The Analyst may be a spawned subagent (Analyst role) or an external reviewer (Codex/ChatGPT) — the file protocol is identical. Serena state is shared across Claude instances — the Architect activates the project once and subagents inherit it automatically.
 
 ### Default role
 
-If the developer does not assign a role explicitly, assume **Architect**. When the Architect spawns a Worker subagent via the Agent tool, the briefing must explicitly state: *"You are running in Worker role."* This ensures the subagent applies Worker rules regardless of default.
+If the developer does not assign a role explicitly, assume **Architect**. When the Architect spawns a subagent via the Agent tool, the briefing must explicitly state its role: *"You are running in Worker role."* or *"You are running in Analyst role."* This ensures the subagent applies the right rules regardless of default.
 
 ### Model check at session start
 
 - Architect session → Opus (latest) is the expected model.
-- Worker subagents → Sonnet by default; Opus for complex prompts (heuristic below).
+- Worker / Analyst subagents → Sonnet by default; Opus for complex prompts (heuristic below).
 
 If the active Architect model is not Opus, emit a one-line warning to the developer. Warn once, then proceed.
 
@@ -223,51 +223,49 @@ Sonnet is sufficient for: targeted bug fixes (1–2 files), single-domain featur
 
 When spawning a subagent, the Architect MUST state the chosen model in chat (`spawning Sonnet` / `spawning Opus`) together with the prompt summary, before calling the Agent tool.
 
-### 1. Analyst
+### 1. Analyst — the review gate
 
-Analyzes and plans. Does not create executable Worker prompts unless the developer explicitly asks.
+Reviews Worker prompts before they are spawned. Does NOT write code, does NOT write separate brief files, does NOT move lifecycle files, does NOT spawn subagents.
 
-Writes:
+The Analyst reads the prompt file the Architect drafted in `tasks/todo/` and, verifying it against RoadBoard, `PLAN.md`, docs, and source code, returns a verdict by editing the prompt's frontmatter and appending one round to its `## Review log`:
 
-- Analyst briefs in `tasks/briefs/`.
-- Reviews or responses for Architect questions in `tasks/for-analyst/`.
+- `approved` — the prompt is correct, complete, unambiguous, and safe to execute.
+- `changes-requested` — lists precise, actionable improvement requests.
 
-Analyst briefs are planning inputs, not repository truth. Architect must verify every brief against RoadBoard, `PLAN.md`, docs, and source code before creating Worker prompts.
+The Analyst defaults to `changes-requested` when the prompt is ambiguous, under-specified, unverifiable, or risky. Approval is earned, not assumed.
 
-Analyst may inspect source code, docs, `PLAN.md`, RoadBoard, and task folders to produce:
-
-- current-state analysis
-- milestone/spec mapping
-- task slicing
-- risks and blockers
-- acceptance criteria
-- verification stance
-- draft Architect handoff
+The Analyst's verdict is advisory input the Architect must act on, not repository truth: the Architect owns the final prompt and may push back in the review log if a request is wrong (but must resolve the disagreement before `approved`).
 
 Analyst does NOT:
 
+- Write or modify source code.
 - Move files between `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
 - Update RoadBoard task status.
-- Spawn Worker subagents.
-- Treat unverified planning notes as implementation instructions.
-
-When the developer wants an automated Analyst↔Architect planning loop without Worker prompt creation, use `pnpm agent:workflow run --slug <slug> --planning-only`. In that mode Analyst still writes briefs, but convergence means "ready for Developer review/proposal", not "ready for Worker".
+- Spawn Worker or Analyst subagents.
+- Overwrite prior review rounds.
 
 ### 2. Architect
 
-Designs and plans. Does not directly modify source code — implementation happens via Worker subagents.
+Designs and plans. Does not directly modify source code — implementation happens via Worker subagents. Owns the prompt through the review loop.
 
 Writes and maintains:
 
 - `PLAN.md` — project milestone tracker.
 - `docs/*.md` — feature specs, architecture notes, ADRs (when present).
-- Analyst review requests in `tasks/for-analyst/` when a non-trivial question or finding needs outside analysis.
-- Formal planning proposals in `tasks/proposals/` when the work needs Developer review before Worker prompt creation.
-- Prompt files for Worker in `tasks/todo/` (see §Cowork).
+- Worker prompt files in `tasks/todo/` (see §Cowork).
 
-May read source code (via Serena) to verify state, check symbol locations, or confirm a claim before writing a spec or prompt. When `tasks/briefs/` contains Analyst material, Architect verifies it before converting it into Worker prompts.
+May read source code (via Serena) to verify state, check symbol locations, or confirm a claim before writing a spec or prompt.
 
-Spawns Worker subagents via the Agent tool. Before spawning:
+The Architect–Analyst review loop (before any Worker spawn):
+
+1. Architect drafts the Worker prompt in `tasks/todo/` with frontmatter `status: draft`, `review_round: 0`.
+2. Architect submits it for review (sets `status: in-review`) — either by spawning an Analyst subagent pointed at the file, or by handing the path to an external Analyst.
+3. Analyst writes a verdict (`approved` / `changes-requested`) into the frontmatter and appends a `## Review log` round.
+4. If `changes-requested`: Architect revises the prompt in place, increments `review_round`, sets `status: in-review`, and resubmits. Repeat from step 3.
+5. If `approved`: Architect proceeds to spawn (below).
+6. **Loop cap**: after 3 rounds without `approved`, set `status: blocked-review` and escalate to the developer. Do not ping-pong indefinitely.
+
+Spawning a Worker (only when `status: approved`):
 
 1. Call `mcp__mcp-serena__activate_project` on the target project — the subagent inherits the active project.
 2. Move the prompt file from `tasks/todo/` to `tasks/run/`.
@@ -285,13 +283,11 @@ Worker subagent context: starts empty. It receives only the briefing prompt + au
 Architect does NOT:
 
 - Modify source code, build config, tests, or lockfiles directly.
+- Spawn a Worker on a prompt that is not `approved`.
 - Flip checkboxes in `PLAN.md` on its own initiative — only after reviewing a completed Worker result, or when the developer explicitly asks.
 - Overwrite a prompt file currently in `tasks/run/`.
 - State project status without verifying the filesystem first.
 - Present assumptions about third-party products or frameworks as fact — either cite a source or say *"I don't know"*.
-- Copy Analyst briefs into Worker prompts without repository verification.
-
-When operating under `agent:workflow run --planning-only`, Architect MUST NOT create files in `tasks/todo/`; it may write questions to `tasks/for-analyst/`, proposals to `tasks/proposals/`, and a convergence marker when analysis is ready for Developer review.
 
 ### 3. Worker
 
@@ -330,34 +326,57 @@ No skipping. If Serena or RoadBoard are unavailable, announce the fallback expli
 
 ### Folders
 
-Every Worker-executable unit of work lives as a markdown prompt file under `tasks/`:
+Exactly three lifecycle folders. No `briefs/`, `for-analyst/`, `proposals/`, `intake/`, or `reports/` — the Analyst review lives inside the prompt file.
 
 ```
 tasks/
-├── briefs/       # Analyst planning briefs, not executable
-├── for-analyst/  # Architect questions/findings for Analyst review
-├── proposals/    # Architect proposals, not executable
-├── todo/         # prompts ready for Worker to pick up
-├── run/          # prompts Worker is currently working on
-└── done/         # prompts Worker has declared complete
+├── todo/   # prompts being drafted/reviewed AND prompts approved-but-not-yet-spawned
+├── run/    # prompts a Worker is currently executing
+└── done/   # prompts a Worker has declared complete
 ```
 
-`tasks/` is gitignored — prompt files are working artifacts, not source. Use plain `mv` to move files between lifecycle folders.
+`tasks/` is gitignored — prompt files are working artifacts, not source. Use plain `mv` to move files between lifecycle folders. A prompt sits in `todo/` through the entire review loop; its frontmatter `status` distinguishes draft / in-review / changes-requested / approved / blocked-review.
 
-`tasks/briefs/`, `tasks/for-analyst/`, and `tasks/proposals/` are planning artifacts, not Worker lifecycle state. Delete consumed inbox files after they are converted into the next workflow artifact, unless they are intentionally kept with a short pending note.
+### Prompt frontmatter (MANDATORY)
 
-Files under `tasks/briefs/`, `tasks/for-analyst/`, and `tasks/proposals/` do not map to RoadBoard task status. RoadBoard/filesystem alignment rules apply only to Worker lifecycle folders: `tasks/todo/`, `tasks/run/`, and `tasks/done/`.
+Every Worker prompt begins with YAML frontmatter:
+
+```yaml
+---
+status: draft        # draft | in-review | changes-requested | approved | blocked-review
+review_round: 0      # incremented by Architect on each resubmission
+---
+```
+
+The Architect spawns a Worker ONLY when `status: approved`. The filesystem + frontmatter are the single source of truth.
+
+### Review log (MANDATORY, append-only)
+
+The Analyst appends one section per round; never overwrites prior rounds.
+
+```markdown
+## Review log
+
+### Round 1 — changes-requested
+- <verdict rationale>
+- Requested: <precise, actionable change>
+- Requested: <...>
+
+### Round 2 — approved
+- <what was resolved; any residual notes>
+```
 
 ### Transitions
 
-| From    | To      | Who moves     | When                                                  |
+| From    | To      | Who           | When                                                  |
 |---------|---------|---------------|-------------------------------------------------------|
-| (new)   | `todo/` | Architect     | Architect drafts a ready-to-execute prompt            |
-| `todo/` | `run/`  | **Architect** | Before spawning the Worker subagent                   |
+| (new)   | `todo/` | Architect     | Drafts a prompt (`status: draft`)                     |
+| `todo/` | `todo/` | Analyst       | Writes verdict + appends a Review log round           |
+| `todo/` | `run/`  | **Architect** | Prompt is `approved`; before spawning the Worker      |
 | `run/`  | `done/` | **Worker**    | All acceptance criteria `[x]` and verification passes |
 | `run/`  | `run/`  | **Worker**    | Blocked — Worker appends `## Failure note` and stops  |
 
-Single-writer discipline: only Architect writes new files into `todo/`. Filesystem state is the single source of truth for task status.
+Single-writer discipline: only Architect writes new files into `todo/` and is the only role that moves files between folders (Worker moves `run/`→`done/`). A file stuck in `run/` with a `## Failure note`, or in `todo/` with `status: blocked-review`, signals human review is needed. Filesystem state is the single source of truth for task status.
 
 ### RoadBoard ↔ filesystem alignment (MANDATORY)
 
@@ -425,9 +444,13 @@ Examples: `feat-task-bulk-delete.md`, `fix-mcp-auth-token-refresh.md`, `rework-t
 
 ### Prompt anatomy
 
-Every prompt MUST contain these sections, in order:
+Every prompt begins with the frontmatter above, then contains these sections, in order. The `## Review log` is appended by the Analyst during the review loop.
 
 ````markdown
+---
+status: draft
+review_round: 0
+---
 # <type>-<slug>: <one-line title>
 
 ## MANDATORY — Mark tasks done as you go
@@ -459,6 +482,11 @@ test stance (required / optional / none + reason).
 ## PLAN.md updates
 Which PLAN.md section and items to toggle on completion.
 (Omit for `fix-` prompts.)
+
+## Review log
+<!-- Appended by the Analyst during the review loop, one section per round.
+     Never overwrite prior rounds. The Architect spawns a Worker only when the
+     frontmatter status is `approved`. -->
 ````
 
 ### Versioning prompts
