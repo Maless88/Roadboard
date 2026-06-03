@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 /**
- * agent-workflow.ts — CLI for the AI Workflow pipeline.
- * Subcommands: status, intake, lint, report, ready, sync, run, adapters
+ * agent-workflow.ts — CLI for the AI Workflow pipeline (Analyst review-gate model).
+ *
+ * Paradigm: exactly three lifecycle folders — tasks/todo/, tasks/run/, tasks/done/.
+ * The Analyst review happens INSIDE the prompt file via YAML frontmatter
+ * (status, review_round) and an append-only "## Review log" section.
+ * A prompt is spawnable only when `status: approved`.
+ *
+ * Subcommands: status, lint, ready, sync, review, run, adapters, config
  * Run via: pnpm agent:workflow <command> [options]
  */
 
@@ -18,9 +24,20 @@ export function readPackageVersion(): string {
   return pkg.version;
 }
 const TASK_LIST_PATH = path.join(ROOT, "TASK_LIST.md");
-const TEMPLATES_DIR = path.join(ROOT, "docs", "templates");
-const INTAKE_TEMPLATE = path.join(TEMPLATES_DIR, "developer-intake-template.md");
-const REPORT_TEMPLATE = path.join(TEMPLATES_DIR, "final-report-template.md");
+
+/** The three lifecycle folders — the single source of truth for task state. */
+const LIFECYCLE_FOLDERS = ["todo", "run", "done"] as const;
+
+/** Valid frontmatter status values. A prompt is spawnable only when `approved`. */
+export const PROMPT_STATUSES = [
+  "draft",
+  "in-review",
+  "changes-requested",
+  "approved",
+  "blocked-review",
+] as const;
+
+export type PromptStatus = (typeof PROMPT_STATUSES)[number];
 
 export interface FolderCount {
   folder: string;
@@ -31,21 +48,16 @@ export interface StatusResult {
   counts: FolderCount[];
 }
 
-export interface IntakeResult {
-  filePath: string;
-  slug: string;
+export interface PromptFrontmatter {
+  status: PromptStatus | null;
+  reviewRound: number | null;
+  raw: Record<string, string>;
 }
 
-export interface LintResult {
-  ok: boolean;
-  issues: number;
-  message: string;
-}
-
-export interface FileLintResult {
-  file: string;
-  errors: string[];
-  warnings: string[];
+export interface ParsedPrompt {
+  frontmatter: PromptFrontmatter;
+  body: string;
+  hasFrontmatter: boolean;
 }
 
 export interface PromptLintResult {
@@ -53,13 +65,29 @@ export interface PromptLintResult {
   warnings: string[];
 }
 
-export interface ReportResult {
-  filePath: string;
-  slug: string;
+export interface FileLintResult {
+  file: string;
+  status: PromptStatus | null;
+  spawnable: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface LintResult {
+  ok: boolean;
+  issues: number;
+  message: string;
+  files: FileLintResult[];
+}
+
+export interface ReadyEntry {
+  file: string;
+  status: PromptStatus | null;
 }
 
 export interface ReadyResult {
-  files: string[];
+  approved: ReadyEntry[];
+  pending: ReadyEntry[];
 }
 
 export interface StaleCheckResult {
@@ -135,17 +163,6 @@ export interface AdaptersRunResult {
   outputPath: string;
 }
 
-const TRACKED_FOLDERS = [
-  "intake",
-  "proposals",
-  "briefs",
-  "for-analyst",
-  "todo",
-  "run",
-  "done",
-  "reports",
-];
-
 /**
  * Counts .md files in a tasks subdirectory.
  * Returns 0 if the folder does not exist.
@@ -161,11 +178,11 @@ export function countFilesInFolder(folderPath: string): number {
 }
 
 /**
- * Returns per-folder file counts for all tracked task folders.
+ * Returns per-folder file counts for the three lifecycle folders.
  * Missing folders report count = 0.
  */
 export function getStatus(): StatusResult {
-  const counts = TRACKED_FOLDERS.map((folder) => ({
+  const counts = LIFECYCLE_FOLDERS.map((folder) => ({
     folder,
     count: countFilesInFolder(path.join(TASKS_DIR, folder)),
   }));
@@ -173,75 +190,149 @@ export function getStatus(): StatusResult {
   return { counts };
 }
 
+// ---------------------------------------------------------------------------
+// Prompt parsing — frontmatter + body
+// ---------------------------------------------------------------------------
+
 /**
- * Creates tasks/intake/<slug>-intake.md from the developer-intake-template.
- * Creates tasks/intake/ if it does not exist.
- * Throws if the template is missing.
+ * Parses YAML frontmatter (a leading `---` ... `---` block) plus the body.
+ * Only flat `key: value` pairs are supported — enough for status/review_round.
  */
-export function runIntake(slug: string): IntakeResult {
-  if (!slug || slug.trim() === "") {
-    throw new Error("--slug is required for intake command");
+export function parsePrompt(content: string): ParsedPrompt {
+  const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+
+  if (!fmMatch) {
+    return {
+      frontmatter: { status: null, reviewRound: null, raw: {} },
+      body: content,
+      hasFrontmatter: false,
+    };
   }
 
-  if (!fs.existsSync(INTAKE_TEMPLATE)) {
-    throw new Error(`Intake template not found: ${INTAKE_TEMPLATE}`);
+  const raw: Record<string, string> = {};
+  const fmBlock = fmMatch[1];
+
+  for (const line of fmBlock.split(/\r?\n/)) {
+    const kv = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
+
+    if (kv) {
+      // Strip inline comments and surrounding quotes
+      const value = kv[2].replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "").trim();
+      raw[kv[1]] = value;
+    }
   }
 
-  const intakeDir = path.join(TASKS_DIR, "intake");
-  fs.mkdirSync(intakeDir, { recursive: true });
+  const statusRaw = raw["status"] ?? null;
+  const status =
+    statusRaw !== null && (PROMPT_STATUSES as readonly string[]).includes(statusRaw)
+      ? (statusRaw as PromptStatus)
+      : null;
 
-  const destPath = path.join(intakeDir, `${slug}-intake.md`);
-  const templateContent = fs.readFileSync(INTAKE_TEMPLATE, "utf-8");
-  fs.writeFileSync(destPath, templateContent, "utf-8");
+  const roundRaw = raw["review_round"];
+  const reviewRound =
+    roundRaw !== undefined && /^\d+$/.test(roundRaw) ? Number.parseInt(roundRaw, 10) : null;
 
-  return { filePath: destPath, slug };
+  return {
+    frontmatter: { status, reviewRound, raw },
+    body: fmMatch[2],
+    hasFrontmatter: true,
+  };
 }
 
-const REQUIRED_SECTIONS = [
-  "## Context",
-  "## Scope",
-  "## Acceptance Criteria",
-  "## Notes",
-  "## PLAN.md Updates",
-];
+const REQUIRED_SECTIONS = ["## Context", "## Scope", "## Acceptance criteria"];
 
 /**
- * Pure lint function — validates prompt markdown content.
- * Returns errors for missing required sections / checklist items,
- * and warnings for missing RoadBoard task references.
+ * Pure lint function — validates a prompt against the review-gate shape.
+ *
+ * Errors:
+ *   - missing or malformed frontmatter
+ *   - missing / invalid `status`
+ *   - missing / invalid `review_round`
+ *   - missing required sections (Context, Scope, Acceptance criteria)
+ *   - empty or missing checklist in Acceptance criteria
+ *   - malformed Review log (present but with no recognisable round)
+ *
+ * Warnings:
+ *   - no RoadBoard task reference in Context
+ *   - no Review log yet while status is past `draft`
  */
 export function lintPromptContent(content: string): PromptLintResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
+  const parsed = parsePrompt(content);
+
+  // --- Frontmatter -----------------------------------------------------------
+  if (!parsed.hasFrontmatter) {
+    errors.push("missing YAML frontmatter (--- ... ---)");
+  }
+
+  if (parsed.frontmatter.raw["status"] === undefined) {
+    errors.push("missing frontmatter field: status");
+  }
+
+  else if (parsed.frontmatter.status === null) {
+    errors.push(
+      `invalid frontmatter status: "${parsed.frontmatter.raw["status"]}" ` +
+      `(expected one of: ${PROMPT_STATUSES.join(", ")})`,
+    );
+  }
+
+  if (parsed.frontmatter.raw["review_round"] === undefined) {
+    errors.push("missing frontmatter field: review_round");
+  }
+
+  else if (parsed.frontmatter.reviewRound === null) {
+    errors.push(
+      `invalid frontmatter review_round: "${parsed.frontmatter.raw["review_round"]}" (expected a non-negative integer)`,
+    );
+  }
+
+  // --- Required sections -----------------------------------------------------
   for (const section of REQUIRED_SECTIONS) {
-    const pattern = new RegExp(section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    const pattern = new RegExp("^" + section.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "im");
 
     if (!pattern.test(content)) {
       errors.push(`missing section: ${section}`);
     }
   }
 
-  // Check for at least one checklist item inside the Acceptance Criteria section
-  const acMatch = content.match(/## Acceptance Criteria\s*([\s\S]*?)(?=\n## |\s*$)/i);
+  // At least one checklist item inside Acceptance criteria
+  const acMatch = content.match(/## Acceptance criteria\s*([\s\S]*?)(?=\n## |\s*$)/i);
 
   if (acMatch) {
     const acBlock = acMatch[1];
 
     if (!/- \[[ x]\]/i.test(acBlock)) {
-      errors.push("missing checklist item in ## Acceptance Criteria");
+      errors.push("missing checklist item in ## Acceptance criteria");
     }
   }
 
-  // Warning: no RoadBoard task reference found in Context section
+  // --- Review log ------------------------------------------------------------
+  const reviewLogMatch = content.match(/## Review log\s*([\s\S]*?)(?=\n## |\s*$)/i);
+
+  if (reviewLogMatch) {
+    const logBlock = reviewLogMatch[1];
+
+    // A well-formed log has at least one round heading: "### Round N — <verdict>"
+    if (!/###\s+Round\s+\d+\s*[—-]/i.test(logBlock)) {
+      errors.push(
+        "malformed ## Review log: expected at least one '### Round N — <verdict>' entry",
+      );
+    }
+  }
+
+  else if (parsed.frontmatter.status !== null && parsed.frontmatter.status !== "draft") {
+    warnings.push(
+      `status is "${parsed.frontmatter.status}" but no ## Review log section is present`,
+    );
+  }
+
+  // --- Warnings --------------------------------------------------------------
   const contextMatch = content.match(/## Context\s*([\s\S]*?)(?=\n## |\s*$)/i);
 
-  if (contextMatch) {
-    const contextBlock = contextMatch[1];
-
-    if (!/RoadBoard task/i.test(contextBlock)) {
-      warnings.push("no RoadBoard task reference found in ## Context");
-    }
+  if (contextMatch && !/RoadBoard task/i.test(contextMatch[1])) {
+    warnings.push("no RoadBoard task reference found in ## Context");
   }
 
   return { errors, warnings };
@@ -249,7 +340,9 @@ export function lintPromptContent(content: string): PromptLintResult {
 
 /**
  * Runs lint validation on all .md files in tasks/<dir>/ (default: todo).
- * Prints per-file failures and exits 1 if any errors are found.
+ * For each file reports lint errors/warnings, its frontmatter status, and
+ * whether it is spawnable (status: approved). Prompts in todo/ that are not
+ * approved are flagged as not-spawnable.
  */
 export function runLint(dir?: string): LintResult {
   const targetDir = path.basename(dir ?? "todo");
@@ -260,33 +353,45 @@ export function runLint(dir?: string): LintResult {
       ok: true,
       issues: 0,
       message: `lint: ok (0 issues) — folder tasks/${targetDir} does not exist`,
+      files: [],
     };
   }
 
-  const files = fs.readdirSync(folderPath).filter((f) => f.endsWith(".md")).sort();
+  const fileNames = fs.readdirSync(folderPath).filter((f) => f.endsWith(".md")).sort();
   let totalErrors = 0;
   const lines: string[] = [];
+  const files: FileLintResult[] = [];
 
-  for (const file of files) {
+  for (const file of fileNames) {
     const filePath = path.join(folderPath, file);
     const content = fs.readFileSync(filePath, "utf-8");
     const { errors, warnings } = lintPromptContent(content);
+    const parsed = parsePrompt(content);
+    const status = parsed.frontmatter.status;
+    const spawnable = status === "approved";
+
+    files.push({ file, status, spawnable, errors, warnings });
 
     if (errors.length > 0) {
       totalErrors += errors.length;
-      lines.push(`FAIL ${file}: missing sections: ${errors.join(", ")}`);
+      lines.push(`FAIL ${file}: ${errors.join(", ")}`);
     }
 
     if (warnings.length > 0) {
       lines.push(`WARN ${file}: ${warnings.join(", ")}`);
     }
+
+    // Only flag not-spawnable in the todo/ folder — run/ and done/ are post-spawn.
+    if (targetDir === "todo" && !spawnable) {
+      lines.push(`NOT-SPAWNABLE ${file}: status=${status ?? "unknown"} (only 'approved' may be spawned)`);
+    }
   }
 
   const ok = totalErrors === 0;
-  const summary = `lint: ${ok ? "ok" : "FAIL"} (${totalErrors} error${totalErrors === 1 ? "" : "s"}, ${files.length} file${files.length === 1 ? "" : "s"} checked)`;
+  const summary = `lint: ${ok ? "ok" : "FAIL"} (${totalErrors} error${totalErrors === 1 ? "" : "s"}, ${fileNames.length} file${fileNames.length === 1 ? "" : "s"} checked)`;
   const message = lines.length > 0 ? `${lines.join("\n")}\n${summary}` : summary;
 
-  return { ok, issues: totalErrors, message };
+  return { ok, issues: totalErrors, message, files };
 }
 
 /**
@@ -308,193 +413,39 @@ function matchingFiles(folder: string, slug: string): string[] {
 }
 
 /**
- * Returns all .md filenames in a folder, sorted.
- * Returns empty array if the folder does not exist.
- */
-function allMdFiles(folder: string): string[] {
-  if (!fs.existsSync(folder)) {
-    return [];
-  }
-
-  return fs.readdirSync(folder).filter((f) => f.endsWith(".md")).sort();
-}
-
-/**
- * Renders a bullet list of filenames with their folder prefix.
- * Falls back to "_none_" when the list is empty.
- */
-function renderFileList(folderLabel: string, files: string[]): string {
-  if (files.length === 0) {
-    return "_none_";
-  }
-
-  return files.map((f) => `- \`${folderLabel}/${f}\``).join("\n");
-}
-
-/**
- * Creates tasks/reports/<slug>-final-report.md populated with local artifacts.
- *
- * Sections:
- *   - Original Request  — intake/ files matching slug
- *   - Iterations Summary — proposals/ + briefs/ + for-analyst/ files matching slug
- *   - Final Prompts Ready — runReady() output (tasks/todo/ lint-passing files)
- *   - Blocked / Deferred — tasks/run/ files (in-progress)
- *   - GO Checklist — preserved from template
- *
- * Creates tasks/reports/ if it does not exist.
- * Throws if the template is missing.
- */
-export function runReport(slug: string): ReportResult {
-  if (!slug || slug.trim() === "") {
-    throw new Error("--slug is required for report command");
-  }
-
-  if (!fs.existsSync(REPORT_TEMPLATE)) {
-    throw new Error(`Report template not found: ${REPORT_TEMPLATE}`);
-  }
-
-  const reportsDir = path.join(TASKS_DIR, "reports");
-  fs.mkdirSync(reportsDir, { recursive: true });
-
-  // Collect matching files from planning folders
-  const intakeFiles = matchingFiles(path.join(TASKS_DIR, "intake"), slug);
-  const proposalFiles = matchingFiles(path.join(TASKS_DIR, "proposals"), slug);
-  const briefFiles = matchingFiles(path.join(TASKS_DIR, "briefs"), slug);
-  const forAnalystFiles = matchingFiles(path.join(TASKS_DIR, "for-analyst"), slug);
-
-  // Ready prompts (lint-passing todo/)
-  const readyFiles = runReady().files;
-
-  // In-progress: all files in tasks/run/
-  const runFiles = allMdFiles(path.join(TASKS_DIR, "run"));
-
-  // Build sections
-  const originalRequestSection = renderFileList("tasks/intake", intakeFiles);
-
-  const iterationParts: string[] = [];
-
-  if (proposalFiles.length > 0) {
-    iterationParts.push(`**Proposals**\n\n${renderFileList("tasks/proposals", proposalFiles)}`);
-  }
-
-  if (briefFiles.length > 0) {
-    iterationParts.push(`**Briefs**\n\n${renderFileList("tasks/briefs", briefFiles)}`);
-  }
-
-  if (forAnalystFiles.length > 0) {
-    iterationParts.push(`**For-analyst**\n\n${renderFileList("tasks/for-analyst", forAnalystFiles)}`);
-  }
-
-  const iterationSection =
-    iterationParts.length > 0 ? iterationParts.join("\n\n") : "_none_";
-
-  const readySection = renderFileList("tasks/todo", readyFiles);
-
-  const runSection = renderFileList("tasks/run", runFiles);
-
-  const now = new Date().toISOString().slice(0, 10);
-
-  // Queue snapshot
-  const status = getStatus();
-  const staleCheck = checkTaskListStale();
-  const taskListStatus = !staleCheck.exists
-    ? "missing"
-    : staleCheck.stale
-      ? "stale"
-      : "up to date";
-  const queueSnapshotLines = status.counts
-    .map(({ folder, count }) => `| ${folder} | ${count} |`)
-    .join("\n");
-  const queueSnapshotSection = [
-    `## Queue Snapshot`,
-    ``,
-    `| Folder | Count |`,
-    `|--------|-------|`,
-    queueSnapshotLines,
-    ``,
-    `TASK_LIST.md: ${taskListStatus}`,
-  ].join("\n");
-
-  const content = [
-    `# Final Report: ${slug}`,
-    ``,
-    `> Generated on ${now} by \`pnpm agent:workflow report --slug ${slug}\`.`,
-    ``,
-    queueSnapshotSection,
-    ``,
-    `## Original Request`,
-    ``,
-    originalRequestSection,
-    ``,
-    `## Iterations Summary`,
-    ``,
-    iterationSection,
-    ``,
-    `## Prompts Ready for GO`,
-    ``,
-    readySection,
-    ``,
-    `## In Progress`,
-    ``,
-    runSection,
-    ``,
-    `## Blocked / Deferred`,
-    ``,
-    `_Prompts or tasks that could not be completed in this cycle, with reason._`,
-    ``,
-    `| Item | Reason | Owner | Target cycle |`,
-    `|------|--------|-------|--------------|`,
-    `| | | | |`,
-    ``,
-    `## Stop-Points Encountered`,
-    ``,
-    `_Any \`stop-point\` flags that triggered human review during this cycle._`,
-    ``,
-    `- `,
-    ``,
-    `## GO Checklist`,
-    ``,
-    `- [ ] All \`tasks/run/\` prompts resolved (done or failure-noted)`,
-    `- [ ] \`pnpm typecheck\` passes`,
-    `- [ ] \`pnpm lint\` passes`,
-    `- [ ] \`pnpm test\` passes (or known failures documented)`,
-    `- [ ] RoadBoard task statuses are current`,
-    `- [ ] PLAN.md checkboxes reflect completed work`,
-    `- [ ] Handoff created in RoadBoard (\`create_handoff\`)`,
-  ].join("\n");
-
-  const destPath = path.join(reportsDir, `${slug}-final-report.md`);
-  fs.writeFileSync(destPath, content, "utf-8");
-
-  return { filePath: destPath, slug };
-}
-
-/**
- * Lists .md files in tasks/todo/ that pass lint with 0 errors.
- * Returns empty array if folder does not exist.
+ * Inspects tasks/todo/ and partitions prompts into spawnable (`status: approved`)
+ * versus pending (draft / in-review / changes-requested / blocked-review / unknown).
+ * Returns empty lists if the folder does not exist.
  */
 export function runReady(): ReadyResult {
   const todoDir = path.join(TASKS_DIR, "todo");
 
   if (!fs.existsSync(todoDir)) {
-    return { files: [] };
+    return { approved: [], pending: [] };
   }
 
-  const files = fs
-    .readdirSync(todoDir)
-    .filter((f) => f.endsWith(".md"))
-    .sort()
-    .filter((file) => {
-      const content = fs.readFileSync(path.join(todoDir, file), "utf-8");
-      const { errors } = lintPromptContent(content);
+  const approved: ReadyEntry[] = [];
+  const pending: ReadyEntry[] = [];
 
-      return errors.length === 0;
-    });
+  const files = fs.readdirSync(todoDir).filter((f) => f.endsWith(".md")).sort();
 
-  return { files };
+  for (const file of files) {
+    const content = fs.readFileSync(path.join(todoDir, file), "utf-8");
+    const status = parsePrompt(content).frontmatter.status;
+
+    if (status === "approved") {
+      approved.push({ file, status });
+    }
+
+    else {
+      pending.push({ file, status });
+    }
+  }
+
+  return { approved, pending };
 }
 
-/** Folders compared for stale detection (subset of TRACKED_FOLDERS). */
+/** Folders compared for stale detection — the three lifecycle folders. */
 const STALE_CHECK_FOLDERS = ["todo", "run", "done"];
 
 /**
@@ -630,6 +581,15 @@ function findPromptFile(slug: string, tasksDir?: string): string {
 }
 
 /**
+ * Reads a prompt's frontmatter status from disk.
+ */
+function readPromptStatus(filePath: string): PromptStatus | null {
+  const content = fs.readFileSync(filePath, "utf-8");
+
+  return parsePrompt(content).frontmatter.status;
+}
+
+/**
  * Renders the prompt content for a given slug to a string.
  * Does not invoke any binary.
  */
@@ -690,7 +650,7 @@ export function adaptersDryRun(
 /**
  * Invokes the configured CLI binary with the prompt file as argument.
  * Requires both --execute flag AND enabled: true in .agent/workflow-adapters.json.
- * Saves output to tasks/reports/<slug>-<adapter>-output.md.
+ * Saves output to <adapter.outputDir>/<slug>-<adapter>-output.md.
  */
 export function adaptersRun(
   slug: string,
@@ -739,11 +699,12 @@ export function adaptersRun(
   }
 
   const filePath = findPromptFile(slug, options.tasksDir);
-  const tasksDir = options.tasksDir ?? TASKS_DIR;
-  const reportsDir = path.join(tasksDir, "reports");
-  fs.mkdirSync(reportsDir, { recursive: true });
+  const outputDir = adapterCfg.outputDir && adapterCfg.outputDir.trim() !== ""
+    ? adapterCfg.outputDir
+    : path.join(options.tasksDir ?? TASKS_DIR, "todo");
+  fs.mkdirSync(outputDir, { recursive: true });
 
-  const outputPath = path.join(reportsDir, `${slug}-${adapterName}-output.md`);
+  const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
 
   // Use execFileSync to avoid shell injection — binary path must be absolute
   const output = child_process.execFileSync(adapterCfg.binary, [filePath], {
@@ -815,452 +776,320 @@ export function configShow(options: { configPath?: string } = {}): ConfigShowRes
 
 
 // ---------------------------------------------------------------------------
-// Loop runner — Analyst ↔ Architect
+// run — spawn a Worker on an APPROVED prompt
 // ---------------------------------------------------------------------------
 
-export interface RunLoopOptions {
+export interface RunResult {
+  slug: string;
+  promptFile: string;
+  adapter: string;
+  status: PromptStatus | null;
+  dryRun: boolean;
+  command: string;
+  args: string[];
+  outputPath: string | null;
+}
+
+export interface RunOptions {
   tasksDir?: string;
   configPath?: string;
-  templatesDir?: string;
-  execFn?: (binary: string, args: string[], opts: object) => string;
-  promptFn?: () => string;
   dryRun?: boolean;
-  planningOnly?: boolean;
-  maxIterations?: number;
-  pauseEvery?: number;
-  maxReviewRounds?: number;
-  isInteractive?: () => boolean;
+  execFn?: (binary: string, args: string[], opts: object) => string;
   logFn?: (msg: string) => void;
 }
 
-export interface RunLoopResult {
-  converged: boolean;
-  iterations: number;
-  stoppedByUser: boolean;
-  todoFiles: string[];
-  reason: string;
-}
-
-
-const DEFAULT_MAX_ITERATIONS = 50;
-const DEFAULT_PAUSE_EVERY = 10;
-
-
-function readFileIfExists(p: string): string | null {
-  if (!fs.existsSync(p)) {
-    return null;
-  }
-
-  return fs.readFileSync(p, "utf-8");
-}
-
-
-function readConvergenceRole(filePath: string): "analyst" | "architect" | null {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
-
-    if (parsed.role === "analyst" || parsed.role === "architect") return parsed.role as "analyst" | "architect";
-
-    return null;
-  }
-
-  catch {
-    return null;
-  }
-}
-
-
-function listFilesMatching(dir: string, pattern: RegExp): string[] {
-  if (!fs.existsSync(dir)) {
-    return [];
-  }
-
-  return fs
-    .readdirSync(dir)
-    .filter((f) => pattern.test(f))
-    .sort();
-}
-
-
-function readlineDefault(): string {
-  // Synchronous read of a single line from stdin (used in real CLI runs only).
-  // Tests inject promptFn so this path is never hit under vitest.
-  try {
-    const buf = fs.readFileSync(0, "utf-8");
-
-    return buf.split("\n")[0]?.trim() ?? "";
-  }
-
-  catch {
-    return "";
-  }
-}
-
-
-function buildAnalystPrompt(args: {
-  systemPrompt: string;
-  intake: string;
-  forAnalystSnippets: { file: string; content: string }[];
-  slug: string;
-  iteration: number;
-  reviewMode?: boolean;
-  todoListing?: string;
-}): string {
-  const exchanges = args.forAnalystSnippets.length === 0
-    ? "(none)"
-    : args.forAnalystSnippets
-        .map((s) => `---\n# ${s.file}\n${s.content}`)
-        .join("\n\n");
-
-  const instructions = args.reviewMode
-    ? [
-        "## Review mode",
-        "",
-        "The Architect has produced Worker prompts in tasks/todo/. Your job now is to review them against your brief and the intake.",
-        "",
-        "Current tasks/todo/ contents:",
-        args.todoListing ?? "(empty)",
-        "",
-        "If the prompts correctly address all risks and criteria from your brief:",
-        `  → write tasks/.convergence-${args.slug} with JSON: {"slug":"${args.slug}","iteration":${args.iteration},"role":"analyst"}`,
-        "  → this signals final sign-off and ends the loop.",
-        "",
-        "If you find issues, gaps, or missing decisions:",
-        `  → write your concerns to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
-        "  → do NOT write the convergence file in this case.",
-        "  → the loop will return to the Architect with your concerns.",
-      ]
-    : [
-        "## Instructions",
-        `Write your planning brief to: tasks/briefs/${args.slug}-brief-v${args.iteration}.md`,
-        `where N is the current iteration number (${args.iteration}).`,
-      ];
-
-  return [
-    args.systemPrompt,
-    "",
-    "---",
-    "## Intake",
-    args.intake,
-    "",
-    "## Previous Analyst↔Architect exchanges",
-    exchanges,
-    "",
-    ...instructions,
-  ].join("\n");
-}
-
-
-function buildArchitectPrompt(args: {
-  systemPrompt: string;
-  brief: string;
-  todoListing: string;
-  slug: string;
-  iteration: number;
-  planningOnly: boolean;
-}): string {
-  const instructions = args.planningOnly
-    ? [
-        "Planning-only mode is active.",
-        `If you have questions for Analyst: write to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
-        `If analysis is ready for Developer review: write a proposal to tasks/proposals/${args.slug}-proposal-v${args.iteration}.md`,
-        `Then write tasks/.convergence-${args.slug}`,
-        `  with JSON content: {"slug":"${args.slug}","iteration":${args.iteration},"mode":"planning-only"}`,
-        "Do NOT write Worker prompts.",
-        "Do NOT write to tasks/todo/.",
-        "Do NOT write to both for-analyst/ and .convergence-<slug> in the same iteration.",
-      ]
-    : [
-        `If you have questions for Analyst: write to tasks/for-analyst/${args.slug}-q${args.iteration}.md`,
-        `If prompts are ready: write them to tasks/todo/ and write tasks/.convergence-${args.slug}`,
-        `  with JSON content: {"slug":"${args.slug}","iteration":${args.iteration}}`,
-        "Do NOT write to both for-analyst/ and .convergence-<slug> in the same iteration.",
-      ];
-
-  return [
-    args.systemPrompt,
-    "",
-    "---",
-    "## Planning Brief (latest)",
-    args.brief,
-    "",
-    "## Current tasks/todo/ state",
-    args.todoListing,
-    "",
-    "## Instructions",
-    ...instructions,
-  ].join("\n");
-}
-
-
 /**
- * Orchestrates the Analyst ↔ Architect planning loop.
- * Pure & testable: pass execFn / promptFn / tasksDir / configPath to override
- * filesystem and subprocess interactions.
+ * Spawns a Worker adapter on a prompt identified by slug.
+ *
+ * REFUSES any prompt whose frontmatter status is not `approved` — the review
+ * gate. With dryRun the command is previewed and nothing is executed. The
+ * adapter must exist in config and be enabled to actually run.
  */
-export function runLoop(slug: string, options: RunLoopOptions = {}): RunLoopResult {
+export function runWorker(slug: string, adapterName: string, options: RunOptions = {}): RunResult {
   if (!slug || slug.trim() === "") {
     throw new Error("--slug is required for run command");
   }
 
+  if (!adapterName || adapterName.trim() === "") {
+    throw new Error("--adapter is required for run command");
+  }
+
   const tasksDir = options.tasksDir ?? TASKS_DIR;
   const configPath = options.configPath ?? ADAPTERS_CONFIG_PATH;
-  const templatesDir = options.templatesDir ?? TEMPLATES_DIR;
+  const dryRun = options.dryRun ?? false;
   const execFn = options.execFn ?? ((binary, args, opts) =>
     child_process.execFileSync(binary, args, { ...opts, encoding: "utf-8" }) as string);
-  const promptFn = options.promptFn ?? readlineDefault;
   const log = options.logFn ?? ((msg: string) => console.log(msg));
-  const dryRun = options.dryRun ?? false;
-  const planningOnly = options.planningOnly ?? false;
-  const maxIterations = options.maxIterations ?? DEFAULT_MAX_ITERATIONS;
-  const pauseEvery = options.pauseEvery ?? DEFAULT_PAUSE_EVERY;
-  const maxReviewRounds = options.maxReviewRounds ?? 3;
-  const isInteractive = options.isInteractive ?? (() => Boolean(process.stdin.isTTY));
 
-  // --- 1. Validate intake ----------------------------------------------------
-  const intakePath = path.join(tasksDir, "intake", `${slug}-intake.md`);
+  const promptFile = findPromptFile(slug, tasksDir);
+  const status = readPromptStatus(promptFile);
 
-  if (!fs.existsSync(intakePath)) {
+  // --- Review gate -----------------------------------------------------------
+  if (status !== "approved") {
     throw new Error(
-      `Intake file not found: ${intakePath}. ` +
-      `Run \`pnpm agent:workflow intake --slug ${slug}\` first.`,
+      `Refusing to run: prompt "${path.basename(promptFile)}" has status="${status ?? "unknown"}". ` +
+      "Only prompts with frontmatter status: approved may be spawned. " +
+      "Complete the Analyst review (## Review log) and set status: approved first.",
     );
   }
 
-  const intake = fs.readFileSync(intakePath, "utf-8");
-
-  // --- 2. Validate config ----------------------------------------------------
   const config = loadAdaptersConfig(configPath);
 
   if (config === null) {
     throw new Error(
-      `No config file found at ${configPath}. ` +
-      `Run \`pnpm agent:workflow config --init\` first.`,
+      `No adapter config found at ${configPath}. ` +
+      "Run `pnpm agent:workflow config --init` first.",
     );
   }
 
-  if (!config.roles || !config.roles.analyst || !config.roles.architect) {
+  const adapterCfg = config.adapters[adapterName];
+
+  if (!adapterCfg) {
+    throw new Error(`Adapter "${adapterName}" not found in config. Check ${configPath}.`);
+  }
+
+  const command = adapterCfg.binary;
+  const args = [...(adapterCfg.flags ?? []), promptFile];
+
+  if (dryRun) {
+    log(`[dry-run] would run worker on approved prompt: ${command} ${args.join(" ")}`);
+
+    return { slug, promptFile, adapter: adapterName, status, dryRun: true, command, args, outputPath: null };
+  }
+
+  if (!adapterCfg.enabled) {
     throw new Error(
-      "Config is missing required roles. " +
-      "Ensure .agent/workflow-adapters.json has roles.analyst and roles.architect. " +
-      "Run `pnpm agent:workflow config --init` to scaffold a starter config.",
+      `Adapter "${adapterName}" is disabled (enabled: false). ` +
+      "Set enabled: true in the config to proceed.",
     );
   }
 
-  const analystRole = config.roles.analyst;
+  const outputDir = adapterCfg.outputDir && adapterCfg.outputDir.trim() !== ""
+    ? adapterCfg.outputDir
+    : path.join(tasksDir, "run");
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
+
+  log(`[run] invoking worker adapter "${adapterName}" on approved prompt ${path.basename(promptFile)}`);
+  const output = execFn(command, args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+  fs.writeFileSync(outputPath, output, "utf-8");
+
+  return { slug, promptFile, adapter: adapterName, status, dryRun: false, command, args, outputPath };
+}
+
+
+// --- Review loop (Analyst review gate) ---------------------------------------
+
+export interface ReviewOptions {
+  analyst?: "codex" | "claude";
+  maxRounds?: number;
+  tasksDir?: string;
+  configPath?: string;
+  spawnFn?: (command: string, args: string[]) => number;
+  logFn?: (msg: string) => void;
+}
+
+export interface ReviewResult {
+  slug: string;
+  promptFile: string;
+  finalStatus: PromptStatus | null;
+  rounds: number;
+  outcome: "approved" | "blocked-review";
+}
+
+/** Build the child-process invocation for a role (codex exec / claude -p), headless. */
+export function buildRoleInvocation(
+  role: RoleConfig,
+  promptText: string,
+  repoRoot: string,
+): { command: string; args: string[] } {
+  const flags = role.flags ?? [];
+  const isCodex = path.basename(role.binary).replace(/\.[^.]+$/, "") === "codex";
+
+  if (isCodex) {
+    // Drop a stray "exec" from flags — we add the exec scaffold ourselves.
+    const extraFlags = flags.filter((f) => f !== "exec");
+    const args = [
+      "exec",
+      "--cd", repoRoot,
+      "--sandbox", "workspace-write",
+      "--skip-git-repo-check",
+      ...extraFlags,
+      promptText,
+    ];
+
+    return { command: role.binary, args };
+  }
+
+  // claude (default) — headless print mode with non-interactive edit permission
+  const args = ["-p", promptText];
+
+  if (role.model) {
+    args.push("--model", role.model);
+  }
+
+  const hasPermFlag = flags.some(
+    (f) => f.includes("permission") || f.includes("dangerously-skip-permissions"),
+  );
+
+  if (!hasPermFlag) {
+    args.push("--permission-mode", "acceptEdits");
+  }
+
+  args.push(...flags);
+
+  return { command: role.binary, args };
+}
+
+/** Flip the frontmatter `status:` line in place without disturbing the rest. */
+export function setPromptStatus(filePath: string, status: PromptStatus): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const updated = content.replace(
+    /^(---\r?\n[\s\S]*?\bstatus:[ \t]*)[A-Za-z-]+/m,
+    `$1${status}`,
+  );
+  fs.writeFileSync(filePath, updated, "utf-8");
+}
+
+function buildArchitectPrompt(relPath: string, status: PromptStatus | null): string {
+  const action =
+    status === "changes-requested"
+      ? "The ## Review log ends with a `changes-requested` round. Revise the prompt IN PLACE to address EVERY requested change. If a request is wrong, resolve it by adjusting the prompt and noting the rationale — do not leave it unaddressed."
+      : "This is the first submission. Validate the prompt is complete and coherent; make minimal fixes only if clearly needed.";
+
+  return [
+    "You are running in Architect role.",
+    `Read the Worker prompt at: ${relPath}`,
+    action,
+    "Then update the YAML frontmatter: set `status: in-review` and set `review_round` to the next integer (increment it).",
+    "Do NOT append to `## Review log` — that is the Analyst's job. Do NOT spawn subagents, do NOT modify source code, do NOT move the file, do NOT commit.",
+    `Edit ONLY ${relPath}.`,
+  ].join("\n\n");
+}
+
+function buildAnalystPrompt(relPath: string): string {
+  return [
+    "You are running in Analyst role — the review gate.",
+    `Read the Worker prompt at: ${relPath}`,
+    "Verify it against PLAN.md, docs/, and the actual source files it cites (use semantic navigation; do not trust the prompt's own claims).",
+    "Judge: correctness, completeness, unambiguity, scope cleanliness, safety.",
+    "Write your verdict by editing ONLY this file: set frontmatter `status` to `approved` or `changes-requested`, and APPEND a new `### Round <n>` section under `## Review log` (never overwrite prior rounds). Use the current `review_round` value as <n>.",
+    "Default to `changes-requested` if anything is ambiguous, incomplete, unverifiable, or risky. Approval is earned.",
+    "Do NOT modify source code, do NOT move the file, do NOT commit.",
+  ].join("\n\n");
+}
+
+/**
+ * Drive the Architect <-> Analyst review loop until the prompt reaches
+ * `status: approved`, or `blocked-review` after maxRounds without convergence.
+ * Architect = claude; Analyst = codex by default, or claude when analyst="claude".
+ */
+export function runReview(slug: string, options: ReviewOptions = {}): ReviewResult {
+  if (!slug || slug.trim() === "") {
+    throw new Error("--slug is required for review command");
+  }
+
+  const tasksDir = options.tasksDir ?? TASKS_DIR;
+  const configPath = options.configPath ?? ADAPTERS_CONFIG_PATH;
+  const analystKind = options.analyst ?? "codex";
+  const maxRounds = options.maxRounds ?? 3;
+  const log = options.logFn ?? ((msg: string) => console.log(msg));
+  const spawn =
+    options.spawnFn ??
+    ((command: string, args: string[]) => {
+      const r = child_process.spawnSync(command, args, { cwd: ROOT, stdio: "inherit" });
+
+      return r.status ?? 1;
+    });
+
+  const config = loadAdaptersConfig(configPath);
+
+  if (config === null || !config.roles) {
+    throw new Error(
+      `No role config found at ${configPath}. Run \`pnpm agent:workflow config --init\` first.`,
+    );
+  }
+
   const architectRole = config.roles.architect;
 
-  // --- 3. Load system prompt templates --------------------------------------
-  const analystPromptPath = analystRole.systemPromptPath
-    ? path.resolve(ROOT, analystRole.systemPromptPath)
-    : path.join(templatesDir, "analyst-system-prompt.md");
-  const architectPromptPath = architectRole.systemPromptPath
-    ? path.resolve(ROOT, architectRole.systemPromptPath)
-    : path.join(templatesDir, "architect-system-prompt.md");
+  if (!architectRole) {
+    throw new Error(`No "architect" role in ${configPath}.`);
+  }
 
-  const analystSystemPrompt = readFileIfExists(analystPromptPath) ?? "";
-  const architectSystemPrompt = readFileIfExists(architectPromptPath) ?? "";
+  const analystRole: RoleConfig =
+    analystKind === "claude"
+      ? { binary: "claude", model: architectRole.model, flags: architectRole.flags }
+      : config.roles.analyst;
 
-  // --- 4. Loop ---------------------------------------------------------------
-  const briefsDir = path.join(tasksDir, "briefs");
-  const forAnalystDir = path.join(tasksDir, "for-analyst");
-  const todoDir = path.join(tasksDir, "todo");
-  const convergenceFile = path.join(tasksDir, `.convergence-${slug}`);
+  if (!analystRole) {
+    throw new Error(`No "analyst" role in ${configPath}. Add one or pass --analyst claude.`);
+  }
 
-  fs.mkdirSync(briefsDir, { recursive: true });
-  fs.mkdirSync(forAnalystDir, { recursive: true });
-  fs.mkdirSync(todoDir, { recursive: true });
+  const promptFile = findPromptFile(slug, tasksDir);
+  const relPath = path.relative(ROOT, promptFile);
+  let rounds = 0;
 
-  const briefPattern = new RegExp(`^${slug}-brief-.*\\.md$`);
-  const forAnalystPattern = new RegExp(`^${slug}-.*\\.md$`);
+  for (let i = 0; i < maxRounds; i++) {
+    const status = readPromptStatus(promptFile);
 
-  let iteration = 0;
-  let converged = false;
-  let stoppedByUser = false;
-  let reason = "";
-  let architectTurnCompleted = false;
-  let reviewRounds = 0;
+    if (status === "approved") {
+      log(`[review] already approved — nothing to do.`);
 
-  let prevTodoCount = listFilesMatching(todoDir, /\.md$/).length;
-  let prevForAnalystCount = listFilesMatching(forAnalystDir, forAnalystPattern).length;
-
-  while (iteration < maxIterations) {
-    iteration += 1;
-
-    const isReviewPass = architectTurnCompleted;
-
-    if (isReviewPass) reviewRounds += 1;
-
-    // --- Analyst turn -------------------------------------------------------
-    const forAnalystFiles = listFilesMatching(forAnalystDir, forAnalystPattern);
-    const forAnalystSnippets = forAnalystFiles.map((f) => ({
-      file: f,
-      content: fs.readFileSync(path.join(forAnalystDir, f), "utf-8"),
-    }));
-
-    const todoListingForAnalyst = architectTurnCompleted
-      ? (() => {
-          const list = listFilesMatching(todoDir, /\.md$/);
-
-          return list.length === 0 ? "(empty)" : list.map((f) => `- ${f}`).join("\n");
-        })()
-      : undefined;
-
-    const analystPrompt = buildAnalystPrompt({
-      systemPrompt: analystSystemPrompt,
-      intake,
-      forAnalystSnippets,
-      slug,
-      iteration,
-      reviewMode: architectTurnCompleted,
-      todoListing: todoListingForAnalyst,
-    });
-    const analystArgs = [...(analystRole.flags ?? []), analystPrompt];
-
-    if (dryRun) {
-      log(`[dry-run] iteration ${iteration} analyst: ${analystRole.binary} ${(analystRole.flags ?? []).join(" ")} <prompt:${analystPrompt.length} chars>`);
+      return { slug, promptFile, finalStatus: status, rounds, outcome: "approved" };
     }
 
-    else {
-      log(`[iter ${iteration}] invoking analyst (${analystRole.binary})`);
-      execFn(analystRole.binary, analystArgs, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+    if (status === "blocked-review") {
+      log(`[review] status is blocked-review — escalate to developer.`);
+
+      return { slug, promptFile, finalStatus: status, rounds, outcome: "blocked-review" };
     }
 
-    // Detect new brief
-    const briefFiles = listFilesMatching(briefsDir, briefPattern);
+    // Architect step: submit (draft) or revise (changes-requested)
+    if (status === "draft" || status === "changes-requested" || status === null) {
+      const verb = status === "changes-requested" ? "revising" : "submitting";
+      log(`[review] round ${i + 1}: Architect (${architectRole.binary}) ${verb}…`);
+      const { command, args } = buildRoleInvocation(architectRole, buildArchitectPrompt(relPath, status), ROOT);
+      const code = spawn(command, args);
 
-    if (briefFiles.length === 0 && !dryRun) {
-      log(`[iter ${iteration}] WARN: Analyst did not produce a brief in tasks/briefs/`);
-    }
-
-    // Analyst wrote convergence marker → brief ready, or (review pass) final sign-off
-    if (fs.existsSync(convergenceFile)) {
-      const role = readConvergenceRole(convergenceFile);
-      fs.unlinkSync(convergenceFile);
-
-      if (architectTurnCompleted && role === "analyst") {
-        converged = true;
-        reason = "analyst final sign-off";
-        break;
+      if (code !== 0) {
+        throw new Error(`Architect step failed (exit ${code}).`);
       }
 
-      log(`[iter ${iteration}] Analyst signalled brief ready, proceeding to Architect`);
-    }
+      const afterArch = readPromptStatus(promptFile);
 
-    // --- Review-round cap backstop ------------------------------------------
-    if (isReviewPass && reviewRounds >= maxReviewRounds) {
-      reason = `review round cap reached (${reviewRounds} review pass(es) without Analyst sign-off) — developer triage needed`;
-      break;
-    }
-
-    // --- Architect turn -----------------------------------------------------
-    const latestBrief = briefFiles.length > 0
-      ? fs.readFileSync(path.join(briefsDir, briefFiles[briefFiles.length - 1]), "utf-8")
-      : "(no brief available yet)";
-    const todoListing = (() => {
-      const list = listFilesMatching(todoDir, /\.md$/);
-
-      return list.length === 0 ? "(empty)" : list.map((f) => `- ${f}`).join("\n");
-    })();
-
-    const architectPrompt = buildArchitectPrompt({
-      systemPrompt: architectSystemPrompt,
-      brief: latestBrief,
-      todoListing,
-      slug,
-      iteration,
-      planningOnly,
-    });
-    const architectArgs = [...(architectRole.flags ?? []), architectPrompt];
-
-    if (dryRun) {
-      log(`[dry-run] iteration ${iteration} architect: ${architectRole.binary} ${(architectRole.flags ?? []).join(" ")} <prompt:${architectPrompt.length} chars>`);
-    }
-
-    else {
-      log(`[iter ${iteration}] invoking architect (${architectRole.binary})`);
-      execFn(architectRole.binary, architectArgs, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
-    }
-
-    // --- Convergence check --------------------------------------------------
-    if (fs.existsSync(convergenceFile)) {
-      if (planningOnly) {
-        converged = true;
-        reason = "convergence file written";
-        break;
+      if (afterArch !== "in-review") {
+        throw new Error(
+          `Architect did not set status to in-review (got "${afterArch ?? "unknown"}"). Aborting.`,
+        );
       }
-
-      fs.unlinkSync(convergenceFile);
-      architectTurnCompleted = true;
-      log(`[iter ${iteration}] Architect signalled prompts ready, returning to Analyst for final review`);
     }
 
-    const currentTodoCount = listFilesMatching(todoDir, /\.md$/).length;
-    const currentForAnalystCount = listFilesMatching(forAnalystDir, forAnalystPattern).length;
+    // Analyst step: write verdict into the prompt
+    log(`[review] round ${i + 1}: Analyst (${analystRole.binary}) reviewing…`);
+    const { command, args } = buildRoleInvocation(analystRole, buildAnalystPrompt(relPath), ROOT);
+    const code = spawn(command, args);
 
-    if (planningOnly && currentTodoCount > prevTodoCount) {
-      throw new Error(
-        `Planning-only mode violation: new tasks/todo/ file appeared for slug "${slug}". ` +
-        "Inspect and remove the Worker prompt before continuing.",
-      );
+    if (code !== 0) {
+      throw new Error(`Analyst step failed (exit ${code}).`);
     }
 
-    // Implicit: new todo file appeared, no new for-analyst → return to Analyst for review
-    if (!planningOnly && currentTodoCount > prevTodoCount && currentForAnalystCount <= prevForAnalystCount) {
-      architectTurnCompleted = true;
-      log(`[iter ${iteration}] WARN: Architect produced prompts (no convergence file) — returning to Analyst for final review`);
-    }
+    rounds++;
+    const verdict = readPromptStatus(promptFile);
+    log(`[review] round ${i + 1} verdict: ${verdict ?? "unknown"}`);
 
-    prevTodoCount = currentTodoCount;
-    prevForAnalystCount = currentForAnalystCount;
-
-    // --- Dry-run early exit -------------------------------------------------
-    if (dryRun) {
-      reason = "dry-run completed one iteration";
-      break;
-    }
-
-    // --- Interactive pause --------------------------------------------------
-    if (iteration % pauseEvery === 0) {
-      if (!isInteractive()) {
-        reason = `paused at iteration ${iteration} in non-interactive mode (no TTY) — re-run in a terminal to continue`;
-        stoppedByUser = true;
-        break;
-      }
-
-      const briefsNow = listFilesMatching(briefsDir, briefPattern).length;
-      const forAnalystNow = listFilesMatching(forAnalystDir, forAnalystPattern).length;
-      const todoNow = listFilesMatching(todoDir, /\.md$/).length;
-      log(
-        `\n[pause @ iter ${iteration}] briefs=${briefsNow} for-analyst=${forAnalystNow} todo=${todoNow}\n` +
-        `Continue or stop? [c]ontinue / [s]top: `,
-      );
-      const answer = promptFn().toLowerCase();
-
-      if (answer === "s" || answer === "stop") {
-        stoppedByUser = true;
-        reason = "user stopped the loop";
-        break;
-      }
+    if (verdict === "approved") {
+      return { slug, promptFile, finalStatus: verdict, rounds, outcome: "approved" };
     }
   }
 
-  if (!converged && !stoppedByUser && iteration >= maxIterations) {
-    throw new Error(
-      `Safety cap reached: loop ran ${maxIterations} iterations without convergence for slug "${slug}". ` +
-      `Inspect tasks/for-analyst/ and tasks/briefs/ for the current state.`,
-    );
-  }
+  // Loop cap reached without approval
+  setPromptStatus(promptFile, "blocked-review");
+  log(
+    `[review] reached max ${maxRounds} rounds without approval — set status: blocked-review. Escalate to developer.`,
+  );
 
-  const todoFiles = listFilesMatching(todoDir, /\.md$/);
-
-  return {
-    converged,
-    iterations: iteration,
-    stoppedByUser,
-    todoFiles,
-    reason,
-  };
+  return { slug, promptFile, finalStatus: "blocked-review", rounds, outcome: "blocked-review" };
 }
 
 
@@ -1268,7 +1097,7 @@ function printStatus(result: StatusResult): void {
   console.log("Task folder counts:");
 
   for (const { folder, count } of result.counts) {
-    console.log(`  ${folder.padEnd(12)} ${count}`);
+    console.log(`  ${folder.padEnd(8)} ${count}`);
   }
 
   const stale = checkTaskListStale();
@@ -1299,7 +1128,8 @@ function parseArgs(argv: string[]): {
   init?: boolean;
   show?: boolean;
   dryRun?: boolean;
-  planningOnly?: boolean;
+  analyst?: "codex" | "claude";
+  maxRounds?: number;
 } {
   const [, , command = "", subcommandOrFlag = "", ...rest] = argv;
 
@@ -1323,7 +1153,8 @@ function parseArgs(argv: string[]): {
   let init = false;
   let show = false;
   let dryRun = false;
-  let planningOnly = false;
+  let analyst: "codex" | "claude" | undefined;
+  let maxRounds: number | undefined;
 
   for (let i = 0; i < remaining.length; i++) {
     if (remaining[i] === "--slug" && remaining[i + 1]) {
@@ -1357,12 +1188,19 @@ function parseArgs(argv: string[]): {
       dryRun = true;
     }
 
-    else if (remaining[i] === "--planning-only") {
-      planningOnly = true;
+    else if (remaining[i] === "--analyst" && remaining[i + 1]) {
+      analyst = remaining[i + 1] === "claude" ? "claude" : "codex";
+      i++;
+    }
+
+    else if (remaining[i] === "--max-rounds" && remaining[i + 1]) {
+      const n = Number.parseInt(remaining[i + 1], 10);
+      maxRounds = Number.isFinite(n) && n > 0 ? n : undefined;
+      i++;
     }
   }
 
-  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, planningOnly };
+  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds };
 }
 
 function main(): void {
@@ -1371,16 +1209,11 @@ function main(): void {
     return;
   }
 
-  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, planningOnly } = parseArgs(process.argv);
+  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds } = parseArgs(process.argv);
 
   try {
     if (command === "status") {
       printStatus(getStatus());
-    }
-
-    else if (command === "intake") {
-      const result = runIntake(slug ?? "");
-      console.log(`Created: ${result.filePath}`);
     }
 
     else if (command === "lint") {
@@ -1392,23 +1225,26 @@ function main(): void {
       }
     }
 
-    else if (command === "report") {
-      const result = runReport(slug ?? "");
-      console.log(`Created: ${result.filePath}`);
-    }
-
     else if (command === "ready") {
       const result = runReady();
 
-      if (result.files.length === 0) {
-        console.log("No prompts in tasks/todo/");
+      if (result.approved.length === 0) {
+        console.log("No spawnable prompts in tasks/todo/ (none with status: approved)");
       }
 
       else {
-        console.log("Prompts ready in tasks/todo/:");
+        console.log("Spawnable (status: approved) in tasks/todo/:");
 
-        for (const f of result.files) {
-          console.log(`  ${f}`);
+        for (const { file } of result.approved) {
+          console.log(`  ${file}`);
+        }
+      }
+
+      if (result.pending.length > 0) {
+        console.log("\nPending review in tasks/todo/ (not spawnable):");
+
+        for (const { file, status } of result.pending) {
+          console.log(`  ${file} — ${status ?? "unknown"}`);
         }
       }
     }
@@ -1477,32 +1313,30 @@ function main(): void {
       }
     }
 
-    else if (command === "run") {
-      const result = runLoop(slug ?? "", { dryRun, planningOnly });
+    else if (command === "review") {
+      const result = runReview(slug ?? "", { analyst, maxRounds });
+      console.log(
+        `[review] done — ${result.outcome} (${result.rounds} round(s), final status: ${result.finalStatus ?? "unknown"})`,
+      );
 
-      if (result.converged) {
-        console.log(`\nConverged after ${result.iterations} iteration(s): ${result.reason}`);
-        console.log(`\nPrompts in tasks/todo/:`);
-
-        if (result.todoFiles.length === 0) {
-          console.log("  (none)");
-        }
-
-        else {
-          for (const f of result.todoFiles) {
-            console.log(`  ${f}`);
-          }
-        }
-
-        console.log(`\nRun: pnpm agent:workflow ready`);
-      }
-
-      else if (result.stoppedByUser) {
-        console.log(`\nLoop interrotto manualmente. Controlla tasks/for-analyst/ per lo stato corrente.`);
+      if (result.outcome === "approved") {
+        console.log(`  Spawnable: pnpm agent:workflow run --slug ${result.slug} --adapter <name>`);
       }
 
       else {
-        console.log(`\nLoop ended after ${result.iterations} iteration(s): ${result.reason}`);
+        process.exit(2);
+      }
+    }
+
+    else if (command === "run") {
+      const result = runWorker(slug ?? "", adapter ?? "", { dryRun });
+
+      if (result.dryRun) {
+        console.log(`[dry-run] approved prompt ${path.basename(result.promptFile)} — would run: ${result.command} ${result.args.join(" ")}`);
+      }
+
+      else {
+        console.log(`Worker run complete. Output saved: ${result.outputPath}`);
       }
     }
 
@@ -1528,7 +1362,7 @@ function main(): void {
     else {
       console.error(
         `Unknown command: "${command}"\n` +
-        `Usage: pnpm agent:workflow <status|intake|lint|report|ready|sync|adapters|config|run> [--slug <slug>] [--dir <dir>] [--dry-run] [--planning-only]`,
+        `Usage: pnpm agent:workflow <status|lint|ready|sync|review|adapters|config|run> [--slug <slug>] [--adapter <name>] [--dir <dir>] [--dry-run] [--analyst <codex|claude>] [--max-rounds <n>]`,
       );
       process.exit(1);
     }

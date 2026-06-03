@@ -1,40 +1,52 @@
 @CLAUDE.md
 
-# Codex / ChatGPT Analyst Startup
+# Codex / ChatGPT Analyst startup
 
 This project uses Codex/ChatGPT primarily as an Analyst and Claude Code as the Architect/Worker coordinator.
 
-Before answering "what is there to do?", proposing work, or preparing a brief, verify the current project state:
+The Analyst is a **review gate**, not a planning-brief producer. It reviews Worker
+prompts the Architect has drafted in `tasks/todo/` and returns a verdict by editing
+the prompt in place — updating its frontmatter `status` and appending one round to
+its `## Review log`. It does not write separate brief files and does not move
+lifecycle files.
+
+At the start of each new session or chat, before answering "what is there to do?"
+or proposing work, Codex must verify the current project state:
 
 1. Read `CLAUDE.md` enough to apply the project workflow.
-2. Check RoadBoard state when tools are available.
+2. Check RoadBoard for open phases/tasks when RoadBoard tools are available.
 3. Inspect `PLAN.md` for unchecked tasks and active milestones.
 4. Inspect task folders:
-   - `tasks/briefs/` contains Analyst briefs waiting for Architect review.
-   - `tasks/for-analyst/` contains Architect questions, findings, or proposals waiting for Analyst review.
-   - `tasks/todo/` contains Architect-verified Worker prompts.
+   - `tasks/todo/` contains prompts in the draft/review/approved lifecycle; check frontmatter `status` on each.
    - `tasks/run/` contains Worker prompts in progress.
    - `tasks/done/` contains Worker prompts declared complete.
 5. Run `git status --short` before making claims about repository state.
 
-Codex may create Analyst briefs in `tasks/briefs/` for non-trivial planning work. Codex should not create Worker prompts in `tasks/todo/` unless the developer explicitly asks; Claude Architect owns final prompt creation after verifying repository state, RoadBoard state, `PLAN.md`, docs, and source code.
-
-Use `docs/AI-WORKFLOW.md` for the project-specific collaboration flow and `docs/templates/` for brief and prompt templates.
-
-For design exploration where the Developer wants Analyst↔Architect iteration but explicitly does not want Worker prompts, use:
+To list which `tasks/todo/` prompts are approved (spawnable) vs pending review:
 
 ```bash
-pnpm agent:workflow run --slug <slug> --planning-only
+pnpm agent:workflow ready
 ```
 
-`--planning-only` allows briefs, Architect questions, and proposals, but forbids new files in `tasks/todo/`.
+## Analyst review protocol
 
-## Analyst interaction protocol
+When the Architect submits a prompt for review (sets `status: in-review`), the Analyst:
 
-Analyst (Codex/ChatGPT) communicates with Architect (Claude Code) through the task folder contract. The interface is strictly file-based:
+1. Reads the prompt file in `tasks/todo/`.
+2. Verifies it against RoadBoard (when available), `PLAN.md`, docs, and source code. Does not trust the prompt's own claims.
+3. Checks: correctness, completeness, unambiguity, scope cleanliness, safety.
+4. Writes a verdict by setting frontmatter `status` to `approved` or `changes-requested`, and appends one `## Review log` round — never overwrites prior rounds.
 
-- **Analyst writes to**: `tasks/briefs/` — planning briefs, review responses, corrections.
-- **Analyst reads from**: `tasks/for-analyst/` — Architect questions, findings, and proposals awaiting review; `tasks/proposals/` — formal Architect proposals before Worker prompt creation.
-- **Analyst never**: moves files between `tasks/` lifecycle folders (`todo/` → `run/` → `done/`), creates Worker prompts in `tasks/todo/` without explicit Developer instruction, triggers Worker subagent spawns, or updates RoadBoard task statuses.
+Default to `changes-requested` when uncertain. Approval is earned, not assumed.
 
-The Analyst↔Architect loop is async and may iterate multiple times before any Worker prompt is created. Analyst briefs are planning inputs — Architect verifies every brief against repository state and RoadBoard before converting it into a Worker prompt. A file appearing in `tasks/briefs/` does not automatically trigger any action; Architect pulls from that inbox when ready.
+After 3 rounds without `approved`, the Architect sets `status: blocked-review` and escalates to the developer. The Analyst does not ping-pong indefinitely.
+
+## What the Analyst does NOT do
+
+- Write or modify source code.
+- Write separate brief files or planning documents outside of prompt files.
+- Move files between `tasks/todo/`, `tasks/run/`, `tasks/done/`.
+- Update RoadBoard task status.
+- Spawn Worker or Analyst subagents.
+- Overwrite prior review rounds.
+- Create Worker prompts in `tasks/todo/` — Claude Architect owns prompt creation after verifying repo state, RoadBoard, `PLAN.md`, docs, and source.
