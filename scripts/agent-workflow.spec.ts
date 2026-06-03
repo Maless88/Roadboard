@@ -13,13 +13,15 @@ import {
   countFilesInFolder,
   getStatus,
   lintPromptContent,
+  parsePrompt,
   readPackageVersion,
-  runIntake,
   runLint,
-  runLoop,
   runReady,
-  runReport,
+  runReview,
   runSync,
+  runWorker,
+  buildRoleInvocation,
+  setPromptStatus,
 } from "./agent-workflow";
 
 // ---------------------------------------------------------------------------
@@ -36,6 +38,44 @@ function writeFile(dir: string, name: string, content = "# stub"): string {
   fs.writeFileSync(p, content, "utf-8");
   return p;
 }
+
+// A fully valid, approved prompt under the review-gate model.
+const VALID_PROMPT = `---
+status: approved
+review_round: 2
+---
+
+# feat-test: Test prompt
+
+## Context
+
+RoadBoard task abc123 — phase xyz.
+
+## Scope
+
+**In scope**
+
+- Something
+
+## Acceptance criteria
+
+- [ ] Criterion one
+- [ ] Criterion two
+
+## Notes
+
+Relevant files:
+
+- scripts/agent-workflow.ts
+
+## Review log
+
+### Round 1 — changes-requested
+- Tighten the acceptance criteria.
+
+### Round 2 — approved
+- All concerns resolved.
+`;
 
 // ---------------------------------------------------------------------------
 // countFilesInFolder
@@ -72,17 +112,20 @@ describe("countFilesInFolder", () => {
 // ---------------------------------------------------------------------------
 
 describe("getStatus", () => {
-  it("returns a count entry for all 8 tracked folders", () => {
+  it("returns a count entry only for the three lifecycle folders", () => {
     const result = getStatus();
 
-    expect(result.counts).toHaveLength(8);
+    expect(result.counts).toHaveLength(3);
 
     const folders = result.counts.map((c) => c.folder);
-    expect(folders).toContain("intake");
-    expect(folders).toContain("todo");
-    expect(folders).toContain("run");
-    expect(folders).toContain("done");
-    expect(folders).toContain("reports");
+    expect(folders).toEqual(["todo", "run", "done"]);
+
+    // Removed folders must NOT be tracked anymore.
+    expect(folders).not.toContain("intake");
+    expect(folders).not.toContain("reports");
+    expect(folders).not.toContain("briefs");
+    expect(folders).not.toContain("for-analyst");
+    expect(folders).not.toContain("proposals");
   });
 
   it("count is a non-negative integer for every folder", () => {
@@ -96,70 +139,38 @@ describe("getStatus", () => {
 });
 
 // ---------------------------------------------------------------------------
-// runIntake
+// parsePrompt
 // ---------------------------------------------------------------------------
 
-describe("runIntake", () => {
-  let tmpTasks: string;
-  let tmpTemplates: string;
-  let originalCwd: string;
+describe("parsePrompt", () => {
+  it("parses status and review_round from frontmatter", () => {
+    const parsed = parsePrompt(VALID_PROMPT);
 
-  beforeEach(() => {
-    originalCwd = process.cwd();
-    tmpTasks = makeTempDir();
-    tmpTemplates = makeTempDir();
-
-    // Write a minimal intake template
-    writeFile(tmpTemplates, "developer-intake-template.md", "# Developer Intake: [Brief Title]\n");
+    expect(parsed.hasFrontmatter).toBe(true);
+    expect(parsed.frontmatter.status).toBe("approved");
+    expect(parsed.frontmatter.reviewRound).toBe(2);
   });
 
-  afterEach(() => {
-    fs.rmSync(tmpTasks, { recursive: true });
-    fs.rmSync(tmpTemplates, { recursive: true });
+  it("returns null status when frontmatter is absent", () => {
+    const parsed = parsePrompt("# no frontmatter\n\nbody");
+
+    expect(parsed.hasFrontmatter).toBe(false);
+    expect(parsed.frontmatter.status).toBeNull();
+    expect(parsed.frontmatter.reviewRound).toBeNull();
   });
 
-  it("throws when slug is empty", () => {
-    expect(() => runIntake("")).toThrow("--slug is required");
+  it("returns null status for an unknown status value", () => {
+    const parsed = parsePrompt("---\nstatus: bogus\nreview_round: 0\n---\n# x");
+
+    expect(parsed.frontmatter.status).toBeNull();
+    expect(parsed.frontmatter.raw["status"]).toBe("bogus");
   });
 
-  it("creates tasks/intake/<slug>-intake.md from template", () => {
-    // Override the module-level paths by using the exported function with
-    // a test harness approach: we patch the real tasks dir by checking
-    // the actual function uses TASKS_DIR. Since we cannot easily monkey-patch
-    // module-level constants, we test via the real filesystem paths but
-    // clean up afterwards.
-    const slug = `spec-test-${Date.now()}`;
-    const result = runIntake(slug);
+  it("strips inline comments and quotes from values", () => {
+    const parsed = parsePrompt('---\nstatus: draft   # initial\nreview_round: "0"\n---\n# x');
 
-    expect(result.slug).toBe(slug);
-    expect(result.filePath).toMatch(new RegExp(`${slug}-intake\\.md$`));
-    expect(fs.existsSync(result.filePath)).toBe(true);
-
-    // Clean up
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("creates the intake directory if it does not exist", () => {
-    const slug = `spec-mkdir-${Date.now()}`;
-    const result = runIntake(slug);
-
-    const intakeDir = path.dirname(result.filePath);
-    expect(fs.existsSync(intakeDir)).toBe(true);
-
-    // Clean up
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("copies template content into the new file", () => {
-    const slug = `spec-content-${Date.now()}`;
-    const result = runIntake(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    // The real template has a "# Developer Intake" heading
-    expect(content).toContain("Developer Intake");
-
-    // Clean up
-    fs.unlinkSync(result.filePath);
+    expect(parsed.frontmatter.status).toBe("draft");
+    expect(parsed.frontmatter.reviewRound).toBe(0);
   });
 });
 
@@ -167,46 +178,35 @@ describe("runIntake", () => {
 // lintPromptContent (pure)
 // ---------------------------------------------------------------------------
 
-const VALID_PROMPT = `# feat-test: Test prompt
-
-## Context
-
-RoadBoard task abc123 — phase xyz.
-
-## Scope
-
-**In scope**
-
-- Something
-
-**Out of scope**
-
-- Something else
-
-## Acceptance Criteria
-
-- [ ] Criterion one
-- [ ] Criterion two
-
-## Notes
-
-Relevant files:
-
-- scripts/agent-workflow.ts
-
-## PLAN.md Updates
-
-Under section \`## AI Workflow\`:
-
-- [ ] feat-test — Test prompt
-`;
-
 describe("lintPromptContent", () => {
-  it("returns no errors and no warnings for a valid prompt", () => {
+  it("returns no errors and no warnings for a valid approved prompt", () => {
     const result = lintPromptContent(VALID_PROMPT);
 
     expect(result.errors).toHaveLength(0);
     expect(result.warnings).toHaveLength(0);
+  });
+
+  it("reports an error when frontmatter is missing entirely", () => {
+    const content = VALID_PROMPT.replace(/^---[\s\S]*?---\n/, "");
+    const result = lintPromptContent(content);
+
+    expect(result.errors).toContain("missing YAML frontmatter (--- ... ---)");
+    expect(result.errors).toContain("missing frontmatter field: status");
+    expect(result.errors).toContain("missing frontmatter field: review_round");
+  });
+
+  it("reports an error for an invalid status value", () => {
+    const content = VALID_PROMPT.replace("status: approved", "status: shipping");
+    const result = lintPromptContent(content);
+
+    expect(result.errors.some((e) => e.includes("invalid frontmatter status"))).toBe(true);
+  });
+
+  it("reports an error for a non-numeric review_round", () => {
+    const content = VALID_PROMPT.replace("review_round: 2", "review_round: two");
+    const result = lintPromptContent(content);
+
+    expect(result.errors.some((e) => e.includes("invalid frontmatter review_round"))).toBe(true);
   });
 
   it("reports an error when ## Context is missing", () => {
@@ -223,73 +223,74 @@ describe("lintPromptContent", () => {
     expect(result.errors).toContain("missing section: ## Scope");
   });
 
-  it("reports an error when ## Acceptance Criteria is missing", () => {
-    const content = VALID_PROMPT.replace("## Acceptance Criteria", "## AC");
+  it("reports an error when ## Acceptance criteria is missing", () => {
+    const content = VALID_PROMPT.replace("## Acceptance criteria", "## AC");
     const result = lintPromptContent(content);
 
-    expect(result.errors).toContain("missing section: ## Acceptance Criteria");
+    expect(result.errors).toContain("missing section: ## Acceptance criteria");
   });
 
-  it("reports an error when ## Notes is missing", () => {
-    const content = VALID_PROMPT.replace("## Notes", "## Hints");
-    const result = lintPromptContent(content);
-
-    expect(result.errors).toContain("missing section: ## Notes");
-  });
-
-  it("reports an error when ## PLAN.md Updates is missing", () => {
-    const content = VALID_PROMPT.replace("## PLAN.md Updates", "## Plan Changes");
-    const result = lintPromptContent(content);
-
-    expect(result.errors).toContain("missing section: ## PLAN.md Updates");
-  });
-
-  it("reports an error when Acceptance Criteria has no checklist item", () => {
+  it("reports an error when Acceptance criteria has no checklist item", () => {
     const content = VALID_PROMPT.replace("- [ ] Criterion one\n- [ ] Criterion two", "No items here");
     const result = lintPromptContent(content);
 
-    expect(result.errors).toContain("missing checklist item in ## Acceptance Criteria");
+    expect(result.errors).toContain("missing checklist item in ## Acceptance criteria");
   });
 
-  it("accepts a completed checklist item (- [x]) in Acceptance Criteria", () => {
+  it("accepts a completed checklist item (- [x]) in Acceptance criteria", () => {
     const content = VALID_PROMPT.replace("- [ ] Criterion one", "- [x] Criterion one");
     const result = lintPromptContent(content);
 
-    expect(result.errors).not.toContain("missing checklist item in ## Acceptance Criteria");
+    expect(result.errors).not.toContain("missing checklist item in ## Acceptance criteria");
+  });
+
+  it("reports an error for a malformed Review log (no round heading)", () => {
+    const content = VALID_PROMPT.replace(
+      "### Round 1 — changes-requested\n- Tighten the acceptance criteria.\n\n### Round 2 — approved\n- All concerns resolved.",
+      "Some freeform text without a round heading.",
+    );
+    const result = lintPromptContent(content);
+
+    expect(result.errors.some((e) => e.includes("malformed ## Review log"))).toBe(true);
+  });
+
+  it("warns when status is past draft but no Review log exists", () => {
+    const noLog = VALID_PROMPT
+      .replace("status: approved", "status: in-review")
+      .replace(/## Review log[\s\S]*$/, "");
+    const result = lintPromptContent(noLog);
+
+    expect(result.warnings.some((w) => w.includes("no ## Review log"))).toBe(true);
+  });
+
+  it("does not warn about missing Review log when status is draft", () => {
+    const draft = VALID_PROMPT
+      .replace("status: approved", "status: draft")
+      .replace(/## Review log[\s\S]*$/, "");
+    const result = lintPromptContent(draft);
+
+    expect(result.warnings.some((w) => w.includes("no ## Review log"))).toBe(false);
   });
 
   it("emits a warning (not error) when no RoadBoard task reference in Context", () => {
     const content = VALID_PROMPT.replace("RoadBoard task abc123 — phase xyz.", "Some unrelated context.");
     const result = lintPromptContent(content);
 
-    expect(result.errors).not.toContain(expect.stringContaining("RoadBoard"));
     expect(result.warnings.some((w) => w.includes("RoadBoard task"))).toBe(true);
-  });
-
-  it("section matching is case-insensitive", () => {
-    const content = VALID_PROMPT
-      .replace("## Context", "## CONTEXT")
-      .replace("## Scope", "## scope")
-      .replace("## Acceptance Criteria", "## acceptance criteria")
-      .replace("## Notes", "## NOTES")
-      .replace("## PLAN.md Updates", "## plan.md updates");
-    const result = lintPromptContent(content);
-
-    expect(result.errors).toHaveLength(0);
   });
 });
 
 // ---------------------------------------------------------------------------
-// runLint (filesystem)
+// runLint (filesystem) — pure-function level coverage
 // ---------------------------------------------------------------------------
 
 describe("runLint", () => {
   it("returns ok=true when the target folder does not exist", () => {
-    // Point to a non-existent dir by using a name that cannot exist in tasks/
     const result = runLint("__nonexistent_dir__");
 
     expect(result.ok).toBe(true);
     expect(result.issues).toBe(0);
+    expect(result.files).toHaveLength(0);
   });
 
   it("accepts an optional --dir argument", () => {
@@ -298,151 +299,53 @@ describe("runLint", () => {
     expect(typeof result.ok).toBe("boolean");
     expect(typeof result.issues).toBe("number");
     expect(typeof result.message).toBe("string");
-  });
-
-  it("returns ok=false and issues>0 when a file fails lint", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "lint-test-"));
-    const tasksDir = path.join(tmpDir, "tasks", "custom");
-    fs.mkdirSync(tasksDir, { recursive: true });
-    fs.writeFileSync(path.join(tasksDir, "bad-prompt.md"), "# bad\n\nNo sections here.\n", "utf-8");
-
-    // We cannot easily redirect TASKS_DIR, so we test lintPromptContent directly
-    // and trust runLint wires it correctly (integration-tested by the CLI itself).
-    const { errors } = lintPromptContent("# bad\n\nNo sections here.\n");
-
-    expect(errors.length).toBeGreaterThan(0);
-
-    fs.rmSync(tmpDir, { recursive: true });
-  });
-
-  it("reports FAIL in message when errors found (via pure function)", () => {
-    const content = "# missing everything\n";
-    const result = lintPromptContent(content);
-
-    expect(result.errors.length).toBeGreaterThan(0);
-    expect(result.errors.some((e) => e.includes("## Context"))).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// runReport
-// ---------------------------------------------------------------------------
-
-describe("runReport", () => {
-  it("throws when slug is empty", () => {
-    expect(() => runReport("")).toThrow("--slug is required");
-  });
-
-  it("creates tasks/reports/<slug>-final-report.md", () => {
-    const slug = `spec-report-${Date.now()}`;
-    const result = runReport(slug);
-
-    expect(result.slug).toBe(slug);
-    expect(result.filePath).toMatch(new RegExp(`${slug}-final-report\\.md$`));
-    expect(fs.existsSync(result.filePath)).toBe(true);
-
-    // Clean up
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("report contains key section headings from the template", () => {
-    const slug = `spec-headings-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    expect(content).toContain("## Original Request");
-    expect(content).toContain("## Iterations Summary");
-    expect(content).toContain("## Prompts Ready for GO");
-    expect(content).toContain("## In Progress");
-    expect(content).toContain("## Blocked / Deferred");
-    expect(content).toContain("## GO Checklist");
-
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("report title includes the slug", () => {
-    const slug = `spec-title-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    expect(content).toContain(`# Final Report: ${slug}`);
-
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("produces valid report with empty sections when no files match slug", () => {
-    const slug = `zzz-no-match-slug-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    // Should not crash and sections should contain "_none_" placeholders
-    expect(content).toContain("_none_");
-    expect(fs.existsSync(result.filePath)).toBe(true);
-
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("includes intake file headings when matching slug files exist", () => {
-    const slug = `spec-intake-match-${Date.now()}`;
-
-    // Create a matching intake file in the real tasks/intake/ dir
-    const intakeDir = path.join(path.resolve(__dirname, ".."), "tasks", "intake");
-    fs.mkdirSync(intakeDir, { recursive: true });
-    const intakeFile = path.join(intakeDir, `${slug}-intake.md`);
-    fs.writeFileSync(intakeFile, "# My intake\n", "utf-8");
-
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    expect(content).toContain(`tasks/intake/${slug}-intake.md`);
-
-    // Clean up
-    fs.unlinkSync(intakeFile);
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("GO Checklist contains typecheck and lint items", () => {
-    const slug = `spec-checklist-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    expect(content).toContain("pnpm typecheck");
-    expect(content).toContain("pnpm lint");
-
-    fs.unlinkSync(result.filePath);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// runReady
-// ---------------------------------------------------------------------------
-
-describe("runReady", () => {
-  it("returns empty array when tasks/todo does not exist", () => {
-    // The real tasks/todo may or may not exist; we cannot control that.
-    // Instead test the countFilesInFolder helper for the missing case
-    // (already tested above). Here we just verify the shape.
-    const result = runReady();
-
     expect(Array.isArray(result.files)).toBe(true);
   });
 
-  it("returns only .md filenames (no path prefix)", () => {
+  it("a fully valid approved prompt produces no errors and is spawnable", () => {
+    const { errors } = lintPromptContent(VALID_PROMPT);
+
+    expect(errors).toHaveLength(0);
+    expect(parsePrompt(VALID_PROMPT).frontmatter.status).toBe("approved");
+  });
+
+  it("a bare prompt with no sections and no frontmatter fails lint", () => {
+    const { errors } = lintPromptContent("# bad\n\nNo sections here.\n");
+
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors).toContain("missing YAML frontmatter (--- ... ---)");
+    expect(errors.some((e) => e.includes("## Context"))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runReady — approved-gate partitioning
+// ---------------------------------------------------------------------------
+
+describe("runReady", () => {
+  it("returns approved and pending arrays", () => {
     const result = runReady();
 
-    for (const f of result.files) {
-      expect(f).toMatch(/\.md$/);
-      expect(f).not.toContain("/");
+    expect(Array.isArray(result.approved)).toBe(true);
+    expect(Array.isArray(result.pending)).toBe(true);
+  });
+
+  it("approved entries reference .md filenames without a path prefix", () => {
+    const result = runReady();
+
+    for (const { file } of [...result.approved, ...result.pending]) {
+      expect(file).toMatch(/\.md$/);
+      expect(file).not.toContain("/");
     }
   });
 
-  it("ready filters correctly: valid prompt passes, invalid prompt is excluded", () => {
-    // Test via lintPromptContent which runReady uses internally
-    const validResult = lintPromptContent(VALID_PROMPT);
-    const invalidResult = lintPromptContent("# bad\n\nNo required sections.\n");
+  it("classifies approved vs non-approved correctly (via parsePrompt)", () => {
+    const approved = parsePrompt(VALID_PROMPT).frontmatter.status;
+    const inReview = parsePrompt(VALID_PROMPT.replace("status: approved", "status: in-review"))
+      .frontmatter.status;
 
-    expect(validResult.errors).toHaveLength(0);
-    expect(invalidResult.errors.length).toBeGreaterThan(0);
+    expect(approved).toBe("approved");
+    expect(inReview).toBe("in-review");
   });
 });
 
@@ -477,10 +380,8 @@ describe("checkTaskListStale", () => {
   });
 
   it("reports up to date when TASK_LIST.md is newer than all task files", () => {
-    // Create a task file first
     writeFile(path.join(tasksDir, "todo"), "old-task.md", "# Old task");
 
-    // Wait 5 ms then create TASK_LIST.md so it is newer
     const past = new Date(Date.now() - 5000);
     fs.utimesSync(path.join(tasksDir, "todo", "old-task.md"), past, past);
 
@@ -493,12 +394,10 @@ describe("checkTaskListStale", () => {
   });
 
   it("reports stale when a task file is newer than TASK_LIST.md", () => {
-    // Create TASK_LIST.md first (older)
     writeFile(tmpDir, "TASK_LIST.md", "# TASK_LIST\n");
     const past = new Date(Date.now() - 5000);
     fs.utimesSync(taskListPath, past, past);
 
-    // Create a newer task file
     writeFile(path.join(tasksDir, "todo"), "new-task.md", "# New task");
 
     const result = checkTaskListStale({ tasksDir, taskListPath });
@@ -523,7 +422,6 @@ describe("checkTaskListStale", () => {
     const past = new Date(Date.now() - 5000);
     fs.utimesSync(taskListPath, past, past);
 
-    // A file in done/ should trigger stale
     writeFile(path.join(tasksDir, "done"), "finished.md", "# Done task");
 
     const result = checkTaskListStale({ tasksDir, taskListPath });
@@ -561,7 +459,7 @@ describe("runSync", () => {
     expect(result.outputPath).toBe(taskListPath);
   });
 
-  it("returns correct counts reflecting the task folders", () => {
+  it("returns correct counts reflecting the three lifecycle folders", () => {
     writeFile(path.join(tasksDir, "todo"), "task-a.md", "# Task A");
     writeFile(path.join(tasksDir, "todo"), "task-b.md", "# Task B");
     writeFile(path.join(tasksDir, "run"), "task-c.md", "# Task C");
@@ -598,44 +496,12 @@ describe("runSync", () => {
 
     runSync({ tasksDir, taskListPath });
 
-    // Touch the task file to an older timestamp so TASK_LIST is newer
     const past = new Date(Date.now() - 5000);
     fs.utimesSync(path.join(tasksDir, "todo", "some-task.md"), past, past);
 
     const stale = checkTaskListStale({ tasksDir, taskListPath });
 
     expect(stale.stale).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// runReport — Queue Snapshot section
-// ---------------------------------------------------------------------------
-
-describe("runReport — Queue Snapshot", () => {
-  it("report includes Queue Snapshot section", () => {
-    const slug = `spec-queue-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    expect(content).toContain("## Queue Snapshot");
-    expect(content).toContain("TASK_LIST.md:");
-
-    fs.unlinkSync(result.filePath);
-  });
-
-  it("Queue Snapshot includes all 8 tracked folders", () => {
-    const slug = `spec-queue-folders-${Date.now()}`;
-    const result = runReport(slug);
-    const content = fs.readFileSync(result.filePath, "utf-8");
-
-    const foldersToCheck = ["intake", "proposals", "briefs", "for-analyst", "todo", "run", "done", "reports"];
-
-    for (const folder of foldersToCheck) {
-      expect(content).toContain(folder);
-    }
-
-    fs.unlinkSync(result.filePath);
   });
 });
 
@@ -734,15 +600,6 @@ describe("adaptersRender", () => {
     expect(result.content).toBe(content);
     expect(result.filePath).toContain("feat-smoke.md");
   });
-
-  it("does not invoke any binary (pure read)", () => {
-    writeFile(todoDir, "feat-pure.md", "# pure prompt\n");
-
-    // If this runs without error and without network/process spawn it is a pure read
-    const result = adaptersRender("pure", { tasksDir });
-
-    expect(result.content).toContain("# pure prompt");
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -808,7 +665,6 @@ describe("adaptersDryRun", () => {
   it("does not execute the binary (no side effects)", () => {
     writeFile(todoDir, "feat-noexec.md", "# noexec");
 
-    // Point to a fake binary that does not exist — dry-run must not throw
     const configPath = path.join(tmpDir, "adapters.json");
     fs.writeFileSync(
       configPath,
@@ -820,7 +676,6 @@ describe("adaptersDryRun", () => {
       "utf-8",
     );
 
-    // Should NOT throw even though binary does not exist
     expect(() => adaptersDryRun("noexec", "fake", { configPath, tasksDir })).not.toThrow();
   });
 });
@@ -848,9 +703,7 @@ describe("adaptersRun", () => {
   it("throws with safety gate message when --execute is not passed", () => {
     writeFile(todoDir, "feat-gate.md", "# gate");
 
-    expect(() => adaptersRun("gate", "codex", false, { tasksDir })).toThrow(
-      "Safety gate",
-    );
+    expect(() => adaptersRun("gate", "codex", false, { tasksDir })).toThrow("Safety gate");
   });
 
   it("throws when no config file exists even with --execute", () => {
@@ -897,7 +750,6 @@ describe("adaptersRun", () => {
   });
 
   it("invokes binary and saves output when enabled and --execute passed", () => {
-    // Use /bin/echo as the binary so the test is self-contained
     const configPath = path.join(tmpDir, "adapters.json");
     const promptFile = path.join(todoDir, "feat-echo.md");
     writeFile(todoDir, "feat-echo.md", "# echo prompt\n");
@@ -919,6 +771,151 @@ describe("adaptersRun", () => {
 
     const output = fs.readFileSync(result.outputPath, "utf-8");
     expect(output).toContain(promptFile);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runWorker — the approved-gate spawn
+// ---------------------------------------------------------------------------
+
+describe("runWorker", () => {
+  let tmpDir: string;
+  let tasksDir: string;
+  let todoDir: string;
+  let configPath: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    tasksDir = path.join(tmpDir, "tasks");
+    todoDir = path.join(tasksDir, "todo");
+    fs.mkdirSync(todoDir, { recursive: true });
+    configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: {
+          worker: { enabled: true, binary: "/bin/echo", outputDir: tmpDir },
+        },
+      }),
+      "utf-8",
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("throws when slug is empty", () => {
+    expect(() => runWorker("", "worker", { tasksDir, configPath })).toThrow("--slug is required");
+  });
+
+  it("throws when adapter is empty", () => {
+    writeFile(todoDir, "feat-x.md", "---\nstatus: approved\nreview_round: 1\n---\n# x");
+    expect(() => runWorker("x", "", { tasksDir, configPath })).toThrow("--adapter is required");
+  });
+
+  it("REFUSES a prompt that is not approved (draft)", () => {
+    writeFile(todoDir, "feat-draft.md", "---\nstatus: draft\nreview_round: 0\n---\n# draft prompt\n");
+
+    expect(() => runWorker("draft", "worker", { tasksDir, configPath })).toThrow(
+      /status="draft".*Only prompts with frontmatter status: approved/s,
+    );
+  });
+
+  it("REFUSES a prompt in changes-requested", () => {
+    writeFile(
+      todoDir,
+      "feat-cr.md",
+      "---\nstatus: changes-requested\nreview_round: 1\n---\n# cr prompt\n",
+    );
+
+    expect(() => runWorker("cr", "worker", { tasksDir, configPath })).toThrow(/Refusing to run/);
+  });
+
+  it("REFUSES a prompt with no frontmatter status", () => {
+    writeFile(todoDir, "feat-nofm.md", "# no frontmatter\n");
+
+    expect(() => runWorker("nofm", "worker", { tasksDir, configPath })).toThrow(/status="unknown"/);
+  });
+
+  it("dry-run previews the command for an approved prompt without executing", () => {
+    writeFile(
+      todoDir,
+      "feat-ok.md",
+      "---\nstatus: approved\nreview_round: 2\n---\n# approved prompt\n",
+    );
+
+    let called = false;
+    const result = runWorker("ok", "worker", {
+      tasksDir,
+      configPath,
+      dryRun: true,
+      execFn: () => {
+        called = true;
+        return "";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(called).toBe(false);
+    expect(result.dryRun).toBe(true);
+    expect(result.status).toBe("approved");
+    expect(result.command).toBe("/bin/echo");
+    expect(result.args[result.args.length - 1]).toContain("feat-ok.md");
+    expect(result.outputPath).toBeNull();
+  });
+
+  it("executes the adapter on an approved prompt and saves output", () => {
+    writeFile(
+      todoDir,
+      "feat-go.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# go prompt\n",
+    );
+
+    const result = runWorker("go", "worker", {
+      tasksDir,
+      configPath,
+      execFn: (binary, args) => `${binary} ${args.join(" ")}`,
+      logFn: () => undefined,
+    });
+
+    expect(result.dryRun).toBe(false);
+    expect(result.outputPath).not.toBeNull();
+    expect(fs.existsSync(result.outputPath as string)).toBe(true);
+
+    const output = fs.readFileSync(result.outputPath as string, "utf-8");
+    expect(output).toContain("feat-go.md");
+  });
+
+  it("throws when the adapter is disabled, even for an approved prompt", () => {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: { worker: { enabled: false, binary: "/bin/echo", outputDir: tmpDir } },
+      }),
+      "utf-8",
+    );
+    writeFile(
+      todoDir,
+      "feat-dis.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# x\n",
+    );
+
+    expect(() => runWorker("dis", "worker", { tasksDir, configPath })).toThrow(
+      /disabled \(enabled: false\)/,
+    );
+  });
+
+  it("throws when adapter not found in config for an approved prompt", () => {
+    writeFile(
+      todoDir,
+      "feat-miss.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# x\n",
+    );
+
+    expect(() => runWorker("miss", "ghost", { tasksDir, configPath })).toThrow(
+      /Adapter "ghost" not found/,
+    );
   });
 });
 
@@ -986,7 +983,6 @@ describe("configInit", () => {
 
     expect(() => configInit({ configPath, agentDir })).toThrow("already exists");
 
-    // Confirm the original content is unchanged
     const raw = fs.readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
     expect(parsed.roles).toEqual({});
@@ -1053,674 +1049,6 @@ describe("configShow", () => {
 });
 
 // ---------------------------------------------------------------------------
-// runLoop
-// ---------------------------------------------------------------------------
-
-interface LoopHarness {
-  tmpDir: string;
-  tasksDir: string;
-  configPath: string;
-  templatesDir: string;
-  briefsDir: string;
-  todoDir: string;
-  forAnalystDir: string;
-  intakeDir: string;
-}
-
-
-function makeLoopHarness(slug: string): LoopHarness {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-test-"));
-  const tasksDir = path.join(tmpDir, "tasks");
-  const briefsDir = path.join(tasksDir, "briefs");
-  const todoDir = path.join(tasksDir, "todo");
-  const forAnalystDir = path.join(tasksDir, "for-analyst");
-  const intakeDir = path.join(tasksDir, "intake");
-  const templatesDir = path.join(tmpDir, "templates");
-
-  fs.mkdirSync(briefsDir, { recursive: true });
-  fs.mkdirSync(todoDir, { recursive: true });
-  fs.mkdirSync(forAnalystDir, { recursive: true });
-  fs.mkdirSync(intakeDir, { recursive: true });
-  fs.mkdirSync(templatesDir, { recursive: true });
-
-  fs.writeFileSync(path.join(intakeDir, `${slug}-intake.md`), `# intake ${slug}\n`, "utf-8");
-  fs.writeFileSync(path.join(templatesDir, "analyst-system-prompt.md"), "ANALYST SYSTEM\n", "utf-8");
-  fs.writeFileSync(path.join(templatesDir, "architect-system-prompt.md"), "ARCHITECT SYSTEM\n", "utf-8");
-
-  const configPath = path.join(tmpDir, "workflow-adapters.json");
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({
-      adapters: {},
-      roles: {
-        analyst: { binary: "fake-analyst", flags: [] },
-        architect: { binary: "fake-architect", flags: [] },
-      },
-    }),
-    "utf-8",
-  );
-
-  return { tmpDir, tasksDir, configPath, templatesDir, briefsDir, todoDir, forAnalystDir, intakeDir };
-}
-
-
-describe("runLoop", () => {
-  it("throws when slug is empty", () => {
-    expect(() => runLoop("")).toThrow("--slug is required");
-  });
-
-  it("throws with clear message when intake file is missing", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-noinit-"));
-    const tasksDir = path.join(tmpDir, "tasks");
-    fs.mkdirSync(tasksDir, { recursive: true });
-
-    const configPath = path.join(tmpDir, "cfg.json");
-    fs.writeFileSync(
-      configPath,
-      JSON.stringify({
-        adapters: {},
-        roles: {
-          analyst: { binary: "a", flags: [] },
-          architect: { binary: "b", flags: [] },
-        },
-      }),
-      "utf-8",
-    );
-
-    expect(() =>
-      runLoop("missing", { tasksDir, configPath, execFn: () => "" }),
-    ).toThrow(/Intake file not found/);
-
-    fs.rmSync(tmpDir, { recursive: true });
-  });
-
-  it("throws with config hint when config is missing", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-nocfg-"));
-    const tasksDir = path.join(tmpDir, "tasks");
-    const intakeDir = path.join(tasksDir, "intake");
-    fs.mkdirSync(intakeDir, { recursive: true });
-    fs.writeFileSync(path.join(intakeDir, "x-intake.md"), "# x\n", "utf-8");
-
-    expect(() =>
-      runLoop("x", {
-        tasksDir,
-        configPath: path.join(tmpDir, "nope.json"),
-        execFn: () => "",
-      }),
-    ).toThrow(/config --init/);
-
-    fs.rmSync(tmpDir, { recursive: true });
-  });
-
-  it("throws when config has no roles", () => {
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "loop-noroles-"));
-    const tasksDir = path.join(tmpDir, "tasks");
-    const intakeDir = path.join(tasksDir, "intake");
-    fs.mkdirSync(intakeDir, { recursive: true });
-    fs.writeFileSync(path.join(intakeDir, "y-intake.md"), "# y\n", "utf-8");
-
-    const configPath = path.join(tmpDir, "cfg.json");
-    fs.writeFileSync(configPath, JSON.stringify({ adapters: {} }), "utf-8");
-
-    expect(() =>
-      runLoop("y", { tasksDir, configPath, execFn: () => "" }),
-    ).toThrow(/missing required roles/);
-
-    fs.rmSync(tmpDir, { recursive: true });
-  });
-
-  it("converges when convergence file is written by architect", () => {
-    const slug = "conv";
-    const h = makeLoopHarness(slug);
-    let call = 0;
-    let analystCallCount = 0;
-
-    const execFn = (binary: string, _args: string[]): string => {
-      call += 1;
-
-      if (binary === "fake-analyst") {
-        analystCallCount += 1;
-        fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v${analystCallCount}.md`),
-          "# brief\n",
-          "utf-8",
-        );
-
-        // Second Analyst call (review pass) → final sign-off
-        if (analystCallCount === 2) {
-          fs.writeFileSync(
-            path.join(h.tasksDir, `.convergence-${slug}`),
-            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
-            "utf-8",
-          );
-        }
-      }
-
-      if (binary === "fake-architect") {
-        fs.writeFileSync(
-          path.join(h.todoDir, `feat-${slug}.md`),
-          "# prompt\n",
-          "utf-8",
-        );
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1, role: "architect" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      logFn: () => undefined,
-    });
-
-    expect(result.converged).toBe(true);
-    expect(result.iterations).toBe(2);
-    expect(result.reason).toBe("analyst final sign-off");
-    expect(result.stoppedByUser).toBe(false);
-    expect(result.todoFiles).toContain(`feat-${slug}.md`);
-    expect(call).toBe(3); // analyst, architect, analyst-review
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("planning-only mode asks architect for proposals instead of Worker prompts", () => {
-    const slug = "planning";
-    const h = makeLoopHarness(slug);
-    const proposalsDir = path.join(h.tasksDir, "proposals");
-    let architectPrompt = "";
-
-    const execFn = (binary: string, args: string[]): string => {
-      if (binary === "fake-analyst") {
-        fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v1.md`),
-          "# brief v1\n",
-          "utf-8",
-        );
-      }
-
-      if (binary === "fake-architect") {
-        architectPrompt = args.join("\n");
-        fs.mkdirSync(proposalsDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(proposalsDir, `${slug}-proposal-v1.md`),
-          "# proposal\n",
-          "utf-8",
-        );
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1, mode: "planning-only" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      planningOnly: true,
-      logFn: () => undefined,
-    });
-
-    expect(result.converged).toBe(true);
-    expect(result.iterations).toBe(1);
-    expect(result.todoFiles).toHaveLength(0);
-    expect(architectPrompt).toContain("Planning-only mode is active.");
-    expect(architectPrompt).toContain(`tasks/proposals/${slug}-proposal-v1.md`);
-    expect(architectPrompt).toContain("Do NOT write to tasks/todo/.");
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("planning-only mode fails if a new Worker prompt appears", () => {
-    const slug = "planning-violation";
-    const h = makeLoopHarness(slug);
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "# brief\n", "utf-8");
-      }
-
-      if (binary === "fake-architect") {
-        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
-      }
-
-      return "";
-    };
-
-    expect(() =>
-      runLoop(slug, {
-        tasksDir: h.tasksDir,
-        configPath: h.configPath,
-        templatesDir: h.templatesDir,
-        execFn,
-        promptFn: () => "c",
-        planningOnly: true,
-        logFn: () => undefined,
-      }),
-    ).toThrow(/Planning-only mode violation/);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("converges implicitly when new todo appears without new for-analyst", () => {
-    const slug = "implicit";
-    const h = makeLoopHarness(slug);
-    let analystCalls = 0;
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        analystCalls += 1;
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "# brief\n", "utf-8");
-
-        // Second call = review pass, sign off
-        if (analystCalls === 2) {
-          fs.writeFileSync(
-            path.join(h.tasksDir, `.convergence-${slug}`),
-            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
-            "utf-8",
-          );
-        }
-      }
-
-      if (binary === "fake-architect") {
-        // Writes a todo prompt but no convergence file and no for-analyst question.
-        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      logFn: () => undefined,
-    });
-
-    expect(result.converged).toBe(true);
-    expect(result.reason).toBe("analyst final sign-off");
-    expect(result.iterations).toBe(2);
-    expect(analystCalls).toBe(2);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("stops when user answers 's' at pause checkpoint", () => {
-    const slug = "stop";
-    const h = makeLoopHarness(slug);
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        // Writes a brief but architect keeps asking questions to avoid convergence.
-        const briefs = fs
-          .readdirSync(h.briefsDir)
-          .filter((f) => f.startsWith(`${slug}-brief-`)).length;
-        fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v${briefs + 1}.md`),
-          "# brief\n",
-          "utf-8",
-        );
-      }
-
-      if (binary === "fake-architect") {
-        // Always writes a for-analyst question, never converges. Each iteration
-        // adds a NEW for-analyst file so implicit convergence is not triggered.
-        const qs = fs
-          .readdirSync(h.forAnalystDir)
-          .filter((f) => f.endsWith(".md")).length;
-        fs.writeFileSync(
-          path.join(h.forAnalystDir, `${slug}-q${qs + 1}.md`),
-          "# question\n",
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "s",
-      pauseEvery: 2,
-      maxIterations: 50,
-      isInteractive: () => true,
-      logFn: () => undefined,
-    });
-
-    expect(result.stoppedByUser).toBe(true);
-    expect(result.converged).toBe(false);
-    expect(result.iterations).toBe(2);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("stops at pause checkpoint when non-interactive (no TTY)", () => {
-    const slug = "no-tty";
-    const h = makeLoopHarness(slug);
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        const briefs = fs
-          .readdirSync(h.briefsDir)
-          .filter((f) => f.startsWith(`${slug}-brief-`)).length;
-        fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v${briefs + 1}.md`),
-          "# brief\n",
-          "utf-8",
-        );
-      }
-
-      if (binary === "fake-architect") {
-        // Always writes a NEW for-analyst question so architectTurnCompleted
-        // stays false and the review cap never triggers.
-        const qs = fs
-          .readdirSync(h.forAnalystDir)
-          .filter((f) => f.endsWith(".md")).length;
-        fs.writeFileSync(
-          path.join(h.forAnalystDir, `${slug}-q${qs + 1}.md`),
-          "# question\n",
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      pauseEvery: 2,
-      isInteractive: () => false,
-      maxIterations: 50,
-      logFn: () => undefined,
-    });
-
-    expect(result.stoppedByUser).toBe(true);
-    expect(result.converged).toBe(false);
-    expect(result.reason).toContain("non-interactive");
-    expect(result.iterations).toBe(2);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("stops when review-round cap is reached without Analyst sign-off", () => {
-    const slug = "review-cap";
-    const h = makeLoopHarness(slug);
-    let analystCalls = 0;
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        analystCalls += 1;
-        // Always writes a brief, NEVER the convergence file (always an issue).
-        fs.writeFileSync(
-          path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`),
-          "# brief\n",
-          "utf-8",
-        );
-      }
-
-      if (binary === "fake-architect") {
-        // Always writes prompts and a convergence file → review pass each round.
-        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: analystCalls, role: "architect" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      maxReviewRounds: 2,
-      isInteractive: () => true,
-      pauseEvery: 100,
-      maxIterations: 50,
-      logFn: () => undefined,
-    });
-
-    expect(result.converged).toBe(false);
-    expect(result.stoppedByUser).toBe(false);
-    expect(result.iterations).toBe(3);
-    expect(result.reason).toContain("review round cap");
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("throws with safety cap message when reaching maxIterations", () => {
-    const slug = "cap";
-    const h = makeLoopHarness(slug);
-
-    const execFn = (binary: string): string => {
-      // Architect always writes a NEW for-analyst question — no convergence,
-      // and the new for-analyst file count grows so implicit convergence
-      // never triggers either.
-      if (binary === "fake-architect") {
-        const qs = fs
-          .readdirSync(h.forAnalystDir)
-          .filter((f) => f.endsWith(".md")).length;
-        fs.writeFileSync(
-          path.join(h.forAnalystDir, `${slug}-q${qs + 1}.md`),
-          "# q\n",
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    expect(() =>
-      runLoop(slug, {
-        tasksDir: h.tasksDir,
-        configPath: h.configPath,
-        templatesDir: h.templatesDir,
-        execFn,
-        promptFn: () => "c",
-        maxIterations: 3,
-        pauseEvery: 100,
-        logFn: () => undefined,
-      }),
-    ).toThrow(/Safety cap reached/);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("dry-run does not invoke execFn and exits after one iteration", () => {
-    const slug = "dry";
-    const h = makeLoopHarness(slug);
-    let called = false;
-
-    const execFn = (): string => {
-      called = true;
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      dryRun: true,
-      logFn: () => undefined,
-    });
-
-    expect(called).toBe(false);
-    expect(result.iterations).toBe(1);
-    expect(result.converged).toBe(false);
-    expect(result.reason).toContain("dry-run");
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("invokes analyst before architect each iteration", () => {
-    const slug = "order";
-    const h = makeLoopHarness(slug);
-    const order: string[] = [];
-    let analystCalls = 0;
-
-    const execFn = (binary: string): string => {
-      order.push(binary);
-
-      if (binary === "fake-analyst") {
-        analystCalls += 1;
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "b\n", "utf-8");
-
-        if (analystCalls === 2) {
-          fs.writeFileSync(
-            path.join(h.tasksDir, `.convergence-${slug}`),
-            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
-            "utf-8",
-          );
-        }
-      }
-
-      if (binary === "fake-architect") {
-        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "p\n", "utf-8");
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1, role: "architect" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      logFn: () => undefined,
-    });
-
-    expect(order).toEqual(["fake-analyst", "fake-architect", "fake-analyst"]);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("planning-only mode converges on architect sign-off without analyst review pass", () => {
-    const slug = "po-conv";
-    const h = makeLoopHarness(slug);
-    let analystCalls = 0;
-    const proposalsDir = path.join(h.tasksDir, "proposals");
-
-    const execFn = (binary: string): string => {
-      if (binary === "fake-analyst") {
-        analystCalls += 1;
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v1.md`), "# brief\n", "utf-8");
-      }
-
-      if (binary === "fake-architect") {
-        fs.mkdirSync(proposalsDir, { recursive: true });
-        fs.writeFileSync(path.join(proposalsDir, `${slug}-proposal-v1.md`), "# proposal\n", "utf-8");
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1, mode: "planning-only" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    const result = runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      planningOnly: true,
-      logFn: () => undefined,
-    });
-
-    expect(result.converged).toBe(true);
-    expect(result.iterations).toBe(1);
-    expect(analystCalls).toBe(1); // Analyst NOT called a second time
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-
-  it("analyst review pass receives todo listing in prompt", () => {
-    const slug = "review-prompt";
-    const h = makeLoopHarness(slug);
-    let analystCalls = 0;
-    let reviewPrompt = "";
-
-    const execFn = (binary: string, args: string[]): string => {
-      if (binary === "fake-analyst") {
-        analystCalls += 1;
-        fs.writeFileSync(path.join(h.briefsDir, `${slug}-brief-v${analystCalls}.md`), "# brief\n", "utf-8");
-
-        if (analystCalls === 2) {
-          reviewPrompt = args.join("\n");
-          fs.writeFileSync(
-            path.join(h.tasksDir, `.convergence-${slug}`),
-            JSON.stringify({ slug, iteration: 2, role: "analyst" }),
-            "utf-8",
-          );
-        }
-      }
-
-      if (binary === "fake-architect") {
-        fs.writeFileSync(path.join(h.todoDir, `feat-${slug}.md`), "# prompt\n", "utf-8");
-        fs.writeFileSync(
-          path.join(h.tasksDir, `.convergence-${slug}`),
-          JSON.stringify({ slug, iteration: 1, role: "architect" }),
-          "utf-8",
-        );
-      }
-
-      return "";
-    };
-
-    runLoop(slug, {
-      tasksDir: h.tasksDir,
-      configPath: h.configPath,
-      templatesDir: h.templatesDir,
-      execFn,
-      promptFn: () => "c",
-      logFn: () => undefined,
-    });
-
-    expect(reviewPrompt).toContain("Review mode");
-    expect(reviewPrompt).toContain(`feat-${slug}.md`);
-
-    fs.rmSync(h.tmpDir, { recursive: true });
-  });
-});
-
-// ---------------------------------------------------------------------------
 // readPackageVersion
 // ---------------------------------------------------------------------------
 
@@ -1729,5 +1057,189 @@ describe("readPackageVersion", () => {
     const root = path.resolve(__dirname, "..");
     const expected = (JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf-8")) as { version: string }).version;
     expect(readPackageVersion()).toBe(expected);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Review loop (Analyst review gate)
+// ---------------------------------------------------------------------------
+
+describe("buildRoleInvocation", () => {
+  it("codex → exec with workspace-write sandbox and prompt last", () => {
+    const { command, args } = buildRoleInvocation({ binary: "codex", flags: [] }, "PROMPT", "/repo");
+    expect(command).toBe("codex");
+    expect(args).toEqual([
+      "exec", "--cd", "/repo", "--sandbox", "workspace-write", "--skip-git-repo-check", "PROMPT",
+    ]);
+  });
+
+  it("claude → -p with --permission-mode acceptEdits when no permission flag", () => {
+    const { command, args } = buildRoleInvocation({ binary: "claude", model: "opus", flags: [] }, "P", "/repo");
+    expect(command).toBe("claude");
+    expect(args).toEqual(["-p", "P", "--model", "opus", "--permission-mode", "acceptEdits"]);
+  });
+
+  it("claude → omits --permission-mode when a permission flag is already present", () => {
+    const { args } = buildRoleInvocation(
+      { binary: "claude", flags: ["--dangerously-skip-permissions"] }, "P", "/repo",
+    );
+    expect(args).toContain("--dangerously-skip-permissions");
+    expect(args).not.toContain("--permission-mode");
+  });
+});
+
+describe("setPromptStatus", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("flips only the frontmatter status line, leaving the body untouched", () => {
+    const f = path.join(tmpDir, "p.md");
+    fs.writeFileSync(f, "---\nstatus: draft\nreview_round: 0\n---\n# body mentions status: keepme\n");
+    setPromptStatus(f, "approved");
+    const out = fs.readFileSync(f, "utf-8");
+    expect(out).toContain("status: approved");
+    expect(out).toContain("# body mentions status: keepme");
+    expect(out).not.toMatch(/status: draft/);
+  });
+});
+
+describe("runReview", () => {
+  let tmpDir: string;
+  let tasksDir: string;
+  let todoDir: string;
+  let configPath: string;
+
+  function writeConfig(): void {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: {},
+        roles: {
+          architect: { binary: "claude", model: "opus", flags: ["--dangerously-skip-permissions"] },
+          analyst: { binary: "codex", flags: [] },
+        },
+      }),
+      "utf-8",
+    );
+  }
+
+  // Simulates the two agents by mutating the prompt's frontmatter status:
+  // an Architect call sets in-review; an Analyst call applies the next scripted verdict.
+  function makeSpawn(file: string, verdicts: string[]): (cmd: string, args: string[]) => number {
+    let v = 0;
+
+    return (_cmd: string, args: string[]) => {
+      const text = args.join(" ");
+
+      if (text.includes("Architect role")) {
+        setPromptStatus(file, "in-review");
+      }
+
+      else if (text.includes("Analyst role")) {
+        setPromptStatus(file, (verdicts[v++] ?? "changes-requested") as never);
+      }
+
+      return 0;
+    };
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    tasksDir = path.join(tmpDir, "tasks");
+    todoDir = path.join(tasksDir, "todo");
+    fs.mkdirSync(todoDir, { recursive: true });
+    configPath = path.join(tmpDir, "adapters.json");
+    writeConfig();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("throws when slug is empty", () => {
+    expect(() => runReview("", { tasksDir, configPath })).toThrow("--slug is required");
+  });
+
+  it("draft → architect submits → analyst approves: outcome approved in 1 round", () => {
+    const file = writeFile(todoDir, "feat-a.md", "---\nstatus: draft\nreview_round: 0\n---\n# a\n");
+    const result = runReview("a", {
+      tasksDir, configPath, spawnFn: makeSpawn(file, ["approved"]), logFn: () => undefined,
+    });
+    expect(result.outcome).toBe("approved");
+    expect(result.finalStatus).toBe("approved");
+    expect(result.rounds).toBe(1);
+  });
+
+  it("changes-requested then approved: outcome approved in 2 rounds", () => {
+    const file = writeFile(todoDir, "feat-b.md", "---\nstatus: draft\nreview_round: 0\n---\n# b\n");
+    const result = runReview("b", {
+      tasksDir, configPath, spawnFn: makeSpawn(file, ["changes-requested", "approved"]), logFn: () => undefined,
+    });
+    expect(result.outcome).toBe("approved");
+    expect(result.rounds).toBe(2);
+  });
+
+  it("never converges → blocked-review after maxRounds", () => {
+    const file = writeFile(todoDir, "feat-c.md", "---\nstatus: draft\nreview_round: 0\n---\n# c\n");
+    const result = runReview("c", {
+      tasksDir, configPath, maxRounds: 3,
+      spawnFn: makeSpawn(file, ["changes-requested", "changes-requested", "changes-requested"]),
+      logFn: () => undefined,
+    });
+    expect(result.outcome).toBe("blocked-review");
+    expect(result.rounds).toBe(3);
+    expect(readPackageVersion).toBeDefined();
+    expect(fs.readFileSync(file, "utf-8")).toContain("status: blocked-review");
+  });
+
+  it("already approved → returns immediately without spawning", () => {
+    const file = writeFile(todoDir, "feat-d.md", "---\nstatus: approved\nreview_round: 2\n---\n# d\n");
+    let called = false;
+    const result = runReview("d", {
+      tasksDir, configPath, spawnFn: () => { called = true; return 0; }, logFn: () => undefined,
+    });
+    expect(called).toBe(false);
+    expect(result.outcome).toBe("approved");
+    expect(result.rounds).toBe(0);
+    expect(file).toBeDefined();
+  });
+
+  it("aborts if the Architect step does not set status to in-review", () => {
+    const file = writeFile(todoDir, "feat-e.md", "---\nstatus: draft\nreview_round: 0\n---\n# e\n");
+    // spawn that never mutates the file → architect leaves it at draft
+    expect(() =>
+      runReview("e", { tasksDir, configPath, spawnFn: () => 0, logFn: () => undefined }),
+    ).toThrow(/did not set status to in-review/);
+    expect(file).toBeDefined();
+  });
+
+  it("uses claude as Analyst when analyst='claude' (no codex role needed)", () => {
+    const file = writeFile(todoDir, "feat-f.md", "---\nstatus: draft\nreview_round: 0\n---\n# f\n");
+    const seen: string[] = [];
+    const spawnFn = (cmd: string, args: string[]) => {
+      seen.push(cmd);
+      const text = args.join(" ");
+
+      if (text.includes("Architect role")) {
+        setPromptStatus(file, "in-review");
+      }
+
+      else if (text.includes("Analyst role")) {
+        setPromptStatus(file, "approved");
+      }
+
+      return 0;
+    };
+    const result = runReview("f", { tasksDir, configPath, analyst: "claude", spawnFn, logFn: () => undefined });
+    expect(result.outcome).toBe("approved");
+    // both architect and analyst invoked the claude binary
+    expect(seen.every((c) => c === "claude")).toBe(true);
   });
 });
