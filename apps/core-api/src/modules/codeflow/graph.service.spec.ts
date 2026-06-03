@@ -842,7 +842,9 @@ describe('GraphService', () => {
       ];
 
       const graph = {
-        run: vi.fn().mockResolvedValue([{ n: mgNode, links: mgLinks, annotations: mgAnnotations }]),
+        // getNodeFromMemgraph projects a FLAT record (id, projectId, …, links,
+        // annotations) — not a nested { n }. Mock must match that shape.
+        run: vi.fn().mockResolvedValue([{ ...mgNode, links: mgLinks, annotations: mgAnnotations }]),
       };
 
       const svc = new GraphService(prisma as never, sync as never, audit as never, graph as never);
