@@ -112,6 +112,8 @@ jobs:
         run: pnpm turbo build
 
       - name: Run migrations and seed
+        env:
+          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: pnpm db:migrate && pnpm db:seed
 
       - name: Install Playwright browsers
