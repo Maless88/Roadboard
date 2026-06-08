@@ -1,6 +1,5 @@
 import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
-import { optionalEnv } from '@roadboard/config';
 import { GraphDbClient } from '@roadboard/graph-db';
 import { CreateDomainGroupDto } from './dto/create-domain-group.dto';
 import { UpdateDomainGroupDto } from './dto/update-domain-group.dto';
@@ -9,15 +8,10 @@ import { UpdateDomainGroupDto } from './dto/update-domain-group.dto';
 @Injectable()
 export class DomainGroupsService {
 
-  private readonly useMemgraphWrite: boolean;
-
   constructor(
     @Inject('PRISMA') private readonly prisma: PrismaClient,
     @Optional() @Inject('GRAPH_DB_CLIENT') private readonly graph?: GraphDbClient,
-  ) {
-
-    this.useMemgraphWrite = optionalEnv('GRAPH_WRITE_USE_MEMGRAPH', 'false') === 'true';
-  }
+  ) {}
 
 
   async create(projectId: string, dto: CreateDomainGroupDto) {
@@ -60,26 +54,16 @@ export class DomainGroupsService {
     const group = await this.findOrThrow(projectId, id);
 
     // Unset the domain-group association on all nodes belonging to this group.
-    // Memgraph nodes do not carry the FK `domainGroupId`; the persisted
-    // property is the group NAME (`domainGroup`, see GraphService.nodeProjection
-    // / GraphSyncService.upsertNode). When the write flag is ON we clear that
-    // name property; otherwise we clear the Prisma FK as before.
-    if (this.useMemgraphWrite) {
-      await this.requireGraph().run(
-        `MATCH (n {projectId: $projectId, domainGroup: $name})
-         WHERE NOT n:Link AND NOT n:Annotation
-         SET n.domainGroup = null`,
-        { projectId, name: group.name },
-        { mode: 'write' },
-      );
-    } else {
-      // Prisma onDelete: SetNull handles this via FK, but we do it explicitly
-      // for clarity and to ensure Prisma client reflects the state.
-      await this.prisma.architectureNode.updateMany({
-        where: { domainGroupId: id, projectId },
-        data: { domainGroupId: null },
-      });
-    }
+    // Memgraph nodes carry the group NAME as the `domainGroup` property
+    // (see GraphService.createNodeInMemgraph); clear it for every node in the
+    // project that references this group.
+    await this.requireGraph().run(
+      `MATCH (n {projectId: $projectId, domainGroup: $name})
+       WHERE NOT n:Link AND NOT n:Annotation
+       SET n.domainGroup = null`,
+      { projectId, name: group.name },
+      { mode: 'write' },
+    );
 
     return this.prisma.domainGroup.delete({ where: { id } });
   }
@@ -99,40 +83,27 @@ export class DomainGroupsService {
       groupName = group.name;
     }
 
-    if (this.useMemgraphWrite) {
-      const records = await this.requireGraph().run<{ id: string }>(
-        `MATCH (n {id: $nodeId, projectId: $projectId})
-         WHERE NOT n:Link AND NOT n:Annotation
-         SET n.domainGroup = $groupName
-         RETURN n.id AS id`,
-        { nodeId, projectId, groupName },
-        { mode: 'write' },
-      );
+    const records = await this.requireGraph().run<{ id: string }>(
+      `MATCH (n {id: $nodeId, projectId: $projectId})
+       WHERE NOT n:Link AND NOT n:Annotation
+       SET n.domainGroup = $groupName
+       RETURN n.id AS id`,
+      { nodeId, projectId, groupName },
+      { mode: 'write' },
+    );
 
-      if (records.length === 0) {
-        throw new NotFoundException(`ArchitectureNode ${nodeId} not found`);
-      }
-
-      return { id: nodeId, projectId, domainGroup: groupName };
-    }
-
-    const node = await this.prisma.architectureNode.findUnique({ where: { id: nodeId } });
-
-    if (!node || node.projectId !== projectId) {
+    if (records.length === 0) {
       throw new NotFoundException(`ArchitectureNode ${nodeId} not found`);
     }
 
-    return this.prisma.architectureNode.update({
-      where: { id: nodeId },
-      data: { domainGroupId },
-    });
+    return { id: nodeId, projectId, domainGroup: groupName };
   }
 
 
   private requireGraph(): GraphDbClient {
 
     if (!this.graph) {
-      throw new Error('GRAPH_WRITE_USE_MEMGRAPH is enabled but GraphDbClient is not available');
+      throw new Error('GraphDbClient is not available');
     }
 
     return this.graph;

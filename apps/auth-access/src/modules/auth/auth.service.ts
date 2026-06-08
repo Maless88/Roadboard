@@ -2,6 +2,7 @@ import { ConflictException, Inject, Injectable, Logger, UnauthorizedException } 
 import { PrismaClient } from '@roadboard/database';
 import { hashPassword, verifyPassword, generateToken, hashToken } from '@roadboard/auth';
 import { applyDemoSeed } from '@roadboard/demo-seed';
+import { GraphDbClient } from '@roadboard/graph-db';
 import { LoginDto } from './login.dto';
 import { RegisterDto } from './register.dto';
 import { ensurePersonalTeam } from '../users/users.service';
@@ -88,12 +89,16 @@ export class AuthService {
 
     if (seedDemoProject) {
 
+      const graph = new GraphDbClient();
+
       try {
         await this.prisma.$transaction(async (tx) => {
-          await applyDemoSeed(tx, { userId: user.id, teamId, locale: demoLocale });
+          await applyDemoSeed(tx, { userId: user.id, teamId, locale: demoLocale }, graph);
         });
       } catch (err) {
         this.logger.warn(`Demo seed failed for user ${user.username}: ${(err as Error).message}`);
+      } finally {
+        await graph.close().catch(() => undefined);
       }
     }
 

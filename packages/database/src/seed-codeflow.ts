@@ -1,9 +1,12 @@
 import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { GraphDbClient, applyGraphSchema, labelFromType } from '@roadboard/graph-db';
 
 
 const prisma = new PrismaClient();
+const graph = new GraphDbClient();
 
 const REPO_ROOT = resolve(__dirname, '../../..');
 const DEFAULT_PROJECT_SLUG = 'roadboard-2';
@@ -80,11 +83,18 @@ async function main() {
   const workspaces = discoverWorkspaces();
   console.log(`Discovered ${workspaces.length} workspaces (${workspaces.filter((w) => w.type === 'app').length} apps, ${workspaces.filter((w) => w.type === 'package').length} packages).`);
 
-  // Idempotent reset: wipe previous CodeFlow data for this project
-  await prisma.architectureEdge.deleteMany({ where: { projectId: project.id } });
-  await prisma.architectureLink.deleteMany({ where: { projectId: project.id } });
-  await prisma.architectureAnnotation.deleteMany({ where: { projectId: project.id } });
-  await prisma.architectureNode.deleteMany({ where: { projectId: project.id } });
+  // Memgraph is the sole source of truth for the architecture graph
+  // (nodes/edges/links/annotations). The relational tables retained are the
+  // scan metadata (architectureSnapshot) and codeRepository.
+  await applyGraphSchema(graph);
+
+  // Idempotent reset: wipe previous CodeFlow data for this project.
+  // Graph entities live in Memgraph; scan metadata in Postgres.
+  await graph.run(
+    'MATCH (n {projectId: $projectId}) DETACH DELETE n',
+    { projectId: project.id },
+    { mode: 'write' },
+  );
   await prisma.architectureSnapshot.deleteMany({ where: { projectId: project.id } });
   await prisma.codeRepository.deleteMany({ where: { projectId: project.id } });
 
@@ -108,24 +118,43 @@ async function main() {
     },
   });
 
+  const now = new Date().toISOString();
+
   // Create all nodes first so we can look them up by pkgName when creating edges
   const nodesByPkgName = new Map<string, string>(); // pkgName -> nodeId
 
   for (const ws of workspaces) {
-    const node = await prisma.architectureNode.create({
-      data: {
+    const nodeId = randomUUID();
+    const label = labelFromType(ws.type);
+
+    await graph.run(
+      `MERGE (n:${label} {id: $id})
+       SET n.projectId = $projectId,
+           n.type = $type,
+           n.name = $name,
+           n.path = $path,
+           n.description = $description,
+           n.metadata = $metadata,
+           n.isManual = $isManual,
+           n.isCurrent = $isCurrent,
+           n.createdAt = $createdAt,
+           n.updatedAt = $updatedAt`,
+      {
+        id: nodeId,
         projectId: project.id,
-        repositoryId: repo.id,
-        snapshotId: snapshot.id,
         type: ws.type,
         name: ws.shortName,
         path: ws.path,
         description: ws.pkgName,
+        metadata: JSON.stringify({}),
         isManual: false,
         isCurrent: true,
+        createdAt: now,
+        updatedAt: now,
       },
-    });
-    nodesByPkgName.set(ws.pkgName, node.id);
+      { mode: 'write' },
+    );
+    nodesByPkgName.set(ws.pkgName, nodeId);
     console.log(`  + node ${ws.type}:${ws.shortName} (${ws.pkgName})`);
   }
 
@@ -142,23 +171,32 @@ async function main() {
 
       if (!toId || toId === fromId) continue;
 
-      await prisma.architectureEdge.create({
-        data: {
+      await graph.run(
+        `MATCH (a {id: $fromId}), (b {id: $toId})
+         MERGE (a)-[r:DEPENDS_ON {id: $id}]->(b)
+         SET r.projectId = $projectId,
+             r.edgeType = 'depends_on',
+             r.weight = $weight,
+             r.isManual = $isManual,
+             r.isCurrent = $isCurrent,
+             r.createdAt = $createdAt`,
+        {
+          id: randomUUID(),
+          fromId,
+          toId,
           projectId: project.id,
-          snapshotId: snapshot.id,
-          fromNodeId: fromId,
-          toNodeId: toId,
-          edgeType: 'depends_on',
           weight: 1.0,
           isManual: false,
           isCurrent: true,
+          createdAt: now,
         },
-      });
+        { mode: 'write' },
+      );
       edgeCount++;
     }
   }
 
-  console.log(`Seed complete: 1 repository, 1 snapshot, ${workspaces.length} nodes, ${edgeCount} edges.`);
+  console.log(`Seed complete: 1 repository, 1 snapshot (${snapshot.id}), ${workspaces.length} nodes, ${edgeCount} edges (Memgraph).`);
 }
 
 
@@ -167,4 +205,7 @@ main()
     console.error('Seed CodeFlow failed:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+    await graph.close().catch(() => undefined);
+  });

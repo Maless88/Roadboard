@@ -4,8 +4,6 @@ import { GraphDbClient } from '@roadboard/graph-db';
 import { AuditModule } from '../audit/audit.module';
 import { CodeflowService } from './codeflow.service';
 import { GraphService } from './graph.service';
-import { GraphSyncService } from './graph-sync.service';
-import { DriftService } from './drift.service';
 import { DomainGroupsService } from './domain-groups.service';
 import { RepositoriesController } from './repositories.controller';
 import { GraphController } from './graph.controller';
@@ -18,14 +16,12 @@ import { DomainGroupsController } from './domain-groups.controller';
   providers: [
     CodeflowService,
     GraphService,
-    GraphSyncService,
-    DriftService,
     DomainGroupsService,
     {
       provide: 'GRAPH_DB_CLIENT',
       useFactory: () => new GraphDbClient(),
     },
   ],
-  exports: [CodeflowService, GraphService, DriftService, DomainGroupsService],
+  exports: [CodeflowService, GraphService, DomainGroupsService],
 })
 export class CodeflowModule {}

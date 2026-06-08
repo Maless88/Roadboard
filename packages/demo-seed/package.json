@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@roadboard/database": "workspace:*",
-    "@roadboard/domain": "workspace:*"
+    "@roadboard/domain": "workspace:*",
+    "@roadboard/graph-db": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

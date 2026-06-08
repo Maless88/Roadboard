@@ -1,12 +1,39 @@
 # CodeFlow Drift Runbook
 
 **Audience**: on-call engineers, Architect agents  
-**Last updated**: 2026-05-13  
-**Status**: baseline established (CF-GDB-03c / AI-P0-01); mirror extended to Link + Annotation + extended node fields (CF-GDB-03b-A)
+**Last updated**: 2026-06-08  
+**Status**: RETIRED (CF-GDB-03b-E)
 
 ---
 
-## What is drift?
+> ## ⚠️ RETIRED — drift no longer exists
+>
+> As of **CF-GDB-03b-E**, Memgraph is the **single source of truth** for the
+> CodeFlow architecture graph. The PostgreSQL mirror tables
+> (`architecture_nodes`, `architecture_edges`, `architecture_links`,
+> `architecture_annotations`) were dropped, so there are no longer two
+> projections that can diverge — the concept of Postgres↔Memgraph drift is gone.
+>
+> Consequently:
+>
+> - **`DriftService` has been removed** (`drift.service.ts` deleted).
+> - **The diagnostic endpoint `GET /projects/:projectId/codeflow/graph/drift`
+>   has been retired** (deliberate internal/admin breaking change — it was never
+>   part of the public API contract).
+> - **The scheduled drift check has been removed**: `scripts/drift-check.sh`,
+>   `infra/systemd/roadboard-drift-check.service`, and
+>   `infra/systemd/roadboard-drift-check.timer` are deleted.
+>
+> The remaining relational tables under CodeFlow are scan metadata only
+> (`architecture_snapshots`, `code_repositories`); they are not graph data and
+> are not subject to drift.
+>
+> The content below is preserved for historical reference only and no longer
+> reflects the running system.
+
+---
+
+## What is drift? (historical)
 
 The CodeFlow graph stores two projections of the same architectural data:
 
