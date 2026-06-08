@@ -139,6 +139,8 @@ jobs:
           curl -f http://localhost:3001/health || (echo "core-api not healthy" && exit 1)
 
       - name: Run Playwright tests
+        env:
+          E2E_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
         run: pnpm --filter web-app test:e2e
 
       - name: Upload Playwright report
