@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType } from '@roadboard/domain';
+import { GraphDbClient, labelFromType } from '@roadboard/graph-db';
 
 import { DemoLocale, getDemoContent } from './content';
 
@@ -23,6 +25,7 @@ export interface ApplyDemoSeedResult {
 export async function applyDemoSeed(
   tx: PrismaTx,
   input: ApplyDemoSeedInput,
+  graph?: GraphDbClient,
 ): Promise<ApplyDemoSeedResult> {
 
   const content = getDemoContent(input.locale ?? 'it');
@@ -150,73 +153,127 @@ export async function applyDemoSeed(
     },
   });
 
+  // Architecture graph entities (nodes/edges/links) live in Memgraph, which is
+  // the sole source of truth. When no graph client is supplied the graph layer
+  // is skipped — the relational snapshot metadata above is still recorded.
   const nodeByKey = new Map<string, string>();
 
   for (const node of content.nodes) {
-    const created = await tx.architectureNode.create({
-      data: {
-        projectId: project.id,
-        repositoryId: repo.id,
-        snapshotId: snapshot.id,
-        type: node.type,
-        name: node.name,
-        path: node.path,
-        description: node.description,
-        domainGroup: node.domainGroup,
-        isManual: true,
-        isCurrent: true,
-      },
-    });
-    nodeByKey.set(node.key, created.id);
+    nodeByKey.set(node.key, randomUUID());
   }
 
-  for (const edge of content.edges) {
-    const fromId = nodeByKey.get(edge.from);
-    const toId = nodeByKey.get(edge.to);
+  if (graph) {
+    const now = new Date().toISOString();
 
-    if (!fromId || !toId) {
-      throw new Error(`demo-seed: edge references missing node "${edge.from}" or "${edge.to}"`);
+    for (const node of content.nodes) {
+      const nodeId = nodeByKey.get(node.key)!;
+      const label = labelFromType(node.type);
+
+      await graph.run(
+        `MERGE (n:${label} {id: $id})
+         SET n.projectId = $projectId,
+             n.type = $type,
+             n.name = $name,
+             n.path = $path,
+             n.description = $description,
+             n.domainGroup = $domainGroup,
+             n.metadata = $metadata,
+             n.isManual = $isManual,
+             n.isCurrent = $isCurrent,
+             n.createdAt = $createdAt,
+             n.updatedAt = $updatedAt`,
+        {
+          id: nodeId,
+          projectId: project.id,
+          type: node.type,
+          name: node.name,
+          path: node.path ?? null,
+          description: node.description ?? null,
+          domainGroup: node.domainGroup ?? null,
+          metadata: JSON.stringify({}),
+          isManual: true,
+          isCurrent: true,
+          createdAt: now,
+          updatedAt: now,
+        },
+        { mode: 'write' },
+      );
     }
 
-    await tx.architectureEdge.create({
-      data: {
-        projectId: project.id,
-        snapshotId: snapshot.id,
-        fromNodeId: fromId,
-        toNodeId: toId,
-        edgeType: edge.edgeType,
-        isManual: true,
-        isCurrent: true,
-      },
-    });
-  }
+    for (const edge of content.edges) {
+      const fromId = nodeByKey.get(edge.from);
+      const toId = nodeByKey.get(edge.to);
 
-  for (const link of content.links) {
-    const nodeId = nodeByKey.get(link.nodeKey);
+      if (!fromId || !toId) {
+        throw new Error(`demo-seed: edge references missing node "${edge.from}" or "${edge.to}"`);
+      }
 
-    if (!nodeId) {
-      throw new Error(`demo-seed: link references missing node "${link.nodeKey}"`);
+      await graph.run(
+        `MATCH (a {id: $fromId}), (b {id: $toId})
+         MERGE (a)-[r:${edge.edgeType.toUpperCase()} {id: $id}]->(b)
+         SET r.projectId = $projectId,
+             r.edgeType = $edgeType,
+             r.weight = $weight,
+             r.isManual = $isManual,
+             r.isCurrent = $isCurrent,
+             r.createdAt = $createdAt`,
+        {
+          id: randomUUID(),
+          fromId,
+          toId,
+          projectId: project.id,
+          edgeType: edge.edgeType,
+          weight: 1.0,
+          isManual: true,
+          isCurrent: true,
+          createdAt: now,
+        },
+        { mode: 'write' },
+      );
     }
 
-    const entityId = link.target === 'task'
-      ? taskByTitle.get(link.targetKey)
-      : decisionByKey.get(link.targetKey);
+    for (const link of content.links) {
+      const nodeId = nodeByKey.get(link.nodeKey);
 
-    if (!entityId) {
-      throw new Error(`demo-seed: link references missing ${link.target} "${link.targetKey}"`);
+      if (!nodeId) {
+        throw new Error(`demo-seed: link references missing node "${link.nodeKey}"`);
+      }
+
+      const entityId = link.target === 'task'
+        ? taskByTitle.get(link.targetKey)
+        : decisionByKey.get(link.targetKey);
+
+      if (!entityId) {
+        throw new Error(`demo-seed: link references missing ${link.target} "${link.targetKey}"`);
+      }
+
+      await graph.run(
+        `MERGE (l:Link {id: $id})
+         SET l.projectId = $projectId,
+             l.nodeId = $nodeId,
+             l.entityType = $entityType,
+             l.entityId = $entityId,
+             l.linkType = $linkType,
+             l.note = $note,
+             l.createdByUserId = $createdByUserId,
+             l.createdAt = $createdAt
+         WITH l
+         MATCH (n {id: $nodeId, projectId: $projectId})
+         MERGE (l)-[:LINKED_TO]->(n)`,
+        {
+          id: randomUUID(),
+          projectId: project.id,
+          nodeId,
+          entityType: link.target === 'task' ? 'task' : 'decision',
+          entityId,
+          linkType: link.linkType,
+          note: link.note ?? null,
+          createdByUserId: input.userId,
+          createdAt: now,
+        },
+        { mode: 'write' },
+      );
     }
-
-    await tx.architectureLink.create({
-      data: {
-        nodeId,
-        projectId: project.id,
-        entityType: link.target === 'task' ? 'task' : 'decision',
-        entityId,
-        linkType: link.linkType,
-        note: link.note,
-        createdByUserId: input.userId,
-      },
-    });
   }
 
   return { projectId: project.id, slug };

@@ -2,7 +2,25 @@
 
 Outbox table: `graph_sync_events`  
 Worker: `apps/worker-jobs/src/modules/graph-projection/graph-projection.service.ts`  
-Feature flag: `GRAPH_SYNC_USE_OUTBOX` (default `false` — outbox inactive until CF-GDB-03b cutover)
+Feature flag: `GRAPH_SYNC_USE_OUTBOX` (default `false`)
+
+---
+
+> **Update (CF-GDB-03b-E):** Memgraph is now the **single source of truth** for
+> the CodeFlow architecture graph. The PostgreSQL graph mirror tables
+> (`architecture_nodes`, `architecture_edges`, `architecture_links`,
+> `architecture_annotations`) were dropped and `GraphService` writes directly to
+> Memgraph (fail-closed) — there is no longer a dual-write path.
+>
+> As a result the Postgres↔Memgraph drift concept no longer exists:
+> **`DriftService` and the `GET /projects/:projectId/codeflow/graph/drift`
+> endpoint have been retired**, along with the scheduled `drift-check` systemd
+> units. See `codeflow-drift-runbook.md` (also retired).
+>
+> The `graph_sync_events` outbox table and its worker remain for the
+> repository/metadata projection paths; the one-shot scripts
+> `migrate-to-memgraph` and `backfill-outbox` are obsolete (the source mirror
+> tables they read no longer exist).
 
 ---
 

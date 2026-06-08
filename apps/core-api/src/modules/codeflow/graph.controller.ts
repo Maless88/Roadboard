@@ -8,7 +8,6 @@ import { RequireGrant } from '../../common/require-grant.decorator';
 import { CurrentUser } from '../../common/user.decorator';
 import type { AuthUser } from '../../common/auth-user';
 import { GraphService } from './graph.service';
-import { DriftService } from './drift.service';
 import { CreateNodeDto } from './dto/create-node.dto';
 import { UpdateNodeDto } from './dto/update-node.dto';
 import { CreateEdgeDto } from './dto/create-edge.dto';
@@ -22,7 +21,6 @@ export class GraphController {
 
   constructor(
     @Inject(GraphService) private readonly graphService: GraphService,
-    @Inject(DriftService) private readonly driftService: DriftService,
   ) {}
 
 
@@ -78,16 +76,6 @@ export class GraphController {
     // are global. Gate on codeflow.read since the same scope already
     // governs the rest of this controller.
     return this.graphService.getOutboxStats();
-  }
-
-
-  @RequireGrant(GrantType.CODEFLOW_READ)
-  @Get('drift')
-  getDrift() {
-
-    // Cross-project diff Postgres ↔ Memgraph. Same gating considerations
-    // as outbox-stats above.
-    return this.driftService.detectDrift();
   }
 
 

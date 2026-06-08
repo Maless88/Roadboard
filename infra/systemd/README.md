@@ -1,4 +1,4 @@
-# Self-hosted deploy + drift check — systemd units
+# Self-hosted deploy — systemd units
 
 One-time install on a host running the Roadboard compose stack:
 
@@ -8,22 +8,16 @@ sudo install -m 0644 roadboard-deploy.service /etc/systemd/system/
 sudo install -m 0644 roadboard-deploy.path /etc/systemd/system/
 sudo chmod +x /opt/roadboard/scripts/deploy.sh
 
-# CodeFlow drift check (CF-GDB-03c-4)
-sudo install -m 0644 roadboard-drift-check.service /etc/systemd/system/
-sudo install -m 0644 roadboard-drift-check.timer /etc/systemd/system/
-sudo chmod +x /opt/roadboard/scripts/drift-check.sh
-
-# Add DRIFT_CHECK_TOKEN=<mcp-token-with-codeflow.read> to
-# /opt/roadboard/infra/docker/.env (read by EnvironmentFile= in the
-# .service unit). Example:
-#   DRIFT_CHECK_TOKEN=mcp_xxx
-# Optional override:
-#   DRIFT_CHECK_PROJECT_ID=<project-id-to-check> (defaults to Roadboard 2.0)
-
 sudo systemctl daemon-reload
 sudo systemctl enable --now roadboard-deploy.path
-sudo systemctl enable --now roadboard-drift-check.timer
 ```
+
+> **Note (CF-GDB-03b-E):** the CodeFlow drift check units
+> (`roadboard-drift-check.service`/`.timer`) and `scripts/drift-check.sh` were
+> removed. Memgraph is the single source of truth; Postgres↔Memgraph drift no
+> longer exists. If these units were previously installed, disable and remove
+> them: `sudo systemctl disable --now roadboard-drift-check.timer && sudo rm
+> /etc/systemd/system/roadboard-drift-check.{service,timer}`.
 
 ## How it works
 
