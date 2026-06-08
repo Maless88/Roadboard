@@ -7,7 +7,7 @@ test.describe('Projects', () => {
 
     await page.goto('/login');
     await page.getByLabel('Username').fill('admin');
-    await page.getByLabel('Password').fill('***REDACTED***');
+    await page.getByLabel('Password').fill(process.env.E2E_ADMIN_PASSWORD!);
     await page.locator('button[type="submit"]').click();
     await page.waitForURL('/dashboard');
   });

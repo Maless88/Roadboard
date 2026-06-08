@@ -45,7 +45,7 @@ let projectId = '';
 let projectUrl = '';
 const DEV_USERNAME = `e2edev${RUN_ID}`;
 const DEV_DISPLAY = `E2E Dev ${RUN_ID}`;
-const DEV_PASSWORD = '***REDACTED***';
+const DEV_PASSWORD = process.env.E2E_ADMIN_PASSWORD!;
 
 
 async function adminApiToken(): Promise<string> {
@@ -53,7 +53,7 @@ async function adminApiToken(): Promise<string> {
   const res = await fetch('http://localhost:3002/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: 'admin', password: '***REDACTED***' }),
+    body: JSON.stringify({ username: 'admin', password: process.env.E2E_ADMIN_PASSWORD! }),
   });
   const { token } = await res.json() as { token: string };
   return token;
@@ -99,7 +99,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('1. Owner creates a project via the dashboard page', async ({ page }) => {
 
-    await login(page, 'admin', '***REDACTED***');
+    await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!);
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -137,7 +137,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('2. Owner sees themselves as Proprietario in contributors tab', async ({ page }) => {
 
-    await login(page, 'admin', '***REDACTED***');
+    await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!);
     await page.goto(projectUrl + '?tab=contributors');
     await page.waitForLoadState('networkidle');
 
@@ -151,7 +151,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('3. Owner adds dev3 as developer via Contributors tab', async ({ page }) => {
 
-    await login(page, 'admin', '***REDACTED***');
+    await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!);
     await page.goto(projectUrl + '?tab=contributors');
     await page.waitForLoadState('networkidle');
 
@@ -242,7 +242,7 @@ test.describe.serial('Access Control GUI', () => {
 
   test('6. Owner can delete the project via the dashboard', async ({ page }) => {
 
-    await login(page, 'admin', '***REDACTED***');
+    await login(page, 'admin', process.env.E2E_ADMIN_PASSWORD!);
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
@@ -282,7 +282,7 @@ test.describe.serial('Access Control GUI', () => {
       const loginRes = await fetch('http://localhost:3002/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'admin', password: '***REDACTED***' }),
+        body: JSON.stringify({ username: 'admin', password: process.env.E2E_ADMIN_PASSWORD! }),
       });
       const { token } = await loginRes.json() as { token: string };
       await fetch(`http://localhost:3001/projects/${projectId}`, {
