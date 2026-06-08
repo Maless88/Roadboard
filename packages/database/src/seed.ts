@@ -8,7 +8,13 @@ async function main() {
 
   const { hashPassword } = await import('@roadboard/auth');
 
-  const defaultPassword = await hashPassword('roadboard2025');
+  const rawPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (!rawPassword) {
+    throw new Error('SEED_ADMIN_PASSWORD env var is required — never hardcode passwords in seed files.');
+  }
+
+  const defaultPassword = await hashPassword(rawPassword);
 
   const admin = await prisma.user.upsert({
     where: { username: 'admin' },

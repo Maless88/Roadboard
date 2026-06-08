@@ -24,7 +24,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
 - **Operational memory** — persistent memory entries, decision records, and session handoffs
 - **Team collaboration** — users, teams, project grants, role-based access control
-- **MCP agent access** — 31 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
+- **MCP agent access** — 34 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
 - **Atlas (CodeFlow)** — interactive architecture map with domain groups, agent context view, drift validation, and Deep Code Map schema (File/Symbol/ExternalPackage)
 - **Audit trail** — full activity log per project with filters by event type, actor type, and date range
 - **Project thumbnails** — auto-refresh screenshots from project home URL + manual upload
@@ -41,7 +41,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 apps/
   core-api          NestJS — projects, phases, tasks, memory, decisions, codeflow, release (port 3001)
   auth-access       NestJS — users, teams, sessions, MCP tokens (port 3002)
-  mcp-service       MCP server (stdio + HTTP) — 31 tools for agent integration (port 3005)
+  mcp-service       MCP server (stdio + HTTP) — 34 tools for agent integration (port 3005)
   web-app           Next.js 15 — dashboard, project detail, task management, Atlas (port 3000)
   worker-jobs       NestJS + BullMQ — async jobs: refresh, summary, cleanup (port 3003)
   local-sync-bridge NestJS + SQLite — offline-first journal with sync engine (port 3004)
