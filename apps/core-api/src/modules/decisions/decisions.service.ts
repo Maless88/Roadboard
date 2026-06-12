@@ -1,9 +1,18 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import type { AuthUser } from '../../common/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { CreateDecisionDto } from './create-decision.dto';
 import { UpdateDecisionDto } from './update-decision.dto';
+
+
+interface FindAllFilters {
+  projectId: string;
+  status?: string;
+  updatedSince?: string;
+  limit?: number;
+  cursor?: string;
+}
 
 
 const AUTHOR_INCLUDE = {
@@ -23,40 +32,92 @@ export class DecisionsService {
 
   async create(dto: CreateDecisionDto, user: AuthUser) {
 
-    const decision = await this.prisma.decision.create({
-      data: {
-        projectId: dto.projectId,
-        title: dto.title,
-        summary: dto.summary,
-        rationale: dto.rationale,
-        status: dto.status ?? 'open',
-        impactLevel: dto.impactLevel ?? 'medium',
-        createdByUserId: dto.createdByUserId ?? user.userId,
-        updatedByUserId: user.userId,
-      },
-      include: AUTHOR_INCLUDE,
-    });
+    const existing = dto.id
+      ? await this.prisma.decision.findUnique({ where: { id: dto.id } })
+      : null;
 
-    await this.audit.recordForUser(user, 'decision.created', 'decision', decision.id, decision.projectId, {
-      title: decision.title,
-      impactLevel: decision.impactLevel,
-    });
+    if (existing && existing.projectId !== dto.projectId) {
+      throw new ConflictException(
+        `Decision ${dto.id} already exists in a different project`,
+      );
+    }
+
+    const decision = existing
+      ? await this.prisma.decision.update({
+          where: { id: existing.id },
+          data: {
+            title: dto.title,
+            summary: dto.summary,
+            rationale: dto.rationale,
+            status: dto.status ?? 'open',
+            impactLevel: dto.impactLevel ?? 'medium',
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        })
+      : await this.prisma.decision.create({
+          data: {
+            id: dto.id,
+            projectId: dto.projectId,
+            title: dto.title,
+            summary: dto.summary,
+            rationale: dto.rationale,
+            status: dto.status ?? 'open',
+            impactLevel: dto.impactLevel ?? 'medium',
+            createdByUserId: dto.createdByUserId ?? user.userId,
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        });
+
+    await this.audit.recordForUser(
+      user,
+      existing ? 'decision.updated' : 'decision.created',
+      'decision',
+      decision.id,
+      decision.projectId,
+      { title: decision.title, impactLevel: decision.impactLevel },
+    );
 
     return decision;
   }
 
 
-  async findAll(projectId: string, status?: string) {
+  async findAll(filters: FindAllFilters) {
 
-    const where: Record<string, unknown> = { projectId };
+    const where: Record<string, unknown> = { projectId: filters.projectId };
 
-    if (status) {
-      where.status = status;
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.updatedSince) {
+      where.updatedAt = { gt: new Date(filters.updatedSince) };
+    }
+
+    const orderBy = filters.updatedSince
+      ? [{ updatedAt: 'asc' as const }, { id: 'asc' as const }]
+      : { createdAt: 'desc' as const };
+
+    if (filters.limit !== undefined) {
+      const limit = filters.limit;
+      const items = await this.prisma.decision.findMany({
+        where,
+        orderBy,
+        include: AUTHOR_INCLUDE,
+        take: limit + 1,
+        ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+      });
+
+      const hasMore = items.length > limit;
+      const page = hasMore ? items.slice(0, limit) : items;
+      const nextCursor = hasMore ? page[page.length - 1].id : null;
+      return { items: page, nextCursor };
     }
 
     return this.prisma.decision.findMany({
       where,
-      orderBy: { createdAt: 'desc' },
+      orderBy,
       include: AUTHOR_INCLUDE,
     });
   }

@@ -1,9 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsDate, IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { TaskStatus, TaskPriority } from '@roadboard/domain';
 
 
 export class CreateTaskDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  id?: string;
 
   @IsString()
   @IsNotEmpty()

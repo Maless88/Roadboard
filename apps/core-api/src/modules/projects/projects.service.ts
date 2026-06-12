@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { GrantSubjectType, GrantType, ProjectStatus } from '@roadboard/domain';
 import { isInheritableByTeamMember } from '@roadboard/grants';
@@ -75,8 +75,42 @@ export class ProjectsService {
     const ownerTeamId = await this.resolveOwnerTeamId(dto);
     const createdByUserId = user?.userId;
 
+    const existing = dto.id
+      ? await this.prisma.project.findUnique({ where: { id: dto.id } })
+      : null;
+
+    if (existing && existing.ownerTeamId !== ownerTeamId) {
+      throw new ConflictException(
+        `Project ${dto.id} already exists under a different owner team`,
+      );
+    }
+
+    if (existing) {
+      const updated = await this.prisma.project.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          slug: dto.slug,
+          description: dto.description,
+          status: dto.status,
+        },
+      });
+
+      if (user) {
+        await this.audit.recordForUser(user, 'project.updated', 'project', updated.id, updated.id, {
+          name: updated.name,
+          slug: updated.slug,
+          ownerTeamId,
+          status: updated.status,
+        });
+      }
+
+      return updated;
+    }
+
     const project = await this.prisma.project.create({
       data: {
+        id: dto.id,
         name: dto.name,
         slug: dto.slug,
         description: dto.description,

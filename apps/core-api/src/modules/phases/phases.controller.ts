@@ -41,7 +41,13 @@ export class PhasesController {
   @Get()
   findAll(@Query() query: FindPhasesQueryDto) {
 
-    return this.phasesService.findAll(query.projectId, query.decisionId);
+    return this.phasesService.findAll({
+      projectId: query.projectId,
+      decisionId: query.decisionId,
+      updatedSince: query.updatedSince,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
 

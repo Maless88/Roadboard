@@ -6,6 +6,7 @@ import {
   IsEnum,
   IsIn,
   IsInt,
+  IsISO8601,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -67,6 +68,22 @@ export class FindPhasesQueryDto extends ProjectScopedQueryDto {
   @IsString()
   @IsNotEmpty()
   decisionId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedSince?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cursor?: string;
 }
 
 
@@ -80,6 +97,10 @@ export class FindTasksQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedSince?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -124,10 +145,26 @@ export class FindMemoryQueryDto extends ProjectScopedQueryDto {
   q?: string;
 
   @IsOptional()
+  @IsISO8601()
+  updatedSince?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   take?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cursor?: string;
 }
 
 
@@ -136,6 +173,22 @@ export class FindDecisionsQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsIn(['open', 'accepted', 'rejected', 'superseded'])
   status?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  updatedSince?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(200)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  cursor?: string;
 }
 
 

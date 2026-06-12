@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { TaskStatus } from '@roadboard/domain';
 import type { AuthUser } from '../../common/auth-user';
@@ -12,6 +12,7 @@ interface FindAllFilters {
   projectId: string;
   phaseId?: string;
   status?: TaskStatus;
+  updatedSince?: string;
   take?: number;
   limit?: number;
   cursor?: string;
@@ -43,26 +44,56 @@ export class TasksService {
 
   async create(dto: CreateTaskDto, user: AuthUser) {
 
-    const task = await this.prisma.task.create({
-      data: {
-        projectId: dto.projectId,
-        phaseId: dto.phaseId,
-        title: dto.title,
-        description: dto.description,
-        status: dto.status,
-        priority: dto.priority,
-        assigneeId: dto.assigneeId,
-        dueDate: dto.dueDate,
-        createdByUserId: user.userId,
-        updatedByUserId: user.userId,
-      },
-      include: AUTHOR_INCLUDE,
-    });
+    const existing = dto.id
+      ? await this.prisma.task.findUnique({ where: { id: dto.id } })
+      : null;
 
-    await this.audit.recordForUser(user, 'task.created', 'task', task.id, task.projectId, {
-      title: task.title,
-      phaseId: task.phaseId,
-    });
+    if (existing && existing.projectId !== dto.projectId) {
+      throw new ConflictException(
+        `Task ${dto.id} already exists in a different project`,
+      );
+    }
+
+    const task = existing
+      ? await this.prisma.task.update({
+          where: { id: existing.id },
+          data: {
+            phaseId: dto.phaseId,
+            title: dto.title,
+            description: dto.description,
+            status: dto.status,
+            priority: dto.priority,
+            assigneeId: dto.assigneeId,
+            dueDate: dto.dueDate,
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        })
+      : await this.prisma.task.create({
+          data: {
+            id: dto.id,
+            projectId: dto.projectId,
+            phaseId: dto.phaseId,
+            title: dto.title,
+            description: dto.description,
+            status: dto.status,
+            priority: dto.priority,
+            assigneeId: dto.assigneeId,
+            dueDate: dto.dueDate,
+            createdByUserId: user.userId,
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        });
+
+    await this.audit.recordForUser(
+      user,
+      existing ? 'task.updated' : 'task.created',
+      'task',
+      task.id,
+      task.projectId,
+      { title: task.title, phaseId: task.phaseId },
+    );
 
     await this.recomputePhaseStatus(task.phaseId);
     await this.recomputeProjectStatus(task.projectId);
@@ -83,7 +114,13 @@ export class TasksService {
       where.status = filters.status;
     }
 
-    const orderBy = [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
+    if (filters.updatedSince) {
+      where.updatedAt = { gt: new Date(filters.updatedSince) };
+    }
+
+    const orderBy = filters.updatedSince
+      ? [{ updatedAt: 'asc' as const }, { id: 'asc' as const }]
+      : [{ createdAt: 'desc' as const }, { id: 'desc' as const }];
     const explicit = filters.fields && filters.fields.length > 0 ? filters.fields : null;
     const useSelect = filters.compact === true || explicit !== null;
     const isPaginated = filters.limit !== undefined;
