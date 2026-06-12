@@ -41,7 +41,13 @@ export class DecisionsController {
   @Get()
   findAll(@Query() query: FindDecisionsQueryDto) {
 
-    return this.decisionsService.findAll(query.projectId, query.status);
+    return this.decisionsService.findAll({
+      projectId: query.projectId,
+      status: query.status,
+      updatedSince: query.updatedSince,
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
 

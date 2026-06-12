@@ -1,9 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsDate, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { PhaseStatus } from '@roadboard/domain';
 
 
 export class CreatePhaseDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  id?: string;
 
   @IsString()
   @IsNotEmpty()

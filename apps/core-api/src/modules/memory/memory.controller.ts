@@ -45,7 +45,10 @@ export class MemoryController {
       projectId: query.projectId,
       type: query.type,
       q: query.q,
+      updatedSince: query.updatedSince,
       take: query.take,
+      limit: query.limit,
+      cursor: query.cursor,
     });
   }
 

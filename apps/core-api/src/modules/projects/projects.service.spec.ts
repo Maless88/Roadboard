@@ -97,3 +97,65 @@ describe('ProjectsService audit coverage', () => {
     );
   });
 });
+
+
+describe('ProjectsService.create with client-provided id', () => {
+
+  it('new row preserves the two grant creations and passes the id', async () => {
+
+    const prisma = makePrisma();
+    prisma.project.findUnique.mockResolvedValue(null);
+    const audit = { recordForUser: vi.fn().mockResolvedValue({ id: 'evt' }) };
+    const service = new ProjectsService(prisma as never, audit as never);
+
+    await service.create(
+      { id: 'proj-1', name: 'demo', slug: 'demo', ownerTeamId: 't1', status: 'active' } as never,
+      MOCK_USER,
+    );
+
+    expect(prisma.project.create).toHaveBeenCalledOnce();
+    const data = prisma.project.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.id).toBe('proj-1');
+    // owner-team grant + calling-user grant
+    expect(prisma.projectGrant.create).toHaveBeenCalledTimes(2);
+    expect(prisma.project.update).not.toHaveBeenCalled();
+  });
+
+
+  it('existing row updates without re-creating grants', async () => {
+
+    const prisma = makePrisma();
+    prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', ownerTeamId: 't1' });
+    prisma.project.update.mockResolvedValue({ id: 'proj-1', name: 'demo', slug: 'demo', status: 'active' });
+    const audit = { recordForUser: vi.fn().mockResolvedValue({ id: 'evt' }) };
+    const service = new ProjectsService(prisma as never, audit as never);
+
+    await service.create(
+      { id: 'proj-1', name: 'demo', slug: 'demo', ownerTeamId: 't1', status: 'active' } as never,
+      MOCK_USER,
+    );
+
+    expect(prisma.project.update).toHaveBeenCalledOnce();
+    expect(prisma.project.create).not.toHaveBeenCalled();
+    expect(prisma.projectGrant.create).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects with 409 when the id belongs to a different owner team', async () => {
+
+    const prisma = makePrisma();
+    prisma.project.findUnique.mockResolvedValue({ id: 'proj-1', ownerTeamId: 'other-team' });
+    const audit = { recordForUser: vi.fn().mockResolvedValue({ id: 'evt' }) };
+    const service = new ProjectsService(prisma as never, audit as never);
+
+    await expect(
+      service.create(
+        { id: 'proj-1', name: 'demo', slug: 'demo', ownerTeamId: 't1', status: 'active' } as never,
+        MOCK_USER,
+      ),
+    ).rejects.toThrow();
+
+    expect(prisma.project.create).not.toHaveBeenCalled();
+    expect(prisma.project.update).not.toHaveBeenCalled();
+  });
+});

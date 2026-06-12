@@ -45,6 +45,7 @@ export class TasksController {
       projectId: query.projectId,
       phaseId: query.phaseId,
       status: query.status,
+      updatedSince: query.updatedSince,
       take: query.take,
       limit: query.limit,
       cursor: query.cursor,

@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { MemoryEntryType } from '@roadboard/domain';
 import type { AuthUser } from '../../common/auth-user';
@@ -11,7 +11,10 @@ interface FindAllFilters {
   projectId: string;
   type?: MemoryEntryType;
   q?: string;
+  updatedSince?: string;
   take?: number;
+  limit?: number;
+  cursor?: string;
 }
 
 
@@ -32,22 +35,48 @@ export class MemoryService {
 
   async create(dto: CreateMemoryEntryDto, user: AuthUser) {
 
-    const entry = await this.prisma.memoryEntry.create({
-      data: {
-        projectId: dto.projectId,
-        type: dto.type,
-        title: dto.title,
-        body: dto.body,
-        createdByUserId: user.userId,
-        updatedByUserId: user.userId,
-      },
-      include: AUTHOR_INCLUDE,
-    });
+    const existing = dto.id
+      ? await this.prisma.memoryEntry.findUnique({ where: { id: dto.id } })
+      : null;
 
-    await this.audit.recordForUser(user, 'memory.created', 'memory_entry', entry.id, entry.projectId, {
-      title: entry.title,
-      type: entry.type,
-    });
+    if (existing && existing.projectId !== dto.projectId) {
+      throw new ConflictException(
+        `MemoryEntry ${dto.id} already exists in a different project`,
+      );
+    }
+
+    const entry = existing
+      ? await this.prisma.memoryEntry.update({
+          where: { id: existing.id },
+          data: {
+            type: dto.type,
+            title: dto.title,
+            body: dto.body,
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        })
+      : await this.prisma.memoryEntry.create({
+          data: {
+            id: dto.id,
+            projectId: dto.projectId,
+            type: dto.type,
+            title: dto.title,
+            body: dto.body,
+            createdByUserId: user.userId,
+            updatedByUserId: user.userId,
+          },
+          include: AUTHOR_INCLUDE,
+        });
+
+    await this.audit.recordForUser(
+      user,
+      existing ? 'memory.updated' : 'memory.created',
+      'memory_entry',
+      entry.id,
+      entry.projectId,
+      { title: entry.title, type: entry.type },
+    );
 
     return entry;
   }
@@ -55,20 +84,43 @@ export class MemoryService {
 
   async findAll(filters: FindAllFilters) {
 
+    const where: Record<string, unknown> = {
+      projectId: filters.projectId,
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.q
+        ? {
+            OR: [
+              { title: { contains: filters.q, mode: 'insensitive' } },
+              { body: { contains: filters.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(filters.updatedSince ? { updatedAt: { gt: new Date(filters.updatedSince) } } : {}),
+    };
+
+    const orderBy = filters.updatedSince
+      ? [{ updatedAt: 'asc' as const }, { id: 'asc' as const }]
+      : { createdAt: 'desc' as const };
+
+    if (filters.limit !== undefined) {
+      const limit = filters.limit;
+      const items = await this.prisma.memoryEntry.findMany({
+        where,
+        orderBy,
+        include: AUTHOR_INCLUDE,
+        take: limit + 1,
+        ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+      });
+
+      const hasMore = items.length > limit;
+      const page = hasMore ? items.slice(0, limit) : items;
+      const nextCursor = hasMore ? page[page.length - 1].id : null;
+      return { items: page, nextCursor };
+    }
+
     return this.prisma.memoryEntry.findMany({
-      where: {
-        projectId: filters.projectId,
-        ...(filters.type ? { type: filters.type } : {}),
-        ...(filters.q
-          ? {
-              OR: [
-                { title: { contains: filters.q, mode: 'insensitive' } },
-                { body: { contains: filters.q, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy,
       include: AUTHOR_INCLUDE,
       ...(filters.take ? { take: filters.take } : {}),
     });

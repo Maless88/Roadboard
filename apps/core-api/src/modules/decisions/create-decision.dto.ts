@@ -1,7 +1,13 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 
 export class CreateDecisionDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  id?: string;
 
   @IsString()
   @IsNotEmpty()

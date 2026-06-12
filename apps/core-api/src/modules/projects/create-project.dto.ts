@@ -1,8 +1,14 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
 import { ProjectStatus } from '@roadboard/domain';
 
 
 export class CreateProjectDto {
+
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  id?: string;
 
   @IsString()
   @IsNotEmpty()
