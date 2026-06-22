@@ -233,6 +233,15 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             </svg>
             Guida
           </Link>
+          <Link
+            href="/boardchat"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.2-3.6A7.9 7.9 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            boardchat
+          </Link>
         </div>
 
       </nav>
