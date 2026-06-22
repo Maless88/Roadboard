@@ -23,6 +23,7 @@ model User {
 
   manager      User?  @relation("UserManager", fields: [managerId], references: [id])
   managedUsers User[] @relation("UserManager")
+  chatThreads  ChatThread[] @relation("UserChatThreads")
 
   teamMemberships TeamMembership[]
   projectGrants   ProjectGrant[]   @relation("GrantedByUser")
@@ -433,4 +434,36 @@ model AgentConfig {
 
   @@index([ownerTeamId])
   @@map("agent_configs")
+}
+
+// ── life-OS: agent chat threads + history ────────────
+
+model ChatThread {
+  id            String    @id @default(cuid())
+  ownerUserId   String    @map("owner_user_id")
+  agentSlug     String    @map("agent_slug")
+  title         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastMessageAt DateTime? @map("last_message_at")
+
+  ownerUser User          @relation("UserChatThreads", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+
+  @@unique([ownerUserId, agentSlug])
+  @@index([ownerUserId])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  threadId  String   @map("thread_id")
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@map("chat_messages")
 }
