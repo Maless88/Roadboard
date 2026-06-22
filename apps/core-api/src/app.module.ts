@@ -15,6 +15,7 @@ import { AuditModule } from "./modules/audit/audit.module";
 import { CodeflowModule } from "./modules/codeflow/codeflow.module";
 import { ProjectRepositoriesModule } from "./modules/projects/repositories/project-repositories.module";
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
+import { OpsModule } from "./modules/ops/ops.module";
 
 
 @Module({
@@ -34,6 +35,7 @@ import { ChatbotModule } from "./modules/chatbot/chatbot.module";
     CodeflowModule,
     ProjectRepositoriesModule,
     ChatbotModule,
+    OpsModule,
   ],
 })
 export class AppModule {}
