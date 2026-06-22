@@ -11,9 +11,9 @@ import { AgentExecutorService, type AgentExecConfig } from "./agent-executor.ser
  * transport (fetch-stream with body) later.
  */
 const DEFAULT_AGENT: AgentExecConfig = {
-  runtime: "api",
-  provider: "anthropic",
-  model: "claude-sonnet-4-5-20250929",
+  runtime: "cli",
+  provider: "claude-code",
+  model: "sonnet",
   systemPrompt:
     "Sei l'assistente del life-OS RoadBoard. Rispondi in modo conciso, pratico e in italiano.",
 };

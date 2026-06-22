@@ -34,9 +34,7 @@ export class AgentExecutorService {
       : messages;
 
     if (agent.runtime === "cli") {
-      throw new ProviderError(
-        `CLI runtime not yet implemented (provider=${agent.provider})`,
-      );
+      return this.streamCli(agent, full);
     }
 
     const name = agent.provider as ProviderName;
@@ -48,6 +46,38 @@ export class AgentExecutorService {
     }
 
     return getProvider(name).stream(full, this.resolveConfig(name, agent.model));
+  }
+
+  private async *streamCli(
+    agent: AgentExecConfig,
+    messages: ChatMessage[],
+  ): AsyncIterable<string> {
+
+    const url = optionalEnv("AGENT_CLI_BRIDGE_URL", "http://host.docker.internal:8787/run");
+    const token = optionalEnv("AGENT_CLI_BRIDGE_TOKEN", "");
+    const prompt = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
+
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt }),
+    });
+
+    if (!res.ok || !res.body) {
+      throw new ProviderError(`CLI bridge error ${res.status}`, res.status);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      yield decoder.decode(value, { stream: true });
+    }
   }
 
   private resolveConfig(name: ProviderName, model: string): ChatProviderConfig {

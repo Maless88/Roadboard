@@ -107,11 +107,15 @@ services:
       <<: *common-env
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
+      AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
+      AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
       GITHUB_REPO: ${GITHUB_REPO:-Maless88/Roadboard}
       GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
       ROADBOARD_REPO_PATH: /opt/roadboard
       ROADBOARD_COMPOSE_FILE: infra/docker/docker-compose.yml
       ROADBOARD_DEPLOY_BRANCH: ${ROADBOARD_DEPLOY_BRANCH:-main}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3001:3001"
     volumes:
@@ -157,6 +161,8 @@ services:
       <<: *common-env
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
+      AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
+      AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
       MCP_TRANSPORT: "http"
       MCP_HTTP_PORT: "3005"
     ports:
@@ -185,6 +191,8 @@ services:
       WORKER_JOBS_PORT: "3003"
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
+      AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
+      AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
     ports:
       - "3003:3003"
     depends_on:
@@ -207,6 +215,8 @@ services:
       JOURNAL_DB_PATH: /data/journal.db
       CORE_API_PORT: "3001"
       AUTH_ACCESS_PORT: "3002"
+      AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
+      AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
     ports:
       - "3004:3004"
     volumes:
