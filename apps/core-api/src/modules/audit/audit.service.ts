@@ -85,6 +85,18 @@ export class AuditService {
   }
 
 
+  async findRecentAgentEvents(take: number | string = 50) {
+
+    const n = typeof take === "string" ? parseInt(take, 10) || 50 : take;
+
+    return this.prisma.activityEvent.findMany({
+      where: { eventType: { startsWith: "agent." } },
+      orderBy: { createdAt: "desc" },
+      take: Math.min(Math.max(n, 1), 200),
+    });
+  }
+
+
   async findByProject(
     projectId: string,
     take: number | string = 50,
