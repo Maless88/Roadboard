@@ -242,6 +242,15 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             </svg>
             boardchat
           </Link>
+          <Link
+            href="/agent-office"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 17v-2a4 4 0 014-4h0a4 4 0 014 4v2M7 7h10M5 7a2 2 0 012-2h10a2 2 0 012 2v0M12 11a2 2 0 100-4 2 2 0 000 4z" />
+            </svg>
+            Agent Office
+          </Link>
         </div>
 
       </nav>

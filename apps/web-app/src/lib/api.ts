@@ -1543,3 +1543,23 @@ export async function getOpsStatus(token: string): Promise<OpsStatus> {
 
   return res.json() as Promise<OpsStatus>;
 }
+
+export interface AgentActivity {
+  id: string;
+  eventType: string;
+  targetId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export async function getAgentActivity(token: string): Promise<AgentActivity[]> {
+
+  const res = await fetch(`${CORE_API}/agents/activity`, {
+    headers: authHeaders(token),
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch agent activity");
+
+  return res.json() as Promise<AgentActivity[]>;
+}
