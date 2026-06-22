@@ -5,7 +5,6 @@
 // trusted interface and set AGENT_CLI_BRIDGE_TOKEN to require a bearer token.
 import http from 'node:http';
 import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
 
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
@@ -30,7 +29,7 @@ http.createServer((req, res) => {
       ? ['exec', prompt]
       : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: tmpdir() });
+    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: process.env.AGENT_CLI_BRIDGE_CWD || process.cwd() });
     child.stdout.on('data', (d) => res.write(d));
     child.stderr.on('data', (d) => console.error('[child-stderr]', String(d)));
     child.on('error', (e) => { res.write(`\n[bridge-error] ${e.message}`); res.end(); });
