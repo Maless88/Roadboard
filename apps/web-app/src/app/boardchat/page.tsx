@@ -14,9 +14,17 @@ export default async function BoardchatPage() {
   const session = await validateSession(token);
   if (!session) redirect("/login");
 
+  const enabled = process.env.AGENTS_ENABLED === "true";
+
   return (
     <AppShell username={session.username} displayName={session.displayName}>
-      <BoardChatClient />
+      {enabled ? (
+        <BoardChatClient />
+      ) : (
+        <div className="mx-auto max-w-2xl p-6 text-sm text-zinc-400">
+          L&apos;agentica e disabilitata su questa istanza (AGENTS_ENABLED).
+        </div>
+      )}
     </AppShell>
   );
 }

@@ -1,4 +1,5 @@
 import { Controller, Inject, Query, Sse, UseGuards } from "@nestjs/common";
+import { optionalEnv } from "@roadboard/config";
 import { Observable } from "rxjs";
 import { AuthGuard } from "../../common/auth.guard";
 import type { ChatMessage } from "../chatbot/providers";
@@ -28,6 +29,13 @@ export class AgentsController {
 
   @Sse("chat")
   chat(@Query("message") message: string): Observable<{ data: string }> {
+
+    if (optionalEnv("AGENTS_ENABLED", "false") !== "true") {
+      return new Observable<{ data: string }>((subscriber) => {
+        subscriber.next({ data: "[ERROR] agents disabled on this instance" });
+        subscriber.complete();
+      });
+    }
 
     const executor = this.executor;
 
