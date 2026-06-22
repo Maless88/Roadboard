@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, Query, Sse, UseGuards } from "@nestjs/common";
+import { Controller, Get, Inject, Param, Query, Sse, UseGuards } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { optionalEnv } from "@roadboard/config";
 import { AuthGuard } from "../../common/auth.guard";
@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import type { ChatMessage } from "../chatbot/providers";
 import { AgentExecutorService } from "./agent-executor.service";
 import { AgentsService } from "./agents.service";
+import { ChatService } from "./chat.service";
 
 @UseGuards(AuthGuard)
 @Controller("agents")
@@ -16,6 +17,7 @@ export class AgentsController {
   constructor(
     @Inject(AgentExecutorService) private readonly executor: AgentExecutorService,
     @Inject(AgentsService) private readonly agents: AgentsService,
+    @Inject(ChatService) private readonly chat: ChatService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
@@ -24,13 +26,23 @@ export class AgentsController {
     return this.agents.list();
   }
 
+  @Get("contacts")
+  contacts(@CurrentUser() user: AuthUser): Promise<unknown> {
+    return this.chat.contacts(user.userId);
+  }
+
   @Get("activity")
   activity(@Query("limit") limit?: string): Promise<unknown> {
     return this.audit.findRecentAgentEvents(limit ?? 50);
   }
 
+  @Get("threads/:slug/messages")
+  messages(@Param("slug") slug: string, @CurrentUser() user: AuthUser): Promise<unknown> {
+    return this.chat.listMessages(user.userId, slug);
+  }
+
   @Sse("chat")
-  chat(
+  chatStream(
     @Query("message") message: string,
     @CurrentUser() user: AuthUser,
     @Query("agent") agentSlug?: string,
@@ -45,17 +57,20 @@ export class AgentsController {
 
     const executor = this.executor;
     const agents = this.agents;
+    const chat = this.chat;
     const audit = this.audit;
 
     return new Observable<{ data: string }>((subscriber) => {
 
       let cancelled = false;
       const started = Date.now();
-      let chars = 0;
+      let reply = "";
 
       void (async () => {
 
         const { slug, config } = await agents.resolveForChat(agentSlug);
+        const thread = await chat.getOrCreateThread(user.userId, slug);
+        await chat.appendMessage(thread.id, "user", message ?? "");
 
         void audit.recordForUser(user, "agent.run.started", "agent", slug, undefined, {
           provider: config.provider,
@@ -67,13 +82,14 @@ export class AgentsController {
           const messages: ChatMessage[] = [{ role: "user", content: message ?? "" }];
           for await (const chunk of executor.stream(config, messages)) {
             if (cancelled) return;
-            chars += chunk.length;
+            reply += chunk;
             subscriber.next({ data: chunk });
           }
+          if (reply.length > 0) await chat.appendMessage(thread.id, "assistant", reply);
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
             ok: true,
             durationMs: Date.now() - started,
-            chars,
+            chars: reply.length,
           });
           subscriber.next({ data: "[DONE]" });
           subscriber.complete();
