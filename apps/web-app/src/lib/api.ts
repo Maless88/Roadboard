@@ -1515,3 +1515,31 @@ export async function getProjectArchitectureSnapshot(
 
   return res.json() as Promise<ArchitectureSnapshot>;
 }
+
+
+export interface OpsComponent {
+  name: string;
+  status: 'ok' | 'down';
+  latencyMs: number | null;
+  detail?: string;
+}
+
+export interface OpsStatus {
+  generatedAt: string;
+  overall: 'ok' | 'degraded';
+  api: { name: string; status: 'ok' };
+  database: OpsComponent;
+  services: OpsComponent[];
+}
+
+export async function getOpsStatus(token: string): Promise<OpsStatus> {
+
+  const res = await fetch(`${CORE_API}/ops/status`, {
+    headers: authHeaders(token),
+    cache: 'no-store',
+  });
+
+  if (!res.ok) throw new Error('Failed to fetch ops status');
+
+  return res.json() as Promise<OpsStatus>;
+}
