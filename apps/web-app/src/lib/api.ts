@@ -1563,3 +1563,19 @@ export async function getAgentActivity(token: string): Promise<AgentActivity[]> 
 
   return res.json() as Promise<AgentActivity[]>;
 }
+
+export interface AgentContact {
+  name: string;
+  slug: string;
+  capability: string;
+  provider: string;
+  model: string;
+  lastMessage: string | null;
+  lastMessageAt: string | null;
+}
+
+export async function getAgentContacts(token: string): Promise<AgentContact[]> {
+  const res = await fetch(`${CORE_API}/agents/contacts`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) throw new Error("Failed to fetch contacts");
+  return res.json() as Promise<AgentContact[]>;
+}

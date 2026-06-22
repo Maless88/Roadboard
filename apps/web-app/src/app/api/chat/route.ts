@@ -13,10 +13,12 @@ export async function GET(req: Request): Promise<Response> {
   const token = await getToken();
   if (!token) return new Response("unauthorized", { status: 401 });
 
-  const message = new URL(req.url).searchParams.get("message") ?? "";
+  const url = new URL(req.url);
+  const message = url.searchParams.get("message") ?? "";
+  const agent = url.searchParams.get("agent") ?? "";
 
   const upstream = await fetch(
-    `${CORE_API}/agents/chat?message=${encodeURIComponent(message)}`,
+    `${CORE_API}/agents/chat?message=${encodeURIComponent(message)}${agent ? `&agent=${encodeURIComponent(agent)}` : ""}`,
     { headers: { Authorization: `Bearer ${token}`, Accept: "text/event-stream" } },
   );
 
