@@ -8,12 +8,14 @@ import { SummaryGenerationProcessor } from './processors/summary-generation.proc
 import { CleanupProcessor } from './processors/cleanup.processor';
 import { ThumbnailRefreshProcessor } from './processors/thumbnail-refresh.processor';
 import { DeepCodeScanProcessor } from './processors/deep-code-scan.processor';
+import { AgentRunProcessor } from './processors/agent-run.processor';
 import {
   QUEUE_DASHBOARD_REFRESH,
   QUEUE_SUMMARY_GENERATION,
   QUEUE_CLEANUP,
   QUEUE_THUMBNAIL_REFRESH,
   QUEUE_DEEP_CODE_SCAN,
+  QUEUE_AGENT_RUN,
 } from './queue-names';
 
 export {
@@ -22,6 +24,7 @@ export {
   QUEUE_CLEANUP,
   QUEUE_THUMBNAIL_REFRESH,
   QUEUE_DEEP_CODE_SCAN,
+  QUEUE_AGENT_RUN,
 };
 
 
@@ -33,6 +36,7 @@ export {
       { name: QUEUE_CLEANUP },
       { name: QUEUE_THUMBNAIL_REFRESH },
       { name: QUEUE_DEEP_CODE_SCAN },
+      { name: QUEUE_AGENT_RUN },
     ),
   ],
   controllers: [JobsController],
@@ -43,6 +47,7 @@ export {
     CleanupProcessor,
     ThumbnailRefreshProcessor,
     DeepCodeScanProcessor,
+    AgentRunProcessor,
   ],
 })
 export class JobsModule {}

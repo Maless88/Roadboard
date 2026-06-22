@@ -9,6 +9,7 @@ import {
   QUEUE_CLEANUP,
   QUEUE_THUMBNAIL_REFRESH,
   QUEUE_DEEP_CODE_SCAN,
+  QUEUE_AGENT_RUN,
 } from './queue-names';
 
 
@@ -16,6 +17,13 @@ export interface DeepCodeScanRequest {
   projectId: string;
   repoPath: string;
   delta?: string[];
+}
+
+export interface AgentRunRequest {
+  capability: string;
+  input: string;
+  sessionId?: string;
+  projectId?: string;
 }
 
 
@@ -32,7 +40,19 @@ export class JobsService {
     @InjectQueue(QUEUE_CLEANUP) private readonly cleanupQueue: Queue,
     @InjectQueue(QUEUE_THUMBNAIL_REFRESH) private readonly thumbnailRefreshQueue: Queue,
     @InjectQueue(QUEUE_DEEP_CODE_SCAN) private readonly deepCodeScanQueue: Queue,
+    @InjectQueue(QUEUE_AGENT_RUN) private readonly agentRunQueue: Queue,
   ) {}
+
+  async enqueueAgentRun(req: AgentRunRequest): Promise<{ jobId: string }> {
+
+    const job = await this.agentRunQueue.add('run', req, {
+      removeOnComplete: 100,
+      removeOnFail: 50,
+      attempts: 1,
+    });
+
+    return { jobId: String(job.id) };
+  }
 
 
   async enqueueDeepCodeScan(req: DeepCodeScanRequest): Promise<{ jobId: string }> {
