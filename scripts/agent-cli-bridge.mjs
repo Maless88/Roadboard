@@ -27,13 +27,13 @@ http.createServer((req, res) => {
     const prompt = String(p.prompt || '');
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, ...(p.model ? ['--model', String(p.model)] : [])];
+      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    const child = spawn(bin, args, { env: process.env });
+    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
     child.stdout.on('data', (d) => res.write(d));
-    child.stderr.on('data', () => {});
+    child.stderr.on('data', (d) => console.error('[child-stderr]', String(d)));
     child.on('error', (e) => { res.write(`\n[bridge-error] ${e.message}`); res.end(); });
-    child.on('close', () => res.end());
-    req.on('close', () => { try { child.kill(); } catch {} });
+    child.on('close', (code) => { console.error('[child-close]', code); res.end(); });
+    res.on('close', () => { try { child.kill(); } catch {} });
   });
 }).listen(PORT, '0.0.0.0', () => console.log(`agent-cli-bridge listening on :${PORT}`));
