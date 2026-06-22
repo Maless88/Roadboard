@@ -60,7 +60,8 @@ model Team {
 
   memberships TeamMembership[]
   invites     TeamInvite[]
-  projects    Project[]
+  projects     Project[]
+  agentConfigs AgentConfig[]
 
   @@map("teams")
 }
@@ -410,4 +411,26 @@ model ChatbotConfig {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("chatbot_configs")
+}
+
+// ── life-OS: Agent definitions ───────────────────────
+
+model AgentConfig {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  capability   String
+  runtime      String   @default("api") // api | cli | local
+  provider     String                   // anthropic | openai | ollama | claude-code | codex
+  model        String
+  systemPrompt String?  @map("system_prompt")
+  enabled      Boolean  @default(true)
+  ownerTeamId  String   @map("owner_team_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  ownerTeam Team @relation(fields: [ownerTeamId], references: [id], onDelete: Cascade)
+
+  @@index([ownerTeamId])
+  @@map("agent_configs")
 }
