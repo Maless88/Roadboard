@@ -84,6 +84,7 @@ services:
       target: workspace
     environment:
       DATABASE_URL: postgresql://roadboard:roadboard@postgres:5432/roadboard
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     command:
       - sh
       - -ec
@@ -122,10 +123,10 @@ services:
       - "127.0.0.1:3001:3001"
     volumes:
       # Self-hosted deploy: container must be able to run
-      # `git pull` on the host repo and `docker compose up -d --build`
-      # on the host engine. Both mounts are REQUIRED for POST /deploy.
+      # `git pull` on the host repo; a host systemd path-unit
+      # (roadboard-deploy.path) does git pull + docker compose up.
+      # docker.sock removed 2026-06-23 (security: container == root host).
       - ${ROADBOARD_HOST_REPO_PATH:-../..}:/opt/roadboard
-      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully

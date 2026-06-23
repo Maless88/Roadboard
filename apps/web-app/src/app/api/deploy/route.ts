@@ -19,7 +19,7 @@ export async function POST() {
   try {
     const res = await fetch(`${CORE_API}/deploy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: '{}',
     });
 

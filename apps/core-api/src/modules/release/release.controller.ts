@@ -4,8 +4,10 @@ import {
   HttpException,
   HttpStatus,
   Post,
+  UseGuards,
 } from "@nestjs/common";
 
+import { AuthGuard } from "../../common/auth.guard";
 import { ReleaseService } from "./release.service";
 
 
@@ -24,6 +26,7 @@ interface TriggerDeployResponse {
 }
 
 
+@UseGuards(AuthGuard)
 @Controller()
 export class ReleaseController {
 
