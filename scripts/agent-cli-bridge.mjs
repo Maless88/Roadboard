@@ -11,6 +11,7 @@ import path from 'node:path';
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
 const BIN = { 'claude-code': 'claude', codex: 'codex' };
+const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
 
 http.createServer((req, res) => {
   if (req.method !== 'POST' || !req.url.startsWith('/run')) {
@@ -26,21 +27,25 @@ http.createServer((req, res) => {
     try { p = JSON.parse(body || '{}'); } catch { res.writeHead(400); return res.end('bad json'); }
     const bin = BIN[p.provider || 'claude-code'];
     if (!bin) { res.writeHead(400); return res.end('unknown provider'); }
+    let reqCwd = (typeof p.cwd === 'string' && p.cwd) ? path.resolve(p.cwd) : null;
+    if (reqCwd && !(reqCwd === WS_BASE || reqCwd.startsWith(WS_BASE + '/'))) {
+      res.writeHead(400); return res.end('cwd not allowed');
+    }
     const prompt = String(p.prompt || '');
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
       : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
-    if (typeof p.cwd === 'string' && p.cwd && typeof p.contextMd === 'string') {
+    if (reqCwd && typeof p.contextMd === 'string') {
       try {
-        fs.mkdirSync(p.cwd, { recursive: true });
-        fs.writeFileSync(path.join(p.cwd, 'CLAUDE.md'), p.contextMd);
-        const ag = path.join(p.cwd, 'AGENTS.md');
+        fs.mkdirSync(reqCwd, { recursive: true });
+        fs.writeFileSync(path.join(reqCwd, 'CLAUDE.md'), p.contextMd);
+        const ag = path.join(reqCwd, 'AGENTS.md');
         try { fs.unlinkSync(ag); } catch {}
         try { fs.symlinkSync('CLAUDE.md', ag); } catch {}
       } catch (e) { /* best-effort */ }
     }
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: (typeof p.cwd === 'string' && p.cwd) ? p.cwd : (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
+    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: reqCwd || (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
     child.stdout.on('data', (d) => res.write(d));
     child.stderr.on('data', (d) => console.error('[child-stderr]', String(d)));
     child.on('error', (e) => { res.write(`\n[bridge-error] ${e.message}`); res.end(); });
