@@ -29,7 +29,7 @@ http.createServer((req, res) => {
       ? ['exec', prompt]
       : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: process.env.AGENT_CLI_BRIDGE_CWD || process.cwd() });
+    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: (typeof p.cwd === 'string' && p.cwd) ? p.cwd : (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
     child.stdout.on('data', (d) => res.write(d));
     child.stderr.on('data', (d) => console.error('[child-stderr]', String(d)));
     child.on('error', (e) => { res.write(`\n[bridge-error] ${e.message}`); res.end(); });

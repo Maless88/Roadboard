@@ -15,6 +15,7 @@ export interface AgentExecConfig {
   provider: string; // anthropic | openai | ollama | claude-code | codex
   model: string;
   systemPrompt?: string | null;
+  workspacePath?: string | null;
 }
 
 const API_PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama"];
@@ -63,7 +64,7 @@ export class AgentExecutorService {
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt }),
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined }),
     });
 
     if (!res.ok || !res.body) {

@@ -1,6 +1,10 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PrismaClient } from "@roadboard/database";
+import { optionalEnv } from "@roadboard/config";
 import type { AgentExecConfig, AgentRuntime } from "./agent-executor.service";
+
+const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/home/alessio/agent-workspaces");
+function wsFor(slug: string): string { return `${WS_BASE}/${slug}`; }
 
 const BUILTIN_DEFAULT: AgentExecConfig = {
   runtime: "cli",
@@ -8,6 +12,7 @@ const BUILTIN_DEFAULT: AgentExecConfig = {
   model: "sonnet",
   systemPrompt:
     "Sei l'assistente del life-OS RoadBoard. Rispondi in modo conciso, pratico e in italiano.",
+  workspacePath: `${WS_BASE}/assistant`,
 };
 
 @Injectable()
@@ -55,6 +60,7 @@ export class AgentsService {
         provider: row.provider,
         model: row.model,
         systemPrompt: row.systemPrompt,
+        workspacePath: wsFor(row.slug),
       },
     };
   }

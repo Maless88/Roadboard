@@ -110,6 +110,7 @@ services:
       AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
       AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
+      AGENT_WORKSPACES_BASE: ${AGENT_WORKSPACES_BASE:-/home/alessio/agent-workspaces}
       GITHUB_REPO: ${GITHUB_REPO:-Maless88/Roadboard}
       GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
       ROADBOARD_REPO_PATH: /opt/roadboard

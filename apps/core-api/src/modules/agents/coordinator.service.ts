@@ -1,50 +1,27 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { ChatMessage } from "../chatbot/providers";
-import { AgentExecutorService, type AgentExecConfig } from "./agent-executor.service";
 import { AgentsService } from "./agents.service";
 
-const ROUTER: AgentExecConfig = {
-  runtime: "cli",
-  provider: "claude-code",
-  model: "sonnet",
-  systemPrompt:
-    "Sei un router di agenti. Rispondi SOLO con lo slug dell'agente piu adatto, niente altro testo.",
-};
+interface AgentRow { slug: string; capability: string; name: string }
 
-interface AgentRow {
-  slug: string;
-  capability: string;
-  name: string;
-}
+const RESEARCH_HINTS = ["cerca", "ricerc", "notizie", "fonti", "web", "google", "aggiorn", "prezzo", "trova", "link"];
 
 @Injectable()
 export class CoordinatorService {
 
-  constructor(
-    @Inject(AgentExecutorService) private readonly executor: AgentExecutorService,
-    @Inject(AgentsService) private readonly agents: AgentsService,
-  ) {}
+  constructor(@Inject(AgentsService) private readonly agents: AgentsService) {}
 
+  /** Fast capability routing (heuristic, no LLM call). */
   async route(message: string): Promise<{ slug: string; reason: string }> {
-
     const list = (await this.agents.list()) as AgentRow[];
     const candidates = list.filter((a) => a.slug !== "coordinator");
     if (candidates.length === 0) return { slug: "default", reason: "no agents" };
 
-    const menu = candidates.map((a) => `${a.slug} (${a.capability})`).join(", ");
-    const prompt = `Agenti disponibili: ${menu}.\nMessaggio utente: "${message}".\nRispondi SOLO con lo slug piu adatto.`;
-
-    let out = "";
-    try {
-      for await (const ch of this.executor.stream(ROUTER, [{ role: "user", content: prompt } as ChatMessage])) {
-        out += ch;
-      }
-    } catch {
-      /* fallback sotto */
+    const m = (message ?? "").toLowerCase();
+    const researcher = candidates.find((a) => a.slug === "researcher" || a.capability === "research");
+    if (researcher && RESEARCH_HINTS.some((k) => m.includes(k))) {
+      return { slug: researcher.slug, reason: "research keywords" };
     }
-
-    const lower = out.toLowerCase();
-    const picked = candidates.find((a) => lower.includes(a.slug.toLowerCase()));
-    return { slug: (picked ?? candidates[0]).slug, reason: out.trim().slice(0, 120) };
+    const assistant = candidates.find((a) => a.slug === "assistant" || a.capability === "general") ?? candidates[0];
+    return { slug: assistant.slug, reason: "default" };
   }
 }
