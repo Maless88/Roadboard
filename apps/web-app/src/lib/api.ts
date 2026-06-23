@@ -1582,6 +1582,7 @@ export async function getAgentContacts(token: string): Promise<AgentContact[]> {
 
 export interface AgentProfile {
   name: string; slug: string; capability: string; runtime: string; provider: string; model: string;
+  trustTier: string; ownerUserId: string | null;
   description: string | null; avatarUrl: string | null; doesText: string | null; doesNotText: string | null;
   workspacePath: string;
   stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number };

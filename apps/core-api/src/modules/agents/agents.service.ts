@@ -88,6 +88,8 @@ export class AgentsService {
 
     return {
       name: a.name, slug: a.slug, capability: a.capability,
+      trustTier: (a as { trustTier?: string }).trustTier ?? "restricted",
+      ownerUserId: (a as { ownerUserId?: string | null }).ownerUserId ?? null,
       runtime: a.runtime, provider: a.provider, model: a.model,
       description: a.description, avatarUrl: a.avatarUrl,
       doesText: a.doesText, doesNotText: a.doesNotText,

@@ -48,6 +48,11 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ s
               )}
               <div className="min-w-0 flex-1">
                 <h1 className="text-2xl font-semibold text-zinc-100">{p.name}</h1>
+                {p.trustTier && p.trustTier !== "restricted" && (
+                  <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full border border-violet-500/50 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-300">
+                    ● {p.trustTier}{p.ownerUserId ? " · privato" : ""}
+                  </span>
+                )}
                 <span className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> {p.provider}
                 </span>
