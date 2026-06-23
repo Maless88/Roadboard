@@ -16,6 +16,7 @@ export interface AgentExecConfig {
   model: string;
   systemPrompt?: string | null;
   workspacePath?: string | null;
+  toolPolicy?: string | null; // restricted | dev | sysadmin
 }
 
 const API_PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama"];
@@ -64,7 +65,7 @@ export class AgentExecutorService {
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined }),
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined, toolPolicy: agent.toolPolicy ?? "restricted" }),
     });
 
     if (!res.ok || !res.body) {

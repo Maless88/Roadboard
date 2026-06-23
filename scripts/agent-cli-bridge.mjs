@@ -11,8 +11,18 @@ import path from 'node:path';
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
 const BIN = { 'claude-code': 'claude', codex: 'codex' };
-// default-deny: chat-only, no host execution/file/network tools
-const CLAUDE_DISALLOWED = ['Bash','Edit','Write','NotebookEdit','Read','Glob','Grep','WebFetch','WebSearch','Task','TodoWrite'];
+// per-request tool policy by trust tier (fail-closed: unknown => restricted).
+// destructive shell prefixes are HARD-BLOCKED for sysadmin (interim for "confirm on dangerous").
+const DANGEROUS_BASH = ['rm','sudo','dd','mkfs','shutdown','reboot','kill','pkill','killall','chmod','chown','mv','docker','systemctl','git push','truncate'];
+function claudeToolArgs(policy) {
+  if (policy === 'sysadmin') {
+    return ['--disallowedTools', 'WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`)];
+  }
+  if (policy === 'dev') {
+    return ['--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', 'Task'];
+  }
+  return ['--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+}
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
 
 http.createServer((req, res) => {
@@ -34,9 +44,11 @@ http.createServer((req, res) => {
       res.writeHead(400); return res.end('cwd not allowed');
     }
     const prompt = String(p.prompt || '');
+    // NOTE: codex tiering not yet implemented; privileged agents must use claude-code.
+    const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev') ? p.toolPolicy : 'restricted';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), '--disallowedTools', ...CLAUDE_DISALLOWED];
+      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...claudeToolArgs(policy)];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });

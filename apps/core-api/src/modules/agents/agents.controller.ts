@@ -76,7 +76,7 @@ export class AgentsController {
 
       void (async () => {
 
-        const { slug, config } = await agents.resolveForChat(agentSlug);
+        const { slug, config } = await agents.resolveForChat(agentSlug, user.userId);
         const thread = await chat.getOrCreateThread(user.userId, slug);
         await chat.appendMessage(thread.id, "user", message ?? "");
 
@@ -84,7 +84,7 @@ export class AgentsController {
         let runConfig = config;
         if (slug === "coordinator") {
           const r = await coordinator.route(message ?? "");
-          const resolved = await agents.resolveForChat(r.slug);
+          const resolved = await agents.resolveForChat(r.slug, user.userId);
           runSlug = resolved.slug;
           runConfig = resolved.config;
           const note = `↪ Coordinator → ${runSlug}\n`;

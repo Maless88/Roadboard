@@ -430,6 +430,8 @@ model AgentConfig {
   doesText     String?  @map("does_text")
   doesNotText  String?  @map("does_not_text")
   enabled      Boolean  @default(true)
+  trustTier    String   @default("restricted") @map("trust_tier") // restricted | dev | sysadmin
+  ownerUserId  String?  @map("owner_user_id")
   ownerTeamId  String   @map("owner_team_id")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

@@ -35,6 +35,7 @@ const BUILTIN_DEFAULT: AgentExecConfig = {
   systemPrompt:
     "Sei l'assistente del life-OS RoadBoard. Rispondi in modo conciso, pratico e in italiano.",
   workspacePath: `${WS_BASE}/assistant`,
+  toolPolicy: "restricted",
 };
 
 @Injectable()
@@ -101,7 +102,7 @@ export class AgentsService {
     };
   }
 
-  async resolveForChat(slug?: string): Promise<{ slug: string; config: AgentExecConfig }> {
+  async resolveForChat(slug?: string, userId?: string): Promise<{ slug: string; config: AgentExecConfig }> {
 
     let row = null;
 
@@ -118,6 +119,12 @@ export class AgentsService {
       return { slug: "default", config: BUILTIN_DEFAULT };
     }
 
+    // owner-gate: elevated tiers only for the agent owner; otherwise downgrade.
+    const tier = (row as { trustTier?: string }).trustTier ?? "restricted";
+    const ownerUserId = (row as { ownerUserId?: string | null }).ownerUserId ?? null;
+    const isOwner = !!ownerUserId && !!userId && ownerUserId === userId;
+    const toolPolicy = tier !== "restricted" && isOwner ? tier : "restricted";
+
     return {
       slug: row.slug,
       config: {
@@ -126,6 +133,7 @@ export class AgentsService {
         model: row.model,
         systemPrompt: buildAgentContext(row as unknown as AgentRow),
         workspacePath: wsFor(row.slug),
+        toolPolicy,
       },
     };
   }
