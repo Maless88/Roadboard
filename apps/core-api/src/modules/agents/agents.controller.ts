@@ -9,6 +9,7 @@ import type { ChatMessage } from "../chatbot/providers";
 import { AgentExecutorService } from "./agent-executor.service";
 import { AgentsService } from "./agents.service";
 import { ChatService } from "./chat.service";
+import { CoordinatorService } from "./coordinator.service";
 
 @UseGuards(AuthGuard)
 @Controller("agents")
@@ -18,6 +19,7 @@ export class AgentsController {
     @Inject(AgentExecutorService) private readonly executor: AgentExecutorService,
     @Inject(AgentsService) private readonly agents: AgentsService,
     @Inject(ChatService) private readonly chat: ChatService,
+    @Inject(CoordinatorService) private readonly coordinator: CoordinatorService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
@@ -58,6 +60,7 @@ export class AgentsController {
     const executor = this.executor;
     const agents = this.agents;
     const chat = this.chat;
+    const coordinator = this.coordinator;
     const audit = this.audit;
 
     return new Observable<{ data: string }>((subscriber) => {
@@ -72,21 +75,34 @@ export class AgentsController {
         const thread = await chat.getOrCreateThread(user.userId, slug);
         await chat.appendMessage(thread.id, "user", message ?? "");
 
-        void audit.recordForUser(user, "agent.run.started", "agent", slug, undefined, {
-          provider: config.provider,
-          model: config.model,
-          runtime: config.runtime,
+        let runSlug = slug;
+        let runConfig = config;
+        if (slug === "coordinator") {
+          const r = await coordinator.route(message ?? "");
+          const resolved = await agents.resolveForChat(r.slug);
+          runSlug = resolved.slug;
+          runConfig = resolved.config;
+          const note = `↪ Coordinator → ${runSlug}\n`;
+          reply += note;
+          subscriber.next({ data: note });
+          void audit.recordForUser(user, "agent.run.routed", "agent", slug, undefined, { to: runSlug, reason: r.reason });
+        }
+
+        void audit.recordForUser(user, "agent.run.started", "agent", runSlug, undefined, {
+          provider: runConfig.provider,
+          model: runConfig.model,
+          runtime: runConfig.runtime,
         });
 
         try {
           const messages: ChatMessage[] = [{ role: "user", content: message ?? "" }];
-          for await (const chunk of executor.stream(config, messages)) {
+          for await (const chunk of executor.stream(runConfig, messages)) {
             if (cancelled) return;
             reply += chunk;
             subscriber.next({ data: chunk });
           }
           if (reply.length > 0) await chat.appendMessage(thread.id, "assistant", reply);
-          void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
+          void audit.recordForUser(user, "agent.run.completed", "agent", runSlug, undefined, {
             ok: true,
             durationMs: Date.now() - started,
             chars: reply.length,
@@ -94,7 +110,7 @@ export class AgentsController {
           subscriber.next({ data: "[DONE]" });
           subscriber.complete();
         } catch (err) {
-          void audit.recordForUser(user, "agent.run.failed", "agent", slug, undefined, {
+          void audit.recordForUser(user, "agent.run.failed", "agent", runSlug, undefined, {
             error: err instanceof Error ? err.message : String(err),
             durationMs: Date.now() - started,
           });
