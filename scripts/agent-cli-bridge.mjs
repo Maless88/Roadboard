@@ -11,6 +11,8 @@ import path from 'node:path';
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
 const BIN = { 'claude-code': 'claude', codex: 'codex' };
+// default-deny: chat-only, no host execution/file/network tools
+const CLAUDE_DISALLOWED = ['Bash','Edit','Write','NotebookEdit','Read','Glob','Grep','WebFetch','WebSearch','Task','TodoWrite'];
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
 
 http.createServer((req, res) => {
@@ -34,7 +36,7 @@ http.createServer((req, res) => {
     const prompt = String(p.prompt || '');
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
+      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), '--disallowedTools', ...CLAUDE_DISALLOWED];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
