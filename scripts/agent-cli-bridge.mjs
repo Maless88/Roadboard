@@ -5,6 +5,8 @@
 // trusted interface and set AGENT_CLI_BRIDGE_TOKEN to require a bearer token.
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
@@ -28,6 +30,15 @@ http.createServer((req, res) => {
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
       : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : [])];
+    if (typeof p.cwd === 'string' && p.cwd && typeof p.contextMd === 'string') {
+      try {
+        fs.mkdirSync(p.cwd, { recursive: true });
+        fs.writeFileSync(path.join(p.cwd, 'CLAUDE.md'), p.contextMd);
+        const ag = path.join(p.cwd, 'AGENTS.md');
+        try { fs.unlinkSync(ag); } catch {}
+        try { fs.symlinkSync('CLAUDE.md', ag); } catch {}
+      } catch (e) { /* best-effort */ }
+    }
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: (typeof p.cwd === 'string' && p.cwd) ? p.cwd : (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
     child.stdout.on('data', (d) => res.write(d));

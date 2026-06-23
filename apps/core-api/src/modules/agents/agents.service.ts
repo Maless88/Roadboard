@@ -6,6 +6,28 @@ import type { AgentExecConfig, AgentRuntime } from "./agent-executor.service";
 const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/home/alessio/agent-workspaces");
 function wsFor(slug: string): string { return `${WS_BASE}/${slug}`; }
 
+function bullets(t: string | null | undefined): string {
+  if (!t) return "";
+  return t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => `- ${l}`).join("\n");
+}
+
+interface AgentRow {
+  name: string; slug: string; description: string | null;
+  systemPrompt: string | null; doesText: string | null; doesNotText: string | null;
+}
+
+export function buildAgentContext(a: AgentRow): string {
+  const parts: string[] = [`# ${a.name}`];
+  if (a.description) parts.push(a.description);
+  if (a.systemPrompt) parts.push(a.systemPrompt);
+  const does = bullets(a.doesText);
+  if (does) parts.push(`## Cosa fa\n${does}`);
+  const dont = bullets(a.doesNotText);
+  if (dont) parts.push(`## Cosa non fa\n${dont}`);
+  parts.push("Rispondi in italiano, conciso e diretto, niente preamboli.");
+  return parts.join("\n\n");
+}
+
 const BUILTIN_DEFAULT: AgentExecConfig = {
   runtime: "cli",
   provider: "claude-code",
@@ -59,7 +81,7 @@ export class AgentsService {
         runtime: row.runtime as AgentRuntime,
         provider: row.provider,
         model: row.model,
-        systemPrompt: row.systemPrompt,
+        systemPrompt: buildAgentContext(row as unknown as AgentRow),
         workspacePath: wsFor(row.slug),
       },
     };

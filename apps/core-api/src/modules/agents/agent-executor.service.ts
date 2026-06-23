@@ -30,13 +30,13 @@ export class AgentExecutorService {
 
   stream(agent: AgentExecConfig, messages: ChatMessage[]): AsyncIterable<string> {
 
+    if (agent.runtime === "cli") {
+      return this.streamCli(agent, messages);
+    }
+
     const full: ChatMessage[] = agent.systemPrompt
       ? [{ role: "system", content: agent.systemPrompt }, ...messages]
       : messages;
-
-    if (agent.runtime === "cli") {
-      return this.streamCli(agent, full);
-    }
 
     const name = agent.provider as ProviderName;
 
@@ -64,7 +64,7 @@ export class AgentExecutorService {
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined }),
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined }),
     });
 
     if (!res.ok || !res.body) {
