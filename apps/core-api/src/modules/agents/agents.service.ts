@@ -58,6 +58,49 @@ export class AgentsService {
     });
   }
 
+  async profile(slug: string): Promise<unknown> {
+
+    const a = await this.prisma.agentConfig.findFirst({ where: { slug, enabled: true } });
+    if (!a) return null;
+
+    const events = await this.prisma.activityEvent.findMany({
+      where: { targetId: slug, eventType: { startsWith: "agent." } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { eventType: true, createdAt: true, metadata: true },
+    });
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const completed = events.filter((e) => e.eventType === "agent.run.completed");
+    const num = (e: { metadata: unknown }, k: string): number => {
+      const m = e.metadata as Record<string, unknown> | null;
+      const v = m ? Number(m[k]) : NaN;
+      return Number.isFinite(v) ? v : NaN;
+    };
+    const durations = completed.map((e) => num(e, "durationMs")).filter((n) => Number.isFinite(n));
+    const avg = durations.length ? Math.round(durations.reduce((x, y) => x + y, 0) / durations.length) : null;
+    const tokens = completed.reduce((acc, e) => {
+      const c = num(e, "chars");
+      return acc + (Number.isFinite(c) ? Math.round(c / 4) : 0);
+    }, 0);
+
+    return {
+      name: a.name, slug: a.slug, capability: a.capability,
+      runtime: a.runtime, provider: a.provider, model: a.model,
+      description: a.description, avatarUrl: a.avatarUrl,
+      doesText: a.doesText, doesNotText: a.doesNotText,
+      workspacePath: wsFor(a.slug),
+      stats: {
+        runsToday: events.filter((e) => e.createdAt >= todayStart).length,
+        avgLatencyMs: avg,
+        lastRun: completed[0]?.createdAt ?? null,
+        tokensApprox: tokens,
+      },
+      recent: events.slice(0, 8).map((e) => ({ eventType: e.eventType, createdAt: e.createdAt, metadata: e.metadata })),
+    };
+  }
+
   async resolveForChat(slug?: string): Promise<{ slug: string; config: AgentExecConfig }> {
 
     let row = null;

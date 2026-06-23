@@ -1579,3 +1579,17 @@ export async function getAgentContacts(token: string): Promise<AgentContact[]> {
   if (!res.ok) throw new Error("Failed to fetch contacts");
   return res.json() as Promise<AgentContact[]>;
 }
+
+export interface AgentProfile {
+  name: string; slug: string; capability: string; runtime: string; provider: string; model: string;
+  description: string | null; avatarUrl: string | null; doesText: string | null; doesNotText: string | null;
+  workspacePath: string;
+  stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number };
+  recent: { eventType: string; createdAt: string; metadata: Record<string, unknown> | null }[];
+}
+
+export async function getAgentProfile(token: string, slug: string): Promise<AgentProfile | null> {
+  const res = await fetch(`${CORE_API}/agents/profile/${encodeURIComponent(slug)}`, { headers: authHeaders(token), cache: "no-store" });
+  if (!res.ok) return null;
+  return res.json() as Promise<AgentProfile>;
+}

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getToken } from "@/lib/auth";
 import { validateSession, getAgentActivity } from "@/lib/api";
@@ -66,7 +67,7 @@ export default async function AgentOfficePage() {
                   >
                     {a.eventType.replace("agent.run.", "")}
                   </span>
-                  <span className="ml-2 text-sm text-zinc-200">{a.targetId}</span>
+                  <Link href={`/agents/${a.targetId}`} className="ml-2 text-sm text-zinc-200 underline-offset-2 hover:underline">{a.targetId}</Link>
                   <span className="ml-2 text-xs text-zinc-500">
                     {[meta(a, "provider"), meta(a, "model"), meta(a, "runtime")].filter(Boolean).join(" · ")}
                   </span>

@@ -38,6 +38,11 @@ export class AgentsController {
     return this.audit.findRecentAgentEvents(limit ?? 50);
   }
 
+  @Get("profile/:slug")
+  profile(@Param("slug") slug: string): Promise<unknown> {
+    return this.agents.profile(slug);
+  }
+
   @Get("threads/:slug/messages")
   messages(@Param("slug") slug: string, @CurrentUser() user: AuthUser): Promise<unknown> {
     return this.chat.listMessages(user.userId, slug);
