@@ -425,6 +425,10 @@ model AgentConfig {
   provider     String                   // anthropic | openai | ollama | claude-code | codex
   model        String
   systemPrompt String?  @map("system_prompt")
+  description  String?
+  avatarUrl    String?  @map("avatar_url")
+  doesText     String?  @map("does_text")
+  doesNotText  String?  @map("does_not_text")
   enabled      Boolean  @default(true)
   ownerTeamId  String   @map("owner_team_id")
   createdAt    DateTime @default(now()) @map("created_at")
