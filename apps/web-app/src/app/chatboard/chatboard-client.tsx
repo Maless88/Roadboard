@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface RoomListItem {
   id: string;
@@ -51,6 +52,8 @@ export function ChatboardClient() {
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const searchParams = useSearchParams();
+  const draftRef = useRef<string | null>(null);
 
   const loadRooms = useCallback(async () => {
     try {
@@ -74,6 +77,23 @@ export function ChatboardClient() {
   }, [loadRooms]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [detail?.messages]);
+
+  // deep-link from Home cockpit: ?room=<id>&draft=<text>
+  useEffect(() => {
+    const room = searchParams.get("room");
+    if (room) { draftRef.current = searchParams.get("draft"); void openRoom(room); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // auto-send the draft once the linked room has loaded
+  useEffect(() => {
+    if (detail && draftRef.current) {
+      const d = draftRef.current;
+      draftRef.current = null;
+      void send(d);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail]);
 
   const nameOf = (slug: string) => names.get(slug) ?? slug;
   const roomAgents = (d: RoomDetail) => d.participants.filter((p) => p.kind === "agent").map((p) => p.refId);
@@ -124,10 +144,10 @@ export function ChatboardClient() {
     } catch { /* ignore */ }
   }
 
-  async function send() {
-    const text = input.trim();
+  async function send(textArg?: string) {
+    const text = (textArg ?? input).trim();
     if (!text || busy || !detail) return;
-    setInput("");
+    if (textArg === undefined) setInput("");
     setDetail((d) => d && ({
       ...d,
       messages: [...d.messages, { senderKind: "user", senderId: "me", content: text }, { senderKind: "agent", senderId: "", content: "" }],

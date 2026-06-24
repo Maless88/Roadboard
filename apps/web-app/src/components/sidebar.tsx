@@ -251,6 +251,15 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
         <div className="mt-3 px-1">
           <p className="px-2 mb-1 text-[10px] font-mono text-gray-600 uppercase tracking-wider">Sistema</p>
           <Link
+            href="/home"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 12l9-9 9 9M5 10v10h14V10" />
+            </svg>
+            Home
+          </Link>
+          <Link
             href="/ops"
             className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
           >
