@@ -41,6 +41,11 @@ export class RoomsController {
     return this.rooms.postMessage(user.userId, id, body.content);
   }
 
+  @Post("direct")
+  ensureDirect(@CurrentUser() user: AuthUser, @Body() body: { agentSlug: string }): Promise<unknown> {
+    return this.rooms.ensureDirectRoom(user.userId, body.agentSlug);
+  }
+
   @Post(":id/participants")
   addParticipant(
     @CurrentUser() user: AuthUser,

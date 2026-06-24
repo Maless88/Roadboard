@@ -111,6 +111,17 @@ export class RoomsService {
     return msg;
   }
 
+  /** Get-or-create the 1:1 direct room for (owner, agent). Keeps boardchat & Chatboard on one store. */
+  async ensureDirectRoom(ownerUserId: string, agentSlug: string): Promise<unknown> {
+    const existing = await this.prisma.chatRoom.findMany({
+      where: { ownerUserId, kind: "direct" },
+      include: { participants: true },
+    });
+    const hit = existing.find((r) => r.participants.some((p) => p.kind === "agent" && p.refId === agentSlug));
+    if (hit) return hit;
+    return this.createRoom(ownerUserId, { kind: "direct", agentSlugs: [agentSlug] });
+  }
+
   async addParticipant(ownerUserId: string, roomId: string, agentSlug: string): Promise<unknown> {
     await this.assertMember(ownerUserId, roomId);
     return this.prisma.chatParticipant.upsert({

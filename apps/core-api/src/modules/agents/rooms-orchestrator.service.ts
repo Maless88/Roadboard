@@ -74,10 +74,12 @@ export class RoomOrchestratorService {
 
           const agentList = (await agents.list()) as { slug: string; capability: string }[];
           const capBySlug = new Map(agentList.map((a) => [a.slug, (a.capability ?? "").toLowerCase()]));
-          const candidates: RoomAgent[] = room.participants
+          const allAgents: RoomAgent[] = room.participants
             .filter((p) => p.kind === "agent")
-            .map((p) => ({ slug: p.refId, capability: capBySlug.get(p.refId) ?? "" }))
-            .filter((a) => a.capability !== ROUTER_CAPABILITY);
+            .map((p) => ({ slug: p.refId, capability: capBySlug.get(p.refId) ?? "" }));
+          // exclude the router as a worker, unless it is the only member (direct chat with it)
+          let candidates = allAgents.filter((a) => a.capability !== ROUTER_CAPABILITY);
+          if (candidates.length === 0) candidates = allAgents;
 
           const decision = decideResponder(message, candidates, (m) => coordinator.capabilityForMessage(m));
           if (!decision) {
