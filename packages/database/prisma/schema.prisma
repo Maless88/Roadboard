@@ -24,6 +24,7 @@ model User {
   manager      User?  @relation("UserManager", fields: [managerId], references: [id])
   managedUsers User[] @relation("UserManager")
   chatThreads  ChatThread[] @relation("UserChatThreads")
+  chatRooms    ChatRoom[]   @relation("UserChatRooms")
 
   teamMemberships TeamMembership[]
   projectGrants   ProjectGrant[]   @relation("GrantedByUser")
@@ -472,4 +473,51 @@ model ChatMessage {
 
   @@index([threadId])
   @@map("chat_messages")
+}
+
+model ChatRoom {
+  id            String    @id @default(cuid())
+  kind          String    @default("direct") // direct | group
+  title         String?
+  ownerUserId   String    @map("owner_user_id")
+  projectId     String?   @map("project_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastMessageAt DateTime? @map("last_message_at")
+
+  ownerUser    User              @relation("UserChatRooms", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  participants ChatParticipant[]
+  messages     RoomMessage[]
+
+  @@index([ownerUserId])
+  @@map("chat_rooms")
+}
+
+model ChatParticipant {
+  id        String   @id @default(cuid())
+  roomId    String   @map("room_id")
+  kind      String   // user | agent
+  refId     String   @map("ref_id") // userId or agent slug
+  createdAt DateTime @default(now()) @map("created_at")
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, kind, refId])
+  @@index([roomId])
+  @@map("chat_participants")
+}
+
+model RoomMessage {
+  id         String   @id @default(cuid())
+  roomId     String   @map("room_id")
+  senderKind String   @map("sender_kind") // user | agent
+  senderId   String   @map("sender_id")   // userId or agent slug
+  content    String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  room ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([roomId, createdAt])
+  @@map("room_messages")
 }
