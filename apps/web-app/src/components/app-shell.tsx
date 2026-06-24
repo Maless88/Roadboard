@@ -42,7 +42,7 @@ export async function AppShell({ children, username, displayName, activeProject,
           userProjects={userProjects}
           locale={locale}
         />
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 pt-12 md:pt-0">
           {children}
         </div>
         <UpdateBanner />

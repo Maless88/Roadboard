@@ -108,10 +108,10 @@ export function BoardChatClient({ initialContacts }: { initialContacts: Contact[
   }
 
   return (
-    <div className="flex h-[calc(100vh-1rem)] overflow-hidden">
+    <div className="flex h-[calc(100dvh-3rem)] overflow-hidden md:h-[calc(100vh-1rem)]">
 
       {/* lista contatti */}
-      <aside className="flex w-72 shrink-0 flex-col border-r border-white/10 bg-zinc-950/40">
+      <aside className={`${active ? "hidden md:flex" : "flex"} w-full shrink-0 flex-col border-r border-white/10 bg-zinc-950/40 md:w-72`}>
         <div className="border-b border-white/10 p-3">
           <p className="px-1 text-[10px] font-mono uppercase tracking-wider text-zinc-500">Agenti</p>
         </div>
@@ -142,10 +142,11 @@ export function BoardChatClient({ initialContacts }: { initialContacts: Contact[
       </aside>
 
       {/* conversazione */}
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className={`${active ? "flex" : "hidden md:flex"} min-w-0 flex-1 flex-col`}>
         {active ? (
           <>
             <header className="flex items-center gap-3 border-b border-white/10 px-5 py-3">
+              <button onClick={() => setActive(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/5 md:hidden">←</button>
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
                 {active.name.charAt(0).toUpperCase()}
               </span>
