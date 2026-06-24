@@ -48,7 +48,7 @@ export class CoordinatorService {
   }
 
   /** Map a free-text message to a capability (heuristic, no LLM call). */
-  private detectCapability(message: string): string {
+  capabilityForMessage(message: string): string {
     const m = (message ?? "").toLowerCase();
     for (const [cap, hints] of Object.entries(CAPABILITY_HINTS)) {
       if (hints.some((k) => m.includes(k))) return cap;
@@ -61,7 +61,7 @@ export class CoordinatorService {
     const reg = await this.registry();
     if (reg.size === 0) return { slug: "default", reason: "no agents" };
 
-    const cap = this.detectCapability(message);
+    const cap = this.capabilityForMessage(message);
     const hit = reg.get(cap);
     if (hit && hit.length) return { slug: hit[0].slug, reason: `capability:${cap}` };
 

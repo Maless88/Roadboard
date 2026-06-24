@@ -1,15 +1,21 @@
-import { Body, Controller, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Param, Post, Query, Sse, UseGuards } from "@nestjs/common";
+import { Observable } from "rxjs";
+import { optionalEnv } from "@roadboard/config";
 import { AuthGuard } from "../../common/auth.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { RoomsService } from "./rooms.service";
 import type { CreateRoomInput } from "./rooms.service";
+import { RoomOrchestratorService } from "./rooms-orchestrator.service";
 
 @UseGuards(AuthGuard)
 @Controller("agents/rooms")
 export class RoomsController {
 
-  constructor(@Inject(RoomsService) private readonly rooms: RoomsService) {}
+  constructor(
+    @Inject(RoomsService) private readonly rooms: RoomsService,
+    @Inject(RoomOrchestratorService) private readonly orchestrator: RoomOrchestratorService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: AuthUser): Promise<unknown> {
@@ -42,5 +48,21 @@ export class RoomsController {
     @Body() body: { agentSlug: string },
   ): Promise<unknown> {
     return this.rooms.addParticipant(user.userId, id, body.agentSlug);
+  }
+
+  /** Drive one turn: post the message, let the director pick a responder, stream its reply. */
+  @Sse(":id/turn")
+  turn(
+    @Param("id") id: string,
+    @Query("message") message: string,
+    @CurrentUser() user: AuthUser,
+  ): Observable<{ data: string }> {
+    if (optionalEnv("AGENTS_ENABLED", "false") !== "true") {
+      return new Observable<{ data: string }>((s) => {
+        s.next({ data: "[ERROR] agents disabled on this instance" });
+        s.complete();
+      });
+    }
+    return this.orchestrator.runTurn(user, id, message ?? "");
   }
 }
