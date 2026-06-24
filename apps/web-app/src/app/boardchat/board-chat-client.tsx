@@ -12,8 +12,41 @@ interface Contact {
   lastMessageAt: string | null;
 }
 interface Msg { role: "user" | "assistant"; content: string }
+interface Handoff { from?: string; to: string; reason: string }
 
 const AV = "linear-gradient(135deg,#7c5cff,#a06eff)";
+
+/**
+ * Split a leading structured handoff marker (RS char + JSON + "\n", emitted by
+ * the coordinator) from the message body. Handles partial markers mid-stream.
+ */
+function splitHandoff(content: string): { handoff: Handoff | null; body: string } {
+  if (content.startsWith("\x1e")) {
+    const nl = content.indexOf("\n");
+    if (nl === -1) return { handoff: null, body: "" }; // marker still streaming
+    try {
+      return { handoff: JSON.parse(content.slice(1, nl)) as Handoff, body: content.slice(nl + 1) };
+    } catch {
+      return { handoff: null, body: content.slice(nl + 1) };
+    }
+  }
+  return { handoff: null, body: content };
+}
+
+function HandoffChip({ to, reason }: { to: string; reason: string }) {
+  const cap = reason?.startsWith("capability:") ? reason.slice("capability:".length) : reason;
+  return (
+    <div className="mb-1 text-left">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300">
+        <span className="text-indigo-400">↪</span>
+        Coordinator → {to}
+        {cap ? (
+          <span className="rounded-full bg-indigo-400/15 px-1.5 py-0.5 text-[10px] text-indigo-200/80">{cap}</span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
 
 export function BoardChatClient({ initialContacts }: { initialContacts: Contact[] }) {
 
@@ -126,18 +159,26 @@ export function BoardChatClient({ initialContacts }: { initialContacts: Contact[
               {messages.length === 0 ? (
                 <p className="text-sm text-zinc-500">Scrivi un messaggio a {active.name}.</p>
               ) : (
-                messages.map((m, i) => (
-                  <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
-                    <span
-                      className={`inline-block max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
-                        m.role === "user" ? "text-white" : "bg-white/5 text-zinc-200"
-                      }`}
-                      style={m.role === "user" ? { background: AV } : undefined}
-                    >
-                      {m.content || (busy ? "…" : "")}
-                    </span>
-                  </div>
-                ))
+                messages.map((m, i) => {
+                  const parsed = m.role === "assistant" ? splitHandoff(m.content) : null;
+                  const handoff = parsed?.handoff ?? null;
+                  const body = parsed ? parsed.body : m.content;
+                  return (
+                    <div key={i} className={m.role === "user" ? "text-right" : "text-left"}>
+                      {handoff ? <HandoffChip to={handoff.to} reason={handoff.reason} /> : null}
+                      {body || busy ? (
+                        <span
+                          className={`inline-block max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                            m.role === "user" ? "text-white" : "bg-white/5 text-zinc-200"
+                          }`}
+                          style={m.role === "user" ? { background: AV } : undefined}
+                        >
+                          {body || "…"}
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })
               )}
               <div ref={endRef} />
             </div>

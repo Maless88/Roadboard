@@ -87,7 +87,9 @@ export class AgentsController {
           const resolved = await agents.resolveForChat(r.slug, user.userId);
           runSlug = resolved.slug;
           runConfig = resolved.config;
-          const note = `↪ Coordinator → ${runSlug}\n`;
+          // Structured handoff marker (RS-prefixed JSON line): the boardchat
+          // client parses it into a handoff chip; invisible if left unparsed.
+          const note = `\x1e${JSON.stringify({ from: "coordinator", to: runSlug, reason: r.reason })}\n`;
           reply += note;
           subscriber.next({ data: note });
           void audit.recordForUser(user, "agent.run.routed", "agent", slug, undefined, { to: runSlug, reason: r.reason });
