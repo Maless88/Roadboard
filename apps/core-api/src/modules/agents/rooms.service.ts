@@ -136,10 +136,14 @@ export class RoomsService {
 
   async addParticipant(ownerUserId: string, roomId: string, agentSlug: string): Promise<unknown> {
     await this.assertMember(ownerUserId, roomId);
-    return this.prisma.chatParticipant.upsert({
+    const p = await this.prisma.chatParticipant.upsert({
       where: { roomId_kind_refId: { roomId, kind: "agent", refId: agentSlug } },
       update: {},
       create: { roomId, kind: "agent", refId: agentSlug },
     });
+    // a room with more than one agent is a group
+    const agentCount = await this.prisma.chatParticipant.count({ where: { roomId, kind: "agent" } });
+    if (agentCount > 1) await this.prisma.chatRoom.update({ where: { id: roomId }, data: { kind: "group" } });
+    return p;
   }
 }

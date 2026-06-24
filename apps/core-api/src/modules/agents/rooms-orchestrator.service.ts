@@ -128,4 +128,32 @@ export class RoomOrchestratorService {
       return () => { cancelled = true; };
     });
   }
+
+  /**
+   * Share the source room's conversation into the target agent's direct room as
+   * a context message (auto-summarized; falls back to a transcript excerpt).
+   */
+  async shareRoom(ownerUserId: string, sourceRoomId: string, toAgentSlug: string): Promise<{ targetRoomId: string }> {
+    const source = (await this.rooms.getRoom(ownerUserId, sourceRoomId)) as {
+      participants: { kind: string; refId: string }[];
+      messages: { senderKind: string; senderId: string; content: string }[];
+    };
+    const transcript = source.messages
+      .map((m) => `${m.senderKind === "user" ? "Utente" : m.senderId}: ${m.content}`)
+      .join("\n");
+    const fromAgents = source.participants.filter((p) => p.kind === "agent").map((p) => p.refId).join(", ") || "chat";
+
+    let summary = "";
+    try {
+      const { config } = await this.agents.resolveForChat("assistant", ownerUserId);
+      const sumCfg = { ...config, systemPrompt: "Riassumi la conversazione per passarla a un altro agente come contesto. Solo il riassunto, conciso, in italiano." };
+      const messages: ChatMessage[] = [{ role: "user", content: `Conversazione:\n${transcript}` }];
+      for await (const ch of this.executor.stream(sumCfg, messages)) summary += ch;
+    } catch { summary = ""; }
+
+    const body = summary.trim() || transcript.slice(0, 2000);
+    const target = (await this.rooms.ensureDirectRoom(ownerUserId, toAgentSlug)) as { id: string };
+    await this.rooms.appendMessage(target.id, "user", ownerUserId, `📎 Contesto dalla chat con ${fromAgents}:\n${body}`);
+    return { targetRoomId: target.id };
+  }
 }

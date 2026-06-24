@@ -60,6 +60,15 @@ export class RoomsController {
     return this.rooms.addParticipant(user.userId, id, body.agentSlug);
   }
 
+  @Post(":id/share")
+  share(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Body() body: { toAgentSlug: string },
+  ): Promise<unknown> {
+    return this.orchestrator.shareRoom(user.userId, id, body.toAgentSlug);
+  }
+
   /** Drive one turn: post the message, let the director pick a responder, stream its reply. */
   @Sse(":id/turn")
   turn(
