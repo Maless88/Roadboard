@@ -47,10 +47,11 @@ export function ChatboardClient() {
   const [detail, setDetail] = useState<RoomDetail | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [picker, setPicker] = useState<null | "invite" | "share">(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [title, setTitle] = useState("");
   const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyRooms, setBusyRooms] = useState<Set<string>>(new Set());
   const endRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
   const draftRef = useRef<string | null>(null);
@@ -97,6 +98,8 @@ export function ChatboardClient() {
 
   const nameOf = (slug: string) => names.get(slug) ?? slug;
   const roomAgents = (d: RoomDetail) => d.participants.filter((p) => p.kind === "agent").map((p) => p.refId);
+  // busy is per-room: a pending turn in one room must not block the others
+  const busy = !!detail && busyRooms.has(detail.id);
 
   async function openRoom(id: string) {
     setActiveId(id);
@@ -146,15 +149,17 @@ export function ChatboardClient() {
 
   async function send(textArg?: string) {
     const text = (textArg ?? input).trim();
-    if (!text || busy || !detail) return;
+    if (!text || !detail) return;
+    const roomId = detail.id;
+    if (busyRooms.has(roomId)) return; // serialize within a room, never across rooms
     if (textArg === undefined) setInput("");
-    setDetail((d) => d && ({
+    setDetail((d) => (d && d.id === roomId) ? ({
       ...d,
       messages: [...d.messages, { senderKind: "user", senderId: "me", content: text }, { senderKind: "agent", senderId: "", content: "" }],
-    }));
-    setBusy(true);
+    }) : d);
+    setBusyRooms((s) => new Set(s).add(roomId));
     try {
-      const res = await fetch(`/api/agents/rooms/${detail.id}/turn?message=${encodeURIComponent(text)}`);
+      const res = await fetch(`/api/agents/rooms/${roomId}/turn?message=${encodeURIComponent(text)}`);
       if (!res.ok || !res.body) throw new Error(`turn ${res.status}`);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -165,7 +170,7 @@ export function ChatboardClient() {
         raw += dec.decode(value, { stream: true });
         const { sender, body } = splitSender(raw);
         setDetail((d) => {
-          if (!d) return d;
+          if (!d || d.id !== roomId) return d; // ignore if user navigated to another room
           const m = [...d.messages];
           const last = m.length - 1;
           m[last] = { senderKind: "agent", senderId: sender?.senderId || m[last].senderId || "", content: body };
@@ -174,15 +179,34 @@ export function ChatboardClient() {
       }
     } catch (e) {
       setDetail((d) => {
-        if (!d) return d;
+        if (!d || d.id !== roomId) return d;
         const m = [...d.messages];
         m[m.length - 1] = { senderKind: "agent", senderId: m[m.length - 1].senderId, content: `[errore] ${e instanceof Error ? e.message : String(e)}` };
         return { ...d, messages: m };
       });
     } finally {
-      setBusy(false);
+      setBusyRooms((s) => { const n = new Set(s); n.delete(roomId); return n; });
       void loadRooms();
     }
+  }
+
+  async function inviteAgent(slug: string) {
+    if (!detail) return;
+    await fetch(`/api/agents/rooms/${detail.id}/participants`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agentSlug: slug }),
+    });
+    setPicker(null);
+    void openRoom(detail.id);
+    void loadRooms();
+  }
+
+  async function shareTo(slug: string) {
+    if (!detail) return;
+    setPicker(null);
+    await fetch(`/api/agents/rooms/${detail.id}/share`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ toAgentSlug: slug }),
+    });
+    void loadRooms();
   }
 
   return (
@@ -261,15 +285,30 @@ export function ChatboardClient() {
         {activeId && detail ? (
           <>
             <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
-              <button onClick={() => { setActiveId(null); setDetail(null); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/5 md:hidden">←</button>
+              <button onClick={() => { setActiveId(null); setDetail(null); setPicker(null); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/5 md:hidden">←</button>
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
                 {detail.kind === "group" ? roomAgents(detail).length : (nameOf(roomAgents(detail)[0] ?? "?")[0]?.toUpperCase() ?? "?")}
               </span>
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-zinc-100">{detail.title || roomAgents(detail).map(nameOf).join(", ") || "Stanza"}</span>
                 <span className="block truncate text-xs text-emerald-400">{roomAgents(detail).map(nameOf).join(" · ")}</span>
               </span>
+              <button onClick={() => setPicker(picker === "invite" ? null : "invite")} title="Invita agente" className="shrink-0 rounded-full px-2.5 py-1 text-sm text-zinc-300 hover:bg-white/5">＋</button>
+              <button onClick={() => setPicker(picker === "share" ? null : "share")} title="Condividi questa chat con…" className="shrink-0 rounded-full px-2.5 py-1 text-sm text-zinc-300 hover:bg-white/5">↗</button>
             </header>
+            {picker && (
+              <div className="border-b border-white/10 bg-zinc-900/50 p-3">
+                <p className="mb-2 text-[11px] uppercase tracking-wider text-zinc-500">{picker === "invite" ? "Invita un agente nella stanza" : "Condividi questa chat con…"}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {agents.filter((a) => a.capability !== "routing" && (picker === "share" || !roomAgents(detail).includes(a.slug))).map((a) => (
+                    <button key={a.slug} onClick={() => void (picker === "invite" ? inviteAgent(a.slug) : shareTo(a.slug))}
+                      className="rounded-full px-2.5 py-1 text-xs font-medium text-white" style={{ background: colorFor(a.slug) }}>
+                      {a.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="flex-1 space-y-3 overflow-y-auto p-5">
               {detail.messages.length === 0 ? (
