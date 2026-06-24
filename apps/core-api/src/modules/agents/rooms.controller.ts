@@ -41,6 +41,11 @@ export class RoomsController {
     return this.rooms.postMessage(user.userId, id, body.content);
   }
 
+  @Post("workspace")
+  ensureWorkspace(@CurrentUser() user: AuthUser): Promise<unknown> {
+    return this.rooms.ensureWorkspaceRoom(user.userId);
+  }
+
   @Post("direct")
   ensureDirect(@CurrentUser() user: AuthUser, @Body() body: { agentSlug: string }): Promise<unknown> {
     return this.rooms.ensureDirectRoom(user.userId, body.agentSlug);

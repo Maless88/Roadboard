@@ -111,6 +111,18 @@ export class RoomsService {
     return msg;
   }
 
+  /** Get-or-create the shared 'Workspace' group room with all enabled non-router agents. */
+  async ensureWorkspaceRoom(ownerUserId: string): Promise<unknown> {
+    const found = await this.prisma.chatRoom.findFirst({
+      where: { ownerUserId, kind: "group", title: "Workspace" },
+      include: { participants: true },
+    });
+    if (found) return found;
+    const agents = await this.prisma.agentConfig.findMany({ where: { enabled: true }, select: { slug: true, capability: true } });
+    const slugs = agents.filter((a) => (a.capability ?? "").toLowerCase() !== "routing").map((a) => a.slug);
+    return this.createRoom(ownerUserId, { kind: "group", title: "Workspace", agentSlugs: slugs });
+  }
+
   /** Get-or-create the 1:1 direct room for (owner, agent). Keeps boardchat & Chatboard on one store. */
   async ensureDirectRoom(ownerUserId: string, agentSlug: string): Promise<unknown> {
     const existing = await this.prisma.chatRoom.findMany({
