@@ -3,12 +3,11 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 
 import { QUEUE_AGENT_RUN } from '../queue-names';
+import { AgentRunRunner } from '../agent-run.runner';
 
 interface AgentRunJobData {
-  capability: string;
-  input: string;
-  sessionId?: string;
-  projectId?: string;
+  activityId: string;
+  runId: string;
 }
 
 @Processor(QUEUE_AGENT_RUN)
@@ -17,14 +16,17 @@ export class AgentRunProcessor extends WorkerHost {
   private readonly logger = new Logger(AgentRunProcessor.name);
 
 
+  constructor(private readonly runner: AgentRunRunner) {
+    super();
+  }
+
+
   async process(job: Job<AgentRunJobData>): Promise<void> {
 
-    const { capability, input } = job.data;
+    const { activityId, runId } = job.data;
 
-    this.logger.log(
-      `[agent-run] job ${job.id} capability=${capability} input="${input.slice(0, 80)}"`,
-    );
+    this.logger.log(`[agent-run] job ${job.id} activity=${activityId} run=${runId}`);
 
-    // TODO Wave 2: route by capability -> executor (provider/model) -> ActivityEvent -> result
+    await this.runner.run(activityId, runId);
   }
 }

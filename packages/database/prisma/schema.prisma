@@ -535,3 +535,67 @@ model AgentUserCredential {
   @@index([userId])
   @@map("agent_user_credentials")
 }
+
+// ── life-OS: scheduled activities + calendar ─────────
+
+enum ScheduleKind {
+  cron
+  once
+  interval
+}
+
+enum ActivityStatus {
+  active
+  paused
+  expired
+  done
+}
+
+enum RunStatus {
+  pending
+  running
+  ok
+  error
+  skipped
+}
+
+model ScheduledActivity {
+  id            String   @id @default(cuid())
+  userId        String         @map("user_id")
+  projectId     String?        @map("project_id")
+  title         String
+  kind          ScheduleKind
+  cronExpr      String?        @map("cron_expr")          // kind=cron (5-field, tz-aware)
+  runAt         DateTime?      @map("run_at")             // kind=once
+  everyMs       Int?           @map("every_ms")           // kind=interval
+  tz            String   @default("Europe/Rome")
+  agentSlug     String         @map("agent_slug")         // responder
+  promptTemplate String        @map("prompt_template")    // what to ask the agent each run
+  deliveryRoomId String?       @map("delivery_room_id")   // room to append into (auto/direct if null)
+  notify        Boolean  @default(true) // push via OpenClaw bridge
+  status        ActivityStatus @default(active)
+  nextRunAt     DateTime?      @map("next_run_at")
+  lastRunAt     DateTime?      @map("last_run_at")
+  expiresAt     DateTime?      @map("expires_at")
+  createdBy     String         @map("created_by")         // "user:<id>" | "agent:<slug>"
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  runs          ScheduledActivityRun[]
+  @@index([status, nextRunAt])
+  @@index([userId])
+  @@map("scheduled_activities")
+}
+
+model ScheduledActivityRun {
+  id              String   @id @default(cuid())
+  activityId      String            @map("activity_id")
+  activity        ScheduledActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  firedAt         DateTime @default(now()) @map("fired_at")
+  status          RunStatus @default(pending)
+  outputMessageId String?          @map("output_message_id") // roomMessage produced
+  outputPreview   String?          @map("output_preview")    // first ~280 chars, for calendar/notif
+  error           String?
+  durationMs      Int?             @map("duration_ms")
+  @@index([activityId, firedAt])
+  @@map("scheduled_activity_runs")
+}

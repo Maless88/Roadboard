@@ -9,6 +9,7 @@ import { CleanupProcessor } from './processors/cleanup.processor';
 import { ThumbnailRefreshProcessor } from './processors/thumbnail-refresh.processor';
 import { DeepCodeScanProcessor } from './processors/deep-code-scan.processor';
 import { AgentRunProcessor } from './processors/agent-run.processor';
+import { AgentRunRunner } from './agent-run.runner';
 import {
   QUEUE_DASHBOARD_REFRESH,
   QUEUE_SUMMARY_GENERATION,
@@ -48,6 +49,7 @@ export {
     ThumbnailRefreshProcessor,
     DeepCodeScanProcessor,
     AgentRunProcessor,
+    AgentRunRunner,
   ],
 })
 export class JobsModule {}

@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ScheduleModule } from "@nestjs/schedule";
 
 import { PrismaModule } from "./prisma.module";
 import { CommonModule } from "./common/common.module";
@@ -17,10 +18,12 @@ import { ProjectRepositoriesModule } from "./modules/projects/repositories/proje
 import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 import { OpsModule } from "./modules/ops/ops.module";
 import { AgentsModule } from "./modules/agents/agents.module";
+import { SchedulingModule } from "./modules/scheduling/scheduling.module";
 
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     PrismaModule,
     CommonModule,
     HealthModule,
@@ -38,6 +41,7 @@ import { AgentsModule } from "./modules/agents/agents.module";
     ChatbotModule,
     OpsModule,
     AgentsModule,
+    SchedulingModule,
   ],
 })
 export class AppModule {}
