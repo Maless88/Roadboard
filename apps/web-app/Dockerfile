@@ -43,6 +43,7 @@ ENV NEXT_PUBLIC_BUILD_TIME=${BUILD_TIME}
 
 COPY --from=builder /app/apps/web-app/.next/standalone ./
 COPY --from=builder /app/apps/web-app/.next/static     ./apps/web-app/.next/static
+COPY --from=builder /app/apps/web-app/public ./apps/web-app/public
 
 EXPOSE 3000
 ENV PORT=3000
