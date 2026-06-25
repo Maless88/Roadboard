@@ -203,6 +203,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
     } finally {
       setBusyRooms((s) => { const n = new Set(s); n.delete(roomId); return n; });
       void loadRooms();
+      try { const rr = await fetch(`/api/agents/rooms/${roomId}`); if (rr.ok) { const dj = await rr.json(); setDetail((d) => (d && d.id === roomId ? dj : d)); } } catch { /* keep streamed view */ }
     }
   }
 
@@ -343,7 +344,18 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
                     <span className="mt-0.5"><Avatar url={avatars.get(m.senderId)} label={nameOf(m.senderId)} bg={colorFor(m.senderId || "?")} /></span>
                     <span className="min-w-0">
                       <span className="mb-0.5 block text-[11px] text-zinc-500">{m.senderId ? nameOf(m.senderId) : "…"}</span>
-                      <span className="inline-block max-w-full whitespace-pre-wrap rounded-2xl bg-white/5 px-3 py-2 text-sm text-zinc-200">{m.content || (busy ? "…" : "")}</span>
+                      {(() => {
+                        const sep = m.content.indexOf("\x1f");
+                        const txt = sep === -1 ? m.content : m.content.slice(0, sep);
+                        const img = sep === -1 ? null : m.content.slice(sep + 1);
+                        return (<>
+                          <span className="inline-block max-w-full whitespace-pre-wrap rounded-2xl bg-white/5 px-3 py-2 text-sm text-zinc-200">{txt || (busy ? "\u2026" : "")}</span>
+                          {img ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={img} alt="immagine generata" className="mt-1 block max-w-[78%] rounded-2xl border border-white/10" />
+                          ) : null}
+                        </>);
+                      })()}
                     </span>
                   </div>
                 );

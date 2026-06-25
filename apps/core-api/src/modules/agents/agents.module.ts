@@ -10,11 +10,12 @@ import { RoomsController } from "./rooms.controller";
 import { RoomOrchestratorService } from "./rooms-orchestrator.service";
 import { AgentCredentialsService } from "./credentials.service";
 import { AgentCredentialsController } from "./credentials.controller";
+import { ImageGenService } from "./image-gen.service";
 
 @Module({
   imports: [AuditModule],
   controllers: [AgentsController, RoomsController, AgentCredentialsController],
-  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService, AgentCredentialsService],
+  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService, AgentCredentialsService, ImageGenService],
   exports: [AgentExecutorService],
 })
 export class AgentsModule {}

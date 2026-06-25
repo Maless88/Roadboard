@@ -7,6 +7,7 @@ import { AgentExecutorService } from "./agent-executor.service";
 import { AgentsService } from "./agents.service";
 import { CoordinatorService } from "./coordinator.service";
 import { RoomsService } from "./rooms.service";
+import { ImageGenService } from "./image-gen.service";
 
 export interface RoomAgent { slug: string; capability: string }
 
@@ -54,10 +55,11 @@ export class RoomOrchestratorService {
     @Inject(CoordinatorService) private readonly coordinator: CoordinatorService,
     @Inject(AgentExecutorService) private readonly executor: AgentExecutorService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ImageGenService) private readonly imageGen: ImageGenService,
   ) {}
 
   runTurn(user: AuthUser, roomId: string, message: string): Observable<{ data: string }> {
-    const { rooms, agents, coordinator, executor, audit } = this;
+    const { rooms, agents, coordinator, executor, audit, imageGen } = this;
 
     return new Observable<{ data: string }>((subscriber) => {
 
@@ -95,6 +97,31 @@ export class RoomOrchestratorService {
           void audit.recordForUser(user, "agent.run.routed", "room", roomId, undefined, {
             to: decision.slug, reason: decision.reason,
           });
+
+          // Image agents (capability "image", e.g. Grafico) skip the CLI: generate
+          // a PNG via the user's provider key and embed it in the message
+          // (caption + "\x1f" + data-URL), so it renders as a chat bubble image.
+          if ((capBySlug.get(decision.slug) ?? "") === "image") {
+            const gen = await imageGen.generate(user.userId, message);
+            let content: string;
+            if (gen.ok) {
+              subscriber.next({ data: "\ud83c\udfa8 Ecco l'immagine." });
+              content = "\ud83c\udfa8 Ecco l'immagine.\x1fdata:image/png;base64," + gen.b64;
+            } else if (gen.error === "no-credentials") {
+              content = "Per generare immagini configura la tua API key Cloudflare nella mia scheda (Agenti \u2192 Grafico \u2192 Supporto).";
+              subscriber.next({ data: content });
+            } else {
+              content = "Generazione immagine fallita (" + gen.error + "). Riprova o controlla la key nella scheda.";
+              subscriber.next({ data: content });
+            }
+            await rooms.appendMessage(roomId, "agent", decision.slug, content);
+            void audit.recordForUser(user, "agent.run.completed", "agent", decision.slug, undefined, {
+              ok: gen.ok, durationMs: Date.now() - started, image: gen.ok, roomId,
+            });
+            subscriber.next({ data: "[DONE]" });
+            subscriber.complete();
+            return;
+          }
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
           const messages: ChatMessage[] = room.messages.map((m) => {
