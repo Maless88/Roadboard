@@ -41,7 +41,7 @@ export class ChatService {
     const agents = await this.prisma.agentConfig.findMany({
       where: { enabled: true },
       orderBy: { createdAt: "asc" },
-      select: { name: true, slug: true, capability: true, provider: true, model: true },
+      select: { name: true, slug: true, capability: true, provider: true, model: true, avatarUrl: true },
     });
     const threads = await this.prisma.chatThread.findMany({
       where: { ownerUserId },

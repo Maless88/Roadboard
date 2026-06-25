@@ -14,7 +14,7 @@ interface RoomListItem {
 interface Participant { kind: string; refId: string }
 interface RMsg { senderKind: "user" | "agent"; senderId: string; content: string }
 interface RoomDetail { id: string; kind: string; title: string | null; participants: Participant[]; messages: RMsg[] }
-interface Contact { name: string; slug: string; capability: string }
+interface Contact { name: string; slug: string; capability: string; avatarUrl?: string | null }
 
 const AV = "linear-gradient(135deg,#7c5cff,#a06eff)";
 const PALETTE = ["#7c5cff", "#22c8b4", "#f59e0b", "#ef4d6f", "#3ccb7f", "#6da8ff", "#b06eff"];
@@ -23,6 +23,20 @@ function colorFor(slug: string): string {
   let h = 0;
   for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
+}
+
+/** Sender avatar: image if available, else a colored initial — like a messaging app. */
+function Avatar({ url, label, bg, size = 28 }: { url?: string | null; label: string; bg: string; size?: number }) {
+  const dim = { width: size, height: size };
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={label} className="shrink-0 rounded-full object-cover" style={dim} />;
+  }
+  return (
+    <span className="inline-flex shrink-0 items-center justify-center rounded-full font-bold text-white" style={{ ...dim, background: bg, fontSize: size * 0.4 }}>
+      {label[0]?.toUpperCase() ?? "?"}
+    </span>
+  );
 }
 
 /** Split a leading sender marker (RS + JSON + "\n") from streamed turn output. */
@@ -39,10 +53,11 @@ function splitSender(raw: string): { sender: { senderId: string; reason?: string
   return { sender: null, body: raw };
 }
 
-export function ChatboardClient() {
+export function ChatboardClient({ displayName }: { displayName: string }) {
 
   const [rooms, setRooms] = useState<RoomListItem[]>([]);
   const [names, setNames] = useState<Map<string, string>>(new Map());
+  const [avatars, setAvatars] = useState<Map<string, string | null>>(new Map());
   const [agents, setAgents] = useState<Contact[]>([]);
   const [detail, setDetail] = useState<RoomDetail | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -72,6 +87,7 @@ export function ChatboardClient() {
           const list: Contact[] = await r.json();
           setAgents(list);
           setNames(new Map(list.map((c) => [c.slug, c.name])));
+          setAvatars(new Map(list.map((c) => [c.slug, c.avatarUrl ?? null])));
         }
       } catch { /* ignore */ }
     })();
@@ -316,16 +332,15 @@ export function ChatboardClient() {
               ) : detail.messages.map((m, i) => {
                 if (m.senderKind === "user") {
                   return (
-                    <div key={i} className="text-right">
-                      <span className="inline-block max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm text-white" style={{ background: AV }}>{m.content}</span>
+                    <div key={i} className="flex justify-end gap-2">
+                      <span className="inline-block max-w-[78%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm text-white" style={{ background: AV }}>{m.content}</span>
+                      <Avatar label={displayName} bg={AV} />
                     </div>
                   );
                 }
                 return (
                   <div key={i} className="flex gap-2">
-                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white" style={{ background: colorFor(m.senderId || "?") }}>
-                      {(nameOf(m.senderId)[0] ?? "?").toUpperCase()}
-                    </span>
+                    <span className="mt-0.5"><Avatar url={avatars.get(m.senderId)} label={nameOf(m.senderId)} bg={colorFor(m.senderId || "?")} /></span>
                     <span className="min-w-0">
                       <span className="mb-0.5 block text-[11px] text-zinc-500">{m.senderId ? nameOf(m.senderId) : "…"}</span>
                       <span className="inline-block max-w-full whitespace-pre-wrap rounded-2xl bg-white/5 px-3 py-2 text-sm text-zinc-200">{m.content || (busy ? "…" : "")}</span>

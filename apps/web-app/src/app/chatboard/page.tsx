@@ -18,7 +18,7 @@ export default async function ChatboardPage() {
     <AppShell username={session.username} displayName={session.displayName}>
       {enabled ? (
         <Suspense fallback={null}>
-          <ChatboardClient />
+          <ChatboardClient displayName={session.displayName} />
         </Suspense>
       ) : (
         <div className="mx-auto max-w-2xl p-6 text-sm text-zinc-400">
