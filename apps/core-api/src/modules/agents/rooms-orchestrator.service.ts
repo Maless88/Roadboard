@@ -109,9 +109,11 @@ export class RoomOrchestratorService {
 
           let reply = "";
           for await (const chunk of executor.stream(config, messages)) {
-            if (cancelled) return;
             reply += chunk;
-            subscriber.next({ data: chunk });
+            // Finish generating and persist even if the client disconnected
+            // (navigated away / pressed Back): the reply must be saved so it is
+            // there when the user returns. Just stop pushing to a dead stream.
+            if (!cancelled) subscriber.next({ data: chunk });
           }
           if (reply.length > 0) await rooms.appendMessage(roomId, "agent", slug, reply);
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
