@@ -12,6 +12,7 @@ const CAPABILITY_HINTS: Record<string, string[]> = {
   research: ["cerca", "ricerc", "notizie", "fonti", "web", "google", "aggiorn", "prezzo", "trova", "link"],
   code: ["codice", "code", "bug", "refactor", "implementa", "funzione", "repo", "commit", "compila", "build", "test"],
   ops: ["server", "deploy", "systemctl", "docker", "log", "riavvia", "restart", "disco", "processo", "container", "ssh"],
+  image: ["immagine", "immagini", "disegna", "disegno", "avatar", "logo", "grafic", "illustr", "render"],
 };
 
 const ROUTER_CAPABILITY = "routing"; // the coordinator itself

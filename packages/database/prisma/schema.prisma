@@ -521,3 +521,17 @@ model RoomMessage {
   @@index([roomId, createdAt])
   @@map("room_messages")
 }
+
+model AgentUserCredential {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  provider  String
+  accountId String   @map("account_id")
+  encToken  String   @map("enc_token")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, provider])
+  @@index([userId])
+  @@map("agent_user_credentials")
+}

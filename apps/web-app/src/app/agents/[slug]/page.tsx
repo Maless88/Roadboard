@@ -4,6 +4,7 @@ import { getToken } from "@/lib/auth";
 import { validateSession, getAgentProfile } from "@/lib/api";
 import type { AgentProfile } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { AgentCredentialsForm } from "./agent-credentials-form";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,8 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ s
             </div>
 
             {p.description ? <p className="mt-4 text-sm text-zinc-300">{p.description}</p> : null}
+
+            {p.capability === "image" ? <AgentCredentialsForm provider="cloudflare" /> : null}
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-white/10 bg-zinc-900/60 p-4">

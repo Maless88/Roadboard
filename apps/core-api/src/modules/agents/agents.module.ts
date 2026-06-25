@@ -8,11 +8,13 @@ import { AgentsController } from "./agents.controller";
 import { RoomsService } from "./rooms.service";
 import { RoomsController } from "./rooms.controller";
 import { RoomOrchestratorService } from "./rooms-orchestrator.service";
+import { AgentCredentialsService } from "./credentials.service";
+import { AgentCredentialsController } from "./credentials.controller";
 
 @Module({
   imports: [AuditModule],
-  controllers: [AgentsController, RoomsController],
-  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService],
+  controllers: [AgentsController, RoomsController, AgentCredentialsController],
+  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService, AgentCredentialsService],
   exports: [AgentExecutorService],
 })
 export class AgentsModule {}
