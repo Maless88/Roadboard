@@ -77,6 +77,7 @@ export class RoomOrchestratorService {
         try {
           await rooms.postMessage(user.userId, roomId, message); // membership-gated
           const room = (await rooms.getRoom(user.userId, roomId)) as {
+            projectId?: string | null;
             participants: { kind: string; refId: string }[];
             messages: { senderKind: string; senderId: string; content: string }[];
           };
@@ -112,6 +113,7 @@ export class RoomOrchestratorService {
           // streamed to the user.
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
             const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
+            gconfig.projectId = room.projectId ?? null; gconfig.source = "chat";
             const gmsgs: ChatMessage[] = room.messages.map((mm) => {
               if (mm.senderKind === "user") return { role: "user", content: forLlmContent(mm.content) };
               if (mm.senderId === gslug) return { role: "assistant", content: forLlmContent(mm.content) };
@@ -147,6 +149,7 @@ export class RoomOrchestratorService {
           }
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
+          config.projectId = room.projectId ?? null; config.source = "chat";
           const messages: ChatMessage[] = room.messages.map((m) => {
             if (m.senderKind === "user") return { role: "user", content: forLlmContent(m.content) };
             if (m.senderId === slug) return { role: "assistant", content: forLlmContent(m.content) };
@@ -183,6 +186,7 @@ export class RoomOrchestratorService {
             await rooms.appendMessage(roomId, "agent", slug, askLine);
 
             const { slug: tSlug, config: tConfig } = await agents.resolveForChat(target, user.userId);
+            tConfig.projectId = room.projectId ?? null; tConfig.source = "chat";
             let tReply = "";
             for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) {
               tReply += chunk;

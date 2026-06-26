@@ -18,6 +18,8 @@ export interface AgentExecConfig {
   toolPolicy?: string | null; // restricted | dev | sysadmin
   roadboardMcpUrl?: string | null;
   roadboardMcpToken?: string | null;
+  projectId?: string | null;
+  source?: string | null; // chat | scheduled
 }
 
 const API_PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama"];
@@ -66,7 +68,7 @@ export class AgentExecutor {
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined, toolPolicy: agent.toolPolicy ?? "restricted", roadboardMcpUrl: agent.roadboardMcpUrl ?? undefined, roadboardMcpToken: agent.roadboardMcpToken ?? undefined }),
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined, toolPolicy: agent.toolPolicy ?? "restricted", roadboardMcpUrl: agent.roadboardMcpUrl ?? undefined, roadboardMcpToken: agent.roadboardMcpToken ?? undefined, projectId: agent.projectId ?? undefined, source: agent.source ?? undefined }),
     });
 
     if (!res.ok || !res.body) {
