@@ -10,18 +10,30 @@ import path from 'node:path';
 
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
-const BIN = { 'claude-code': 'claude', codex: 'codex' };
+const CLAUDE_BIN = process.env.CLAUDE_BIN || [process.env.HOME + '/.local/bin/claude', '/usr/local/bin/claude', '/usr/bin/claude'].find((c) => { try { return require('node:fs').existsSync(c); } catch { return false; } }) || 'claude';
+const BIN = { 'claude-code': CLAUDE_BIN, codex: 'codex' };
 // per-request tool policy by trust tier (fail-closed: unknown => restricted).
 // destructive shell prefixes are HARD-BLOCKED for sysadmin (interim for "confirm on dangerous").
 const DANGEROUS_BASH = ['rm','sudo','dd','mkfs','shutdown','reboot','kill','pkill','killall','chmod','chown','mv','docker','systemctl','git push','truncate'];
-function claudeToolArgs(policy) {
-  if (policy === 'sysadmin') {
-    return ['--disallowedTools', 'WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`)];
-  }
-  if (policy === 'dev') {
-    return ['--disallowedTools', 'Bash', 'WebFetch', 'WebSearch', 'Task'];
-  }
-  return ['--disallowedTools', 'Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+function claudeDisallowed(policy) {
+  if (policy === 'sysadmin') return ['WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`)];
+  if (policy === 'dev') return ['Bash', 'WebFetch', 'WebSearch', 'Task'];
+  return ['Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+}
+// RoadBoard MCP per-agent access (slug derived from cwd). Read tool list enumerated
+// 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
+const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot'];
+const RB_ACCESS = { dev: 'full', researcher: 'read', sysadmin: 'read' };
+function roadboardToolFlags(slug, disallowed) {
+  const allowed = [];
+  const level = RB_ACCESS[slug] || 'none';
+  if (level === 'full') allowed.push('mcp__roadboard');
+  else if (level === 'read') for (const t of RB_READ) allowed.push('mcp__roadboard__' + t);
+  else disallowed.push('mcp__roadboard');
+  const flags = [];
+  if (allowed.length) flags.push('--allowedTools', ...allowed);
+  flags.push('--disallowedTools', ...disallowed);
+  return flags;
 }
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
 
@@ -46,9 +58,11 @@ http.createServer((req, res) => {
     const prompt = String(p.prompt || '');
     // NOTE: codex tiering not yet implemented; privileged agents must use claude-code.
     const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev') ? p.toolPolicy : 'restricted';
+    const slug = reqCwd ? path.basename(reqCwd) : '';
+    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy));
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...claudeToolArgs(policy)];
+      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
