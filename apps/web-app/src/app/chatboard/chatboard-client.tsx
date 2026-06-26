@@ -70,6 +70,19 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
   const endRef = useRef<HTMLDivElement>(null);
   const searchParams = useSearchParams();
   const draftRef = useRef<string | null>(null);
+  const [lastSeen, setLastSeen] = useState<Record<string, string>>({});
+  const prevAtRef = useRef<Record<string, string>>({});
+  const seenLoaded = useRef(false);
+
+  const markSeen = useCallback((id: string) => {
+    setLastSeen((prev) => {
+      const next = { ...prev, [id]: new Date().toISOString() };
+      try { localStorage.setItem("rb_chat_seen", JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const isUnread = (roomId: string | undefined, at: string | null | undefined) =>
+    !!roomId && !!at && roomId !== activeId && at > (lastSeen[roomId] ?? "");
 
   const loadRooms = useCallback(async () => {
     try {
@@ -95,6 +108,40 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [detail?.messages]);
 
+  // load persisted "seen" marks + ask notification permission once
+  useEffect(() => {
+    try { const raw = localStorage.getItem("rb_chat_seen"); if (raw) setLastSeen(JSON.parse(raw)); } catch { /* ignore */ }
+    try { if (typeof Notification !== "undefined" && Notification.permission === "default") void Notification.requestPermission(); } catch { /* ignore */ }
+    seenLoaded.current = true;
+  }, []);
+
+  // poll the room list so replies show up even when you are not in that chat
+  useEffect(() => {
+    const t = setInterval(() => { void loadRooms(); }, 6000);
+    return () => clearInterval(t);
+  }, [loadRooms]);
+
+  // mark the open room as seen as its messages arrive
+  useEffect(() => { if (detail) markSeen(detail.id); }, [detail, markSeen]);
+
+  // notify when a NEW agent message lands in a room you are not viewing
+  useEffect(() => {
+    if (!seenLoaded.current) return;
+    for (const r of rooms) {
+      const at = r.lastMessageAt;
+      if (!at) continue;
+      const prev = prevAtRef.current[r.id];
+      if (prev && at > prev && r.id !== activeId && at > (lastSeen[r.id] ?? "")) {
+        const who = r.kind === "direct" ? nameOf(r.agents[0]) : (r.title || "Gruppo");
+        try {
+          if (typeof Notification !== "undefined" && Notification.permission === "granted")
+            new Notification(who, { body: r.lastMessage ?? "Nuova risposta" });
+        } catch { /* ignore */ }
+      }
+      prevAtRef.current[r.id] = at;
+    }
+  }, [rooms, activeId, lastSeen]);
+
   // deep-link from Home cockpit: ?room=<id>&draft=<text>
   useEffect(() => {
     const room = searchParams.get("room");
@@ -119,6 +166,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
 
   async function openRoom(id: string) {
     setActiveId(id);
+    markSeen(id);
     setDetail(null);
     try {
       const r = await fetch(`/api/agents/rooms/${id}`);
@@ -167,6 +215,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
     const text = (textArg ?? input).trim();
     if (!text || !detail) return;
     const roomId = detail.id;
+    markSeen(roomId);
     if (busyRooms.has(roomId)) return; // serialize within a room, never across rooms
     if (textArg === undefined) setInput("");
     setDetail((d) => (d && d.id === roomId) ? ({
@@ -275,6 +324,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
                   <span className="block truncate text-sm font-semibold text-zinc-100">{a.name}</span>
                   <span className="block truncate text-xs text-zinc-500">{dr?.lastMessage ?? a.capability}</span>
                 </span>
+                {isUnread(dr?.id, dr?.lastMessageAt) ? <span className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-400" /> : null}
               </button>
             );
           })}
@@ -292,6 +342,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
                 <span className="block truncate text-sm font-semibold text-zinc-100">{c.title || c.agents.map(nameOf).join(", ") || "Gruppo"}</span>
                 <span className="block truncate text-xs text-zinc-500">{c.lastMessage ?? `${c.agents.length} agenti`}</span>
               </span>
+              {isUnread(c.id, c.lastMessageAt) ? <span className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-indigo-400" /> : null}
             </button>
           ))}
         </div>
