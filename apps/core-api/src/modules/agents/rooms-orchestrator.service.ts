@@ -98,26 +98,42 @@ export class RoomOrchestratorService {
             to: decision.slug, reason: decision.reason,
           });
 
-          // Image agents (capability "image", e.g. Grafico) skip the CLI: generate
-          // a PNG via the user's provider key and embed it in the message
-          // (caption + "\x1f" + data-URL), so it renders as a chat bubble image.
+          // Image agent (capability "image", e.g. Grafico): it converses like a normal
+          // LLM agent. Only when it decides to generate does it emit a directive
+          // "[[IMG]] <english prompt>" on its own line; we intercept that, call FLUX,
+          // and embed the PNG (caption + "\x1f" + data-URL). The directive is never
+          // streamed to the user.
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
-            const gen = await imageGen.generate(user.userId, message);
-            let content: string;
-            if (gen.ok) {
-              subscriber.next({ data: "\ud83c\udfa8 Ecco l'immagine." });
-              content = "\ud83c\udfa8 Ecco l'immagine.\x1fdata:image/png;base64," + gen.b64;
-            } else if (gen.error === "no-credentials") {
-              content = "Per generare immagini configura la tua API key Cloudflare nella mia scheda (Agenti \u2192 Grafico \u2192 Supporto).";
-              subscriber.next({ data: content });
-            } else {
-              content = "Generazione immagine fallita (" + gen.error + "). Riprova o controlla la key nella scheda.";
-              subscriber.next({ data: content });
-            }
-            await rooms.appendMessage(roomId, "agent", decision.slug, content);
-            void audit.recordForUser(user, "agent.run.completed", "agent", decision.slug, undefined, {
-              ok: gen.ok, durationMs: Date.now() - started, image: gen.ok, roomId,
+            const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
+            const gmsgs: ChatMessage[] = room.messages.map((mm) => {
+              if (mm.senderKind === "user") return { role: "user", content: mm.content };
+              if (mm.senderId === gslug) return { role: "assistant", content: mm.content };
+              return { role: "user", content: `[${mm.senderId}]: ${mm.content}` };
             });
+            let reply = "";
+            let shown = 0;
+            for await (const chunk of executor.stream(gconfig, gmsgs)) {
+              reply += chunk;
+              const cut = reply.indexOf("[[");
+              const safeEnd = cut === -1 ? reply.length : cut;
+              if (safeEnd > shown && !cancelled) { subscriber.next({ data: reply.slice(shown, safeEnd) }); shown = safeEnd; }
+            }
+            const m = reply.match(/\[\[IMG\]\]\s*([\s\S]+?)\s*$/i);
+            let content: string;
+            if (m && typeof m.index === "number") {
+              const prompt = m[1].trim();
+              const visible = reply.slice(0, m.index).trim() || "🎨 Ecco l'immagine.";
+              if (!cancelled) subscriber.next({ data: "\n🎨 genero l'immagine…" });
+              const gen = await imageGen.generate(user.userId, prompt);
+              if (gen.ok) content = visible + "\x1fdata:image/png;base64," + gen.b64;
+              else if (gen.error === "no-credentials") content = visible + "\n(Per generare configura la API key Cloudflare nella mia scheda → Supporto.)";
+              else content = visible + "\n(Generazione fallita: " + gen.error + ".)";
+              void audit.recordForUser(user, "agent.run.completed", "agent", gslug, undefined, { ok: gen.ok, durationMs: Date.now() - started, image: gen.ok, roomId });
+            } else {
+              content = reply.trim();
+              void audit.recordForUser(user, "agent.run.completed", "agent", gslug, undefined, { ok: true, durationMs: Date.now() - started, image: false, roomId });
+            }
+            if (content.length > 0) await rooms.appendMessage(roomId, "agent", gslug, content);
             subscriber.next({ data: "[DONE]" });
             subscriber.complete();
             return;
