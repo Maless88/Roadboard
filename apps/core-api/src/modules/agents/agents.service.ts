@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaClient } from "@roadboard/database";
 import { optionalEnv } from "@roadboard/config";
 import type { AgentExecConfig, AgentRuntime } from "./agent-executor.service";
+import { AgentCredentialsService } from "./credentials.service";
 
 const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/home/alessio/agent-workspaces");
 function wsFor(slug: string): string { return `${WS_BASE}/${slug}`; }
@@ -41,7 +42,10 @@ const BUILTIN_DEFAULT: AgentExecConfig = {
 @Injectable()
 export class AgentsService {
 
-  constructor(@Inject("PRISMA") private readonly prisma: PrismaClient) {}
+  constructor(
+    @Inject("PRISMA") private readonly prisma: PrismaClient,
+    @Inject(AgentCredentialsService) private readonly creds: AgentCredentialsService,
+  ) {}
 
   list(): Promise<unknown> {
     return this.prisma.agentConfig.findMany({
@@ -127,6 +131,7 @@ export class AgentsService {
     const isOwner = !!ownerUserId && !!userId && ownerUserId === userId;
     const toolPolicy = tier !== "restricted" && isOwner ? tier : "restricted";
 
+    const rbMcp = userId ? await this.creds.get(userId, "roadboard-mcp").catch(() => null) : null;
     return {
       slug: row.slug,
       config: {
@@ -136,6 +141,8 @@ export class AgentsService {
         systemPrompt: buildAgentContext(row as unknown as AgentRow),
         workspacePath: wsFor(row.slug),
         toolPolicy,
+        roadboardMcpUrl: rbMcp?.accountId ?? null,
+        roadboardMcpToken: rbMcp?.token ?? null,
       },
     };
   }

@@ -24,12 +24,17 @@ function claudeDisallowed(policy) {
 // 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
 const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot'];
 const RB_ACCESS = { dev: 'full', researcher: 'read', sysadmin: 'read' };
-function roadboardToolFlags(slug, disallowed) {
+function roadboardToolFlags(slug, disallowed, hasLocalMcp) {
   const allowed = [];
   const level = RB_ACCESS[slug] || 'none';
-  if (level === 'full') allowed.push('mcp__roadboard');
-  else if (level === 'read') for (const t of RB_READ) allowed.push('mcp__roadboard__' + t);
-  else disallowed.push('mcp__roadboard');
+  // only grant roadboard tools when we have the LOCAL mcp-config wired; otherwise
+  // block it so the agent can never fall back to a user-scope (company) server.
+  if (level !== 'none' && hasLocalMcp) {
+    if (level === 'full') allowed.push('mcp__roadboard');
+    else for (const t of RB_READ) allowed.push('mcp__roadboard__' + t);
+  } else {
+    disallowed.push('mcp__roadboard');
+  }
   const flags = [];
   if (allowed.length) flags.push('--allowedTools', ...allowed);
   flags.push('--disallowedTools', ...disallowed);
@@ -59,10 +64,19 @@ http.createServer((req, res) => {
     // NOTE: codex tiering not yet implemented; privileged agents must use claude-code.
     const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev') ? p.toolPolicy : 'restricted';
     const slug = reqCwd ? path.basename(reqCwd) : '';
-    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy));
+    const rbLevel = RB_ACCESS[slug] || 'none';
+    let mcpFlags = [];
+    if (rbLevel !== 'none' && reqCwd && p.roadboardMcpUrl && p.roadboardMcpToken) {
+      try {
+        const cfgPath = path.join(reqCwd, '.rb-mcp.json');
+        fs.writeFileSync(cfgPath, JSON.stringify({ mcpServers: { roadboard: { type: 'http', url: String(p.roadboardMcpUrl), headers: { Authorization: 'Bearer ' + String(p.roadboardMcpToken) } } } }), { mode: 0o600 });
+        mcpFlags = ['--mcp-config', cfgPath, '--strict-mcp-config'];
+      } catch (e) { /* fall back to no roadboard access */ }
+    }
+    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy), mcpFlags.length > 0);
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags];
+      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
