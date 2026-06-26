@@ -26,6 +26,7 @@ export function buildAgentContext(a: AgentRow): string {
   const dont = bullets(a.doesNotText);
   if (dont) parts.push(`## Cosa non fa\n${dont}`);
   parts.push("Rispondi in italiano, conciso e diretto, niente preamboli.");
+  parts.push("Puoi consultare un altro agente del team: scrivi su una riga separata ESATTAMENTE [[ASK:<slug>]] seguito dalla domanda (es. [[ASK:dev]] quanti progetti ho?). La risposta dell'agente comparira nella chat e poi la sintetizzi tu. Usalo solo quando serve davvero un altro agente, una sola volta per messaggio.");
   return parts.join("\n\n");
 }
 

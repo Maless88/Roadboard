@@ -157,15 +157,58 @@ export class RoomOrchestratorService {
             provider: config.provider, model: config.model, runtime: config.runtime, roomId,
           });
 
+          // Stream the agent's reply, holding back any "[[" directive (delegation).
           let reply = "";
+          let shown = 0;
           for await (const chunk of executor.stream(config, messages)) {
             reply += chunk;
-            // Finish generating and persist even if the client disconnected
-            // (navigated away / pressed Back): the reply must be saved so it is
-            // there when the user returns. Just stop pushing to a dead stream.
-            if (!cancelled) subscriber.next({ data: chunk });
+            const cut = reply.indexOf("[[");
+            const safeEnd = cut === -1 ? reply.length : cut;
+            if (safeEnd > shown && !cancelled) { subscriber.next({ data: reply.slice(shown, safeEnd) }); shown = safeEnd; }
           }
-          if (reply.length > 0) await rooms.appendMessage(roomId, "agent", slug, reply);
+
+          // Agent-to-agent delegation: "[[ASK:<slug>]] <question>" lets the chat agent
+          // consult another agent; the called agent's reply shows in THIS chat
+          // (attributed to it), then the chat agent synthesizes. Depth 1 (no chains).
+          const ask = reply.match(/\[\[ASK:\s*([a-zA-Z0-9_-]+)\s*\]\]\s*([\s\S]+?)\s*$/);
+          const target = ask ? ask[1].toLowerCase() : null;
+          const lead = ask && typeof ask.index === "number" ? reply.slice(0, ask.index).trim() : reply.trim();
+
+          if (ask && target && target !== slug && capBySlug.has(target)) {
+            const question = ask[2].trim();
+            const tName = (agentList.find((a) => a.slug === target) as unknown as { name?: string } | undefined)?.name ?? target;
+            if (lead) await rooms.appendMessage(roomId, "agent", slug, lead);
+            const askLine = `↪ Chiedo a ${tName}: ${question}`;
+            if (!cancelled) subscriber.next({ data: `\n${askLine}` });
+            await rooms.appendMessage(roomId, "agent", slug, askLine);
+
+            const { slug: tSlug, config: tConfig } = await agents.resolveForChat(target, user.userId);
+            let tReply = "";
+            for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) {
+              tReply += chunk;
+            }
+            tReply = tReply.split("[[")[0].trim() || "(nessuna risposta)";
+            await rooms.appendMessage(roomId, "agent", tSlug, tReply);
+            void audit.recordForUser(user, "agent.run.completed", "agent", tSlug, undefined, { ok: true, durationMs: Date.now() - started, delegatedFrom: slug, roomId });
+
+            const synthMsgs: ChatMessage[] = [
+              ...messages,
+              { role: "user", content: `[sistema] Hai consultato ${tName}, che ha risposto:\n${tReply}\nUsa questa risposta per rispondere all'utente in modo conciso. Non emettere altre direttive.` },
+            ];
+            let synth = "";
+            for await (const chunk of executor.stream(config, synthMsgs)) {
+              synth += chunk;
+              if (!cancelled) subscriber.next({ data: chunk });
+            }
+            synth = synth.split("[[")[0].trim();
+            if (synth) await rooms.appendMessage(roomId, "agent", slug, synth);
+          } else if (ask && target) {
+            const note = (lead ? lead + "\n" : "") + `(non trovo l'agente "${target}")`;
+            await rooms.appendMessage(roomId, "agent", slug, note);
+          } else {
+            if (reply.trim().length > 0) await rooms.appendMessage(roomId, "agent", slug, reply.trim());
+          }
+
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
             ok: true, durationMs: Date.now() - started, chars: reply.length, roomId,
           });
