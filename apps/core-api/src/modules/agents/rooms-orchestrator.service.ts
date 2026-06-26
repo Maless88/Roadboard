@@ -14,6 +14,13 @@ export interface RoomAgent { slug: string; capability: string }
 const ROUTER_CAPABILITY = "routing";
 
 /** Extract @mentions (slug tokens) from a message, lowercased and de-duped. */
+/** Strip the embedded image data-URL (caption + "\x1f" + dataURL) so generated
+ * images are never fed back into the LLM prompt on subsequent turns. */
+export function forLlmContent(content: string): string {
+  const i = content.indexOf("\x1f");
+  return i === -1 ? content : content.slice(0, i);
+}
+
 export function parseMentions(message: string): string[] {
   const out = new Set<string>();
   const re = /@([a-zA-Z0-9_-]+)/g;
@@ -106,9 +113,9 @@ export class RoomOrchestratorService {
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
             const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
             const gmsgs: ChatMessage[] = room.messages.map((mm) => {
-              if (mm.senderKind === "user") return { role: "user", content: mm.content };
-              if (mm.senderId === gslug) return { role: "assistant", content: mm.content };
-              return { role: "user", content: `[${mm.senderId}]: ${mm.content}` };
+              if (mm.senderKind === "user") return { role: "user", content: forLlmContent(mm.content) };
+              if (mm.senderId === gslug) return { role: "assistant", content: forLlmContent(mm.content) };
+              return { role: "user", content: `[${mm.senderId}]: ${forLlmContent(mm.content)}` };
             });
             let reply = "";
             let shown = 0;
@@ -141,9 +148,9 @@ export class RoomOrchestratorService {
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
           const messages: ChatMessage[] = room.messages.map((m) => {
-            if (m.senderKind === "user") return { role: "user", content: m.content };
-            if (m.senderId === slug) return { role: "assistant", content: m.content };
-            return { role: "user", content: `[${m.senderId}]: ${m.content}` };
+            if (m.senderKind === "user") return { role: "user", content: forLlmContent(m.content) };
+            if (m.senderId === slug) return { role: "assistant", content: forLlmContent(m.content) };
+            return { role: "user", content: `[${m.senderId}]: ${forLlmContent(m.content)}` };
           });
 
           void audit.recordForUser(user, "agent.run.started", "agent", slug, undefined, {
