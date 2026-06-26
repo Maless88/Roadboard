@@ -81,6 +81,7 @@ export class RoomOrchestratorService {
             participants: { kind: string; refId: string }[];
             messages: { senderKind: string; senderId: string; content: string }[];
           };
+          const repoUrl = room.projectId ? await rooms.getProjectRepoUrl(room.projectId) : null;
 
           const agentList = (await agents.list()) as { slug: string; capability: string }[];
           const capBySlug = new Map(agentList.map((a) => [a.slug, (a.capability ?? "").toLowerCase()]));
@@ -113,7 +114,7 @@ export class RoomOrchestratorService {
           // streamed to the user.
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
             const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
-            gconfig.projectId = room.projectId ?? null; gconfig.source = "chat";
+            gconfig.projectId = room.projectId ?? null; gconfig.source = "chat"; gconfig.repoUrl = repoUrl;
             const gmsgs: ChatMessage[] = room.messages.map((mm) => {
               if (mm.senderKind === "user") return { role: "user", content: forLlmContent(mm.content) };
               if (mm.senderId === gslug) return { role: "assistant", content: forLlmContent(mm.content) };
@@ -149,7 +150,7 @@ export class RoomOrchestratorService {
           }
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
-          config.projectId = room.projectId ?? null; config.source = "chat";
+          config.projectId = room.projectId ?? null; config.source = "chat"; config.repoUrl = repoUrl;
           const messages: ChatMessage[] = room.messages.map((m) => {
             if (m.senderKind === "user") return { role: "user", content: forLlmContent(m.content) };
             if (m.senderId === slug) return { role: "assistant", content: forLlmContent(m.content) };
@@ -186,7 +187,7 @@ export class RoomOrchestratorService {
             await rooms.appendMessage(roomId, "agent", slug, askLine);
 
             const { slug: tSlug, config: tConfig } = await agents.resolveForChat(target, user.userId);
-            tConfig.projectId = room.projectId ?? null; tConfig.source = "chat";
+            tConfig.projectId = room.projectId ?? null; tConfig.source = "chat"; tConfig.repoUrl = repoUrl;
             let tReply = "";
             for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) {
               tReply += chunk;

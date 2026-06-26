@@ -111,6 +111,16 @@ export class RoomsService {
     return msg;
   }
 
+  /** Resolve the linked git repo URL for a project (CodeRepository), or null. */
+  async getProjectRepoUrl(projectId: string): Promise<string | null> {
+    if (!projectId) return null;
+    const repo = await this.prisma.codeRepository.findFirst({
+      where: { projectId, repoUrl: { not: null } },
+      select: { repoUrl: true },
+    });
+    return repo?.repoUrl ?? null;
+  }
+
   /** Get-or-create the shared 'Workspace' group room with all enabled non-router agents. */
   async ensureWorkspaceRoom(ownerUserId: string): Promise<unknown> {
     const found = await this.prisma.chatRoom.findFirst({
