@@ -7,9 +7,16 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { timingSafeEqual } from 'node:crypto';
 
 const PORT = Number(process.env.AGENT_CLI_BRIDGE_PORT || 8787);
 const TOKEN = process.env.AGENT_CLI_BRIDGE_TOKEN || '';
+if (!TOKEN) { console.error('AGENT_CLI_BRIDGE_TOKEN is required (refusing to run without auth)'); process.exit(1); }
+function bearerOk(header) {
+  const expected = Buffer.from(`Bearer ${TOKEN}`);
+  const given = Buffer.from(typeof header === 'string' ? header : '');
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
 const CLAUDE_BIN = process.env.CLAUDE_BIN || [process.env.HOME + '/.local/bin/claude', '/usr/local/bin/claude', '/usr/bin/claude'].find((c) => { try { return require('node:fs').existsSync(c); } catch { return false; } }) || 'claude';
 const BIN = { 'claude-code': CLAUDE_BIN, codex: 'codex' };
 // per-request tool policy by trust tier (fail-closed: unknown => restricted).
@@ -42,11 +49,11 @@ function roadboardToolFlags(slug, disallowed, hasLocalMcp) {
 }
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
 
-http.createServer((req, res) => {
+const handler = (req, res) => {
   if (req.method !== 'POST' || !req.url.startsWith('/run')) {
     res.writeHead(404); return res.end('not found');
   }
-  if (TOKEN && req.headers.authorization !== `Bearer ${TOKEN}`) {
+  if (!bearerOk(req.headers.authorization)) {
     res.writeHead(401); return res.end('unauthorized');
   }
   let body = '';
@@ -94,4 +101,7 @@ http.createServer((req, res) => {
     child.on('close', (code) => { console.error('[child-close]', code); res.end(); });
     res.on('close', () => { try { child.kill(); } catch {} });
   });
-}).listen(PORT, '0.0.0.0', () => console.log(`agent-cli-bridge listening on :${PORT}`));
+};
+const HOSTS = (process.env.AGENT_CLI_BRIDGE_HOSTS || '127.0.0.1,172.17.0.1').split(',').map((x) => x.trim()).filter(Boolean);
+if (HOSTS.includes('0.0.0.0')) { console.error('refusing to bind 0.0.0.0 (LAN exposure); set AGENT_CLI_BRIDGE_HOSTS to specific interfaces'); process.exit(1); }
+for (const h of HOSTS) http.createServer(handler).listen(PORT, h, () => console.log(`agent-cli-bridge listening on ${h}:${PORT}`));
