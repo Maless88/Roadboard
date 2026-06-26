@@ -4,7 +4,7 @@
 // SECURITY: this executes the local CLI with caller-provided prompts. Bind to a
 // trusted interface and set AGENT_CLI_BRIDGE_TOKEN to require a bearer token.
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
@@ -48,6 +48,24 @@ function roadboardToolFlags(slug, disallowed, hasLocalMcp) {
   return flags;
 }
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
+// Shared per-project repo clone (T0.2): ONE clone per project, outside any working tree.
+// Ada (dev) = rw and may commit on explicit user request; readers (e.g. security) = ro on the same path.
+const REPOS_BASE = process.env.AGENT_REPOS_BASE || ((process.env.HOME || '/home/alessio') + '/agent-repos');
+const REPO_ACCESS = { dev: 'rw' }; // readers (argo, ...) added when they exist as agents
+function ensureProjectRepo(projectId, repoUrl) {
+  if (!projectId || !repoUrl) return null;
+  if (!/^[A-Za-z0-9_-]+$/.test(projectId)) return null; // safe dir name
+  const dir = path.join(REPOS_BASE, projectId);
+  try {
+    fs.mkdirSync(REPOS_BASE, { recursive: true });
+    if (fs.existsSync(path.join(dir, '.git'))) {
+      try { execFileSync('git', ['-C', dir, 'pull', '--ff-only'], { stdio: 'ignore', timeout: 60000 }); } catch (e) { /* keep stale clone */ }
+    } else {
+      execFileSync('git', ['clone', '--depth', '1', String(repoUrl), dir], { stdio: 'ignore', timeout: 120000 });
+    }
+    return dir;
+  } catch (e) { console.error('[repo-ensure]', e.message); return null; }
+}
 
 const handler = (req, res) => {
   if (req.method !== 'POST' || !req.url.startsWith('/run')) {
@@ -72,6 +90,9 @@ const handler = (req, res) => {
     const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev') ? p.toolPolicy : 'restricted';
     const slug = reqCwd ? path.basename(reqCwd) : '';
     const rbLevel = RB_ACCESS[slug] || 'none';
+    const repoAccess = REPO_ACCESS[slug] || 'none';
+    let repoPath = null;
+    if (repoAccess !== 'none' && p.projectId && p.repoUrl) repoPath = ensureProjectRepo(String(p.projectId), String(p.repoUrl));
     let mcpFlags = [];
     if (rbLevel !== 'none' && reqCwd && p.roadboardMcpUrl && p.roadboardMcpToken) {
       try {
@@ -87,7 +108,8 @@ const handler = (req, res) => {
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
-        fs.writeFileSync(path.join(reqCwd, 'CLAUDE.md'), p.contextMd);
+        const _ctx = p.contextMd + (repoPath ? ('\n\n## Repo del progetto\nIl repository del progetto e clonato in: ' + repoPath + ' (accesso ' + repoAccess + '). Lavora lì con path assoluti; non toccare altri percorsi del sistema.') : '');
+        fs.writeFileSync(path.join(reqCwd, 'CLAUDE.md'), _ctx);
         const ag = path.join(reqCwd, 'AGENTS.md');
         try { fs.unlinkSync(ag); } catch {}
         try { fs.symlinkSync('CLAUDE.md', ag); } catch {}
