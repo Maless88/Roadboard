@@ -44,7 +44,7 @@ const RB_READ = ['initial_instructions','list_projects','list_teams','get_user',
 // RB access levels: 'full' (all tools) | 'archive' (read + persist artifacts via
 // create_memory_entry/create_handoff) | 'read' (read-only) | 'none'.
 const RB_ACCESS = { dev: 'full', researcher: 'archive', grafico: 'archive', sysadmin: 'read', argo: 'read',
-  sofia: 'archive', william: 'archive', leonardo: 'archive', marco: 'archive', amerigo: 'archive', salvo: 'archive', tullio: 'archive' };
+  sofia: 'archive', william: 'archive', leonardo: 'archive', marco: 'archive', amerigo: 'archive', salvo: 'archive', tullio: 'archive', cleo: 'archive' };
 const RB_ARCHIVE_WRITE = ['create_memory_entry', 'create_handoff'];
 // All write/mutating RoadBoard tools. For MCP tools claude's allow-list does NOT
 // default-deny the rest, so read/archive levels must DENY these explicitly (deny
