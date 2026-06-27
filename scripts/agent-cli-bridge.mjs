@@ -22,23 +22,48 @@ const BIN = { 'claude-code': CLAUDE_BIN, codex: 'codex' };
 // per-request tool policy by trust tier (fail-closed: unknown => restricted).
 // destructive shell prefixes are HARD-BLOCKED for sysadmin (interim for "confirm on dangerous").
 const DANGEROUS_BASH = ['rm','sudo','dd','mkfs','shutdown','reboot','kill','pkill','killall','chmod','chown','mv','docker','systemctl','git push','truncate'];
-function claudeDisallowed(policy) {
+function claudeDisallowed(policy, repoRw) {
   if (policy === 'sysadmin') return ['WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`)];
-  if (policy === 'dev') return ['Bash', 'WebFetch', 'WebSearch', 'Task'];
+  if (policy === 'auditor') {
+    // read-only code auditor (e.g. Argo): may read/navigate code but never edit,
+    // run shell, fetch the web, or spawn tasks. Proposes changes to dev (Ada).
+    return ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+  }
+  if (policy === 'dev') {
+    // dev on a project repo (rw): git is allowed (commit on the user's explicit
+    // request — see git-conventions skill) but push + dangerous shell stay blocked.
+    // ssh/curl/wget are denied too, to neutralize broad user-scope settings.json allows.
+    if (repoRw) return ['WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`), 'Bash(ssh:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'Bash(npm:*)', 'Bash(pnpm:*)', 'Bash(npx:*)'];
+    return ['Bash', 'WebFetch', 'WebSearch', 'Task'];
+  }
   return ['Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
 }
 // RoadBoard MCP per-agent access (slug derived from cwd). Read tool list enumerated
 // 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
 const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot'];
-const RB_ACCESS = { dev: 'full', researcher: 'read', sysadmin: 'read' };
-function roadboardToolFlags(slug, disallowed, hasLocalMcp) {
-  const allowed = [];
+// RB access levels: 'full' (all tools) | 'archive' (read + persist artifacts via
+// create_memory_entry/create_handoff) | 'read' (read-only) | 'none'.
+const RB_ACCESS = { dev: 'full', researcher: 'archive', grafico: 'archive', sysadmin: 'read', argo: 'read' };
+const RB_ARCHIVE_WRITE = ['create_memory_entry', 'create_handoff'];
+// All write/mutating RoadBoard tools. For MCP tools claude's allow-list does NOT
+// default-deny the rest, so read/archive levels must DENY these explicitly (deny
+// is enforced) to guarantee read-only / archive-only access.
+const RB_WRITE = ['create_task','update_task','update_task_status','delete_task','create_phase','update_phase','create_memory_entry','create_handoff','create_decision','update_decision','create_project','ingest_architecture','create_architecture_repository','create_architecture_node','create_architecture_edge','create_architecture_link','create_architecture_annotation','link_task_to_node'];
+function roadboardToolFlags(slug, disallowed, hasLocalMcp, extraAllowed) {
+  const allowed = [...(extraAllowed || [])];
   const level = RB_ACCESS[slug] || 'none';
   // only grant roadboard tools when we have the LOCAL mcp-config wired; otherwise
   // block it so the agent can never fall back to a user-scope (company) server.
   if (level !== 'none' && hasLocalMcp) {
-    if (level === 'full') allowed.push('mcp__roadboard');
-    else for (const t of RB_READ) allowed.push('mcp__roadboard__' + t);
+    if (level === 'full') {
+      allowed.push('mcp__roadboard');
+    } else {
+      const writeAllow = level === 'archive' ? RB_ARCHIVE_WRITE : [];
+      for (const t of RB_READ) allowed.push('mcp__roadboard__' + t);
+      for (const t of writeAllow) allowed.push('mcp__roadboard__' + t);
+      // explicit deny of every write tool not granted at this level
+      for (const t of RB_WRITE) if (!writeAllow.includes(t)) disallowed.push('mcp__roadboard__' + t);
+    }
   } else {
     disallowed.push('mcp__roadboard');
   }
@@ -51,7 +76,7 @@ const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-wor
 // Shared per-project repo clone (T0.2): ONE clone per project, outside any working tree.
 // Ada (dev) = rw and may commit on explicit user request; readers (e.g. security) = ro on the same path.
 const REPOS_BASE = process.env.AGENT_REPOS_BASE || ((process.env.HOME || '/home/alessio') + '/agent-repos');
-const REPO_ACCESS = { dev: 'rw' }; // readers (argo, ...) added when they exist as agents
+const REPO_ACCESS = { dev: 'rw', argo: 'ro' }; // argo (security auditor) reads the same clone, no write
 function ensureProjectRepo(projectId, repoUrl) {
   if (!projectId || !repoUrl) return null;
   if (!/^[A-Za-z0-9_-]+$/.test(projectId)) return null; // safe dir name
@@ -63,6 +88,11 @@ function ensureProjectRepo(projectId, repoUrl) {
     } else {
       execFileSync('git', ['clone', '--depth', '1', String(repoUrl), dir], { stdio: 'ignore', timeout: 120000 });
     }
+    // Disable push at the DATA layer: claude's Bash permission matching is prefix-based,
+    // so `git -C <path> push` slips past a `Bash(git push:*)` deny. Setting an invalid
+    // push URL makes any push form fail. Commits stay local (commit-on-request); pushing
+    // is a separate, deliberate grant we do NOT give the agent.
+    try { execFileSync('git', ['-C', dir, 'remote', 'set-url', '--push', 'origin', 'DISABLED_NO_PUSH'], { stdio: 'ignore', timeout: 15000 }); } catch (e) { /* best-effort */ }
     return dir;
   } catch (e) { console.error('[repo-ensure]', e.message); return null; }
 }
@@ -87,7 +117,7 @@ const handler = (req, res) => {
     }
     const prompt = String(p.prompt || '');
     // NOTE: codex tiering not yet implemented; privileged agents must use claude-code.
-    const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev') ? p.toolPolicy : 'restricted';
+    const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev' || p.toolPolicy === 'auditor') ? p.toolPolicy : 'restricted';
     const slug = reqCwd ? path.basename(reqCwd) : '';
     const rbLevel = RB_ACCESS[slug] || 'none';
     const repoAccess = REPO_ACCESS[slug] || 'none';
@@ -102,7 +132,8 @@ const handler = (req, res) => {
         mcpFlags = ['--mcp-config', cfgPath, '--strict-mcp-config'];
       } catch (e) { /* fall back to no roadboard access */ }
     }
-    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy), mcpFlags.length > 0);
+    const repoRw = repoAccess === 'rw' && !!repoPath;
+    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy, repoRw), mcpFlags.length > 0, repoRw ? ['Bash(git:*)'] : []);
     const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
