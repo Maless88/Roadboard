@@ -91,6 +91,7 @@ const handler = (req, res) => {
     const slug = reqCwd ? path.basename(reqCwd) : '';
     const rbLevel = RB_ACCESS[slug] || 'none';
     const repoAccess = REPO_ACCESS[slug] || 'none';
+    console.error("[run-dbg]", JSON.stringify({ slug: slug, rbLevel: rbLevel, hasMcpUrl: !!p.roadboardMcpUrl, hasMcpTok: !!p.roadboardMcpToken, hasRepoUrl: !!p.repoUrl, projectId: p.projectId || null, source: p.source || null }));
     let repoPath = null;
     if (repoAccess !== 'none' && p.projectId && p.repoUrl) repoPath = ensureProjectRepo(String(p.projectId), String(p.repoUrl));
     let mcpFlags = [];
@@ -102,9 +103,10 @@ const handler = (req, res) => {
       } catch (e) { /* fall back to no roadboard access */ }
     }
     const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy), mcpFlags.length > 0);
+    const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', 'text', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
+      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
@@ -117,7 +119,30 @@ const handler = (req, res) => {
     }
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
     const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: reqCwd || (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
-    child.stdout.on('data', (d) => res.write(d));
+    if (streamMode) {
+      let buf = '';
+      child.stdout.on('data', (d) => {
+        buf += d.toString();
+        let nl;
+        while ((nl = buf.indexOf('\n')) !== -1) {
+          const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+          if (!line.trim()) continue;
+          let ev; try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
+            for (const b of ev.message.content) {
+              if (b && b.type === 'tool_use' && b.name) {
+                const nm = String(b.name).replace(/^mcp__roadboard__/, 'roadboard:').replace(/^mcp__/, '');
+                res.write('\n_\u2192 ' + nm + '_\n');
+              }
+            }
+          } else if (ev.type === 'result' && typeof ev.result === 'string') {
+            res.write('\n' + ev.result);
+          }
+        }
+      });
+    } else {
+      child.stdout.on('data', (d) => res.write(d));
+    }
     child.stderr.on('data', (d) => console.error('[child-stderr]', String(d)));
     child.on('error', (e) => { res.write(`\n[bridge-error] ${e.message}`); res.end(); });
     child.on('close', (code) => { console.error('[child-close]', code); res.end(); });

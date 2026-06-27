@@ -69,7 +69,7 @@ export class AgentExecutor {
     const res = await fetch(url, {
       method: "POST",
       headers,
-      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined, toolPolicy: agent.toolPolicy ?? "restricted", roadboardMcpUrl: agent.roadboardMcpUrl ?? undefined, roadboardMcpToken: agent.roadboardMcpToken ?? undefined, projectId: agent.projectId ?? undefined, source: agent.source ?? undefined, repoUrl: agent.repoUrl ?? undefined }),
+      body: JSON.stringify({ provider: agent.provider, model: agent.model, prompt, cwd: agent.workspacePath ?? undefined, contextMd: agent.systemPrompt ?? undefined, toolPolicy: agent.toolPolicy ?? "restricted", roadboardMcpUrl: agent.roadboardMcpUrl ?? undefined, roadboardMcpToken: agent.roadboardMcpToken ?? undefined, projectId: agent.projectId ?? undefined, source: agent.source ?? undefined, repoUrl: agent.repoUrl ?? undefined, stream: agent.source === "chat" }),
     });
 
     if (!res.ok || !res.body) {
