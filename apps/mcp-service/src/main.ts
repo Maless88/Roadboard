@@ -15,6 +15,8 @@ const CORE_API_HOST = optionalEnv("CORE_API_HOST", "localhost");
 const CORE_API_PORT = optionalEnv("CORE_API_PORT", "3001");
 const AUTH_ACCESS_HOST = optionalEnv("AUTH_ACCESS_HOST", "localhost");
 const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "3002");
+const EMAIL_HELPER_URL = optionalEnv("EMAIL_HELPER_URL", "http://host.docker.internal:8789");
+const EMAIL_HELPER_TOKEN = optionalEnv("EMAIL_HELPER_TOKEN", "");
 const MCP_TRANSPORT = optionalEnv("MCP_TRANSPORT", "stdio");
 const MCP_HTTP_PORT = Number(optionalEnv("MCP_HTTP_PORT", "3005"));
 const MCP_TOKEN = optionalEnv("MCP_TOKEN", "");
@@ -713,6 +715,18 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     },
   },
   {
+    name: "read_inbox",
+    description:
+      "Read recent emails (read-only, does not mark them read) from a configured account. Returns sender, subject, date, unread flag and a short snippet. Use to triage the user's inbox.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account: { type: "string", enum: ["aruba"], description: "Mailbox to read (default aruba)." },
+        limit: { type: "number", description: "How many recent messages (1-30, default 10)." },
+      },
+    },
+  },
+  {
     name: "notify",
     description:
       "Send a proactive notification to the user (delivered via Telegram by the notification hub). Use for things worth telling the user without being asked. Keep it short.",
@@ -801,6 +815,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   attach_skill: "project.write",
   detach_skill: "project.write",
   sync_skills_catalog: "project.write",
+  read_inbox: "project.read",
   notify: "project.write",
   list_scheduled_activities: "project.read",
   create_scheduled_activity: "project.write",
@@ -1182,6 +1197,16 @@ export async function handleToolCall(
         (args.skills as { name: string; description?: string }[]) ?? [],
       );
       return jsonResponse(result);
+    }
+
+    case "read_inbox": {
+      const account = (args.account as string) || "aruba";
+      const limit = Math.max(1, Math.min(30, Number(args.limit) || 10));
+      const r = await fetch(`${EMAIL_HELPER_URL}/inbox?account=${encodeURIComponent(account)}&limit=${limit}`, {
+        headers: EMAIL_HELPER_TOKEN ? { Authorization: `Bearer ${EMAIL_HELPER_TOKEN}` } : {},
+      });
+      if (!r.ok) return errorResponse(`email helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
     }
 
     case "notify": {
