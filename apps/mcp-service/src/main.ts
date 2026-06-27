@@ -727,6 +727,36 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     },
   },
   {
+    name: "mark_read",
+    description:
+      "Mark specific emails as read (sets the IMAP \\Seen flag). Use ONLY when the user explicitly asks to mark email(s) as read. Pass the uid values returned by read_inbox.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account: { type: "string", enum: ["aruba"], description: "Mailbox (default aruba)." },
+        uids: { type: "array", items: { type: "number" }, description: "UIDs of the messages to mark read (from read_inbox)." },
+      },
+      required: ["uids"],
+    },
+  },
+  {
+    name: "create_draft",
+    description:
+      "Save an email DRAFT in the user's mailbox (Drafts folder). This NEVER sends the email — the user reviews it in their mail client and sends it manually. Use to prepare replies or new messages on the user's behalf. For a reply, pass in_reply_to = the message_id from read_inbox so it threads.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        account: { type: "string", enum: ["aruba"], description: "Mailbox (default aruba)." },
+        to: { type: "string", description: "Recipient address(es), comma-separated." },
+        subject: { type: "string", description: "Subject line." },
+        body: { type: "string", description: "Plain-text body." },
+        cc: { type: "string", description: "Optional Cc address(es)." },
+        in_reply_to: { type: "string", description: "Optional Message-ID being replied to (from read_inbox), for threading." },
+      },
+      required: ["to", "body"],
+    },
+  },
+  {
     name: "notify",
     description:
       "Send a proactive notification to the user (delivered via Telegram by the notification hub). Use for things worth telling the user without being asked. Keep it short.",
@@ -816,6 +846,8 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   detach_skill: "project.write",
   sync_skills_catalog: "project.write",
   read_inbox: "project.read",
+  mark_read: "project.write",
+  create_draft: "project.write",
   notify: "project.write",
   list_scheduled_activities: "project.read",
   create_scheduled_activity: "project.write",
@@ -1204,6 +1236,38 @@ export async function handleToolCall(
       const limit = Math.max(1, Math.min(30, Number(args.limit) || 10));
       const r = await fetch(`${EMAIL_HELPER_URL}/inbox?account=${encodeURIComponent(account)}&limit=${limit}`, {
         headers: EMAIL_HELPER_TOKEN ? { Authorization: `Bearer ${EMAIL_HELPER_TOKEN}` } : {},
+      });
+      if (!r.ok) return errorResponse(`email helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
+    }
+
+    case "mark_read": {
+      const account = (args.account as string) || "aruba";
+      const uids = Array.isArray(args.uids) ? (args.uids as unknown[]).map((u) => Number(u)).filter((u) => Number.isFinite(u)) : [];
+      if (uids.length === 0) return errorResponse("mark_read: 'uids' must be a non-empty array of message UIDs (from read_inbox).");
+      const r = await fetch(`${EMAIL_HELPER_URL}/mark_read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(EMAIL_HELPER_TOKEN ? { Authorization: `Bearer ${EMAIL_HELPER_TOKEN}` } : {}) },
+        body: JSON.stringify({ account, uids }),
+      });
+      if (!r.ok) return errorResponse(`email helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
+    }
+
+    case "create_draft": {
+      const account = (args.account as string) || "aruba";
+      if (!args.to || !args.body) return errorResponse("create_draft: 'to' and 'body' are required.");
+      const r = await fetch(`${EMAIL_HELPER_URL}/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(EMAIL_HELPER_TOKEN ? { Authorization: `Bearer ${EMAIL_HELPER_TOKEN}` } : {}) },
+        body: JSON.stringify({
+          account,
+          to: args.to as string,
+          subject: (args.subject as string) || "",
+          body: args.body as string,
+          cc: args.cc as string | undefined,
+          in_reply_to: args.in_reply_to as string | undefined,
+        }),
       });
       if (!r.ok) return errorResponse(`email helper ${r.status}: ${await r.text()}`);
       return jsonResponse(await r.json());
