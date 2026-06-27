@@ -50,7 +50,14 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
   const menuRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+
+  // load/persist the collapsed state (desktop)
+  useEffect(() => {
+    try { setCollapsed(localStorage.getItem("rb.sidebar.collapsed") === "1"); } catch { /* ignore */ }
+  }, []);
+  const toggleCollapsed = () => setCollapsed((c) => { const n = !c; try { localStorage.setItem("rb.sidebar.collapsed", n ? "1" : "0"); } catch { /* ignore */ } return n; });
 
   // close the mobile drawer whenever navigation changes the route
   useEffect(() => { setMobileOpen(false); }, [pathname]);
@@ -129,7 +136,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       )}
 
       <aside
-        className={`${mobileOpen ? 'flex fixed inset-y-0 left-0 z-50' : 'hidden'} w-64 shrink-0 flex-col h-screen overflow-hidden md:flex md:w-52 md:sticky md:top-0 md:z-auto`}
+        className={`${mobileOpen ? 'flex fixed inset-y-0 left-0 z-50' : 'hidden'} w-64 shrink-0 flex-col h-screen overflow-hidden md:flex md:sticky md:top-0 md:z-auto transition-[width] duration-200 ${collapsed ? 'md:w-16' : 'md:w-52'}`}
         style={{
         background: 'var(--surface-strong)',
         backdropFilter: 'blur(20px)',
@@ -137,31 +144,46 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
         borderRight: '1px solid var(--border-soft)',
       }}
     >
-      {/* Logo */}
-      <Link
-        href="/dashboard"
-        className="px-4 py-4 flex items-center gap-2.5 hover:bg-white/5 transition-colors"
-        style={{ borderBottom: '1px solid var(--border-soft)' }}
-      >
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-          style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)' }}
+      {/* Logo + collapse toggle */}
+      <div className="flex items-center" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+        <Link
+          href="/dashboard"
+          className={`flex flex-1 items-center gap-2.5 py-4 hover:bg-white/5 transition-colors ${collapsed ? 'justify-center px-2' : 'px-4'}`}
         >
-          <span className="text-xs font-black text-white">R</span>
-        </div>
-        <div className="flex flex-col leading-none">
-          <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
-          <span className="text-[10px] text-indigo-400 font-mono" title={process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown'}>
-            {formatBuildLabel(process.env.NEXT_PUBLIC_BUILD_TIME)}
-          </span>
-        </div>
-      </Link>
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)' }}
+          >
+            <span className="text-xs font-black text-white">R</span>
+          </div>
+          {!collapsed && (
+            <div className="flex flex-col leading-none">
+              <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
+              <span className="text-[10px] text-indigo-400 font-mono" title={process.env.NEXT_PUBLIC_BUILD_SHA ?? 'unknown'}>
+                {formatBuildLabel(process.env.NEXT_PUBLIC_BUILD_TIME)}
+              </span>
+            </div>
+          )}
+        </Link>
+        {!collapsed && (
+          <button type="button" aria-label="Comprimi sidebar" onClick={toggleCollapsed}
+            className="hidden md:inline-flex h-8 w-8 mr-2 items-center justify-center rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-200">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+          </button>
+        )}
+      </div>
+      {collapsed && (
+        <button type="button" aria-label="Espandi sidebar" onClick={toggleCollapsed}
+          className="hidden md:inline-flex h-8 w-full items-center justify-center text-gray-500 hover:bg-white/5 hover:text-gray-200" style={{ borderBottom: '1px solid var(--border-soft)' }}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+        </button>
+      )}
 
       {/* Nav principale */}
       <nav className="flex-1 px-2 py-4 flex flex-col gap-0.5 overflow-y-auto">
 
         {/* Progetto attivo + switcher */}
-        {activeProject && (
+        {activeProject && !collapsed && (
           <div ref={switcherRef} className="relative mt-2 mx-1">
             <button
               type="button"
@@ -247,53 +269,36 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             )}
           </div>
         )}
-        {/* Sistema (life-OS) */}
+        {/* Navigazione principale */}
         <div className="mt-3 px-1">
-          <p className="px-2 mb-1 text-[10px] font-mono text-gray-600 uppercase tracking-wider">Sistema</p>
-          <Link
-            href="/home"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {!collapsed && <p className="px-2 mb-1 text-[10px] font-mono text-gray-600 uppercase tracking-wider">Navigazione</p>}
+          <Link href="/home" title="Home"
+            className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/home' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 12l9-9 9 9M5 10v10h14V10" />
             </svg>
-            Home
+            {!collapsed && <span>Home</span>}
           </Link>
-          <Link
-            href="/ops"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 7h10v10H7V7z" />
+          <Link href="/chatboard" title="Chat"
+            className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/chatboard' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.5A8 8 0 1 1 21 12z" />
             </svg>
-            Ops / System
+            {!collapsed && <span>Chat</span>}
           </Link>
-          <Link
-            href="/guida"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          <Link href="/agent-office" title="Agenti & Sistema"
+            className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/agent-office' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3.5 20a5.5 5.5 0 0 1 11 0M16 11.5a2.5 2.5 0 1 0 0-5M15 20a5 5 0 0 1 6-4.6" />
             </svg>
-            Guida
+            {!collapsed && <span>Agenti &amp; Sistema</span>}
           </Link>
-          <Link
-            href="/chatboard"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 18h.01M8 21h8a1 1 0 001-1V4a1 1 0 00-1-1H8a1 1 0 00-1 1v16a1 1 0 001 1z" />
+          <Link href="/scheduling" title="Agenda"
+            className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/scheduling' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 2v4M8 2v4M3 10h18" />
             </svg>
-            Chatboard
-          </Link>
-          <Link
-            href="/agent-office"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-gray-400 hover:text-white hover:bg-white/5 transition-colors"
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 17v-2a4 4 0 014-4h0a4 4 0 014 4v2M7 7h10M5 7a2 2 0 012-2h10a2 2 0 012 2v0M12 11a2 2 0 100-4 2 2 0 000 4z" />
-            </svg>
-            Agent Office
+            {!collapsed && <span>Agenda</span>}
           </Link>
         </div>
 
@@ -302,12 +307,21 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       {/* Footer */}
       <div className="px-2 py-3 space-y-0.5" style={{ borderTop: '1px solid var(--border-soft)' }}>
 
+        {/* Guida (secondaria, in fondo) */}
+        <Link href="/guida" title="Guida"
+          className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/guida' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+          </svg>
+          {!collapsed && <span>Guida</span>}
+        </Link>
+
         {/* User menu */}
         <div ref={menuRef} className="relative mt-1">
 
           <button
             onClick={() => setMenuOpen((o) => !o)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg transition-colors hover:bg-white/5"
+            className={`w-full flex items-center gap-2.5 py-2 rounded-lg transition-colors hover:bg-white/5 ${collapsed ? 'justify-center px-0' : 'px-3'}`}
             style={{ background: menuOpen ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.03)' }}
           >
             <div
@@ -316,7 +330,8 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             >
               {displayName.charAt(0).toUpperCase()}
             </div>
-            <span className="text-xs text-gray-400 flex-1 truncate text-left">{username}</span>
+            {!collapsed && <span className="text-xs text-gray-400 flex-1 truncate text-left">{username}</span>}
+            {!collapsed && (
             <svg
               className="w-3 h-3 text-gray-600 shrink-0 transition-transform"
               style={{ transform: menuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
@@ -324,6 +339,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
             </svg>
+            )}
           </button>
 
           {/* Dropdown */}
