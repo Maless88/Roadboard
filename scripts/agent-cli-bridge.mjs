@@ -132,6 +132,7 @@ const handler = (req, res) => {
     let mcpFlags = [];
     if (rbLevel !== 'none' && reqCwd && p.roadboardMcpUrl && p.roadboardMcpToken) {
       try {
+        fs.mkdirSync(reqCwd, { recursive: true }); // ensure workspace exists (new agents have none yet)
         const cfgPath = path.join(reqCwd, '.rb-mcp.json');
         fs.writeFileSync(cfgPath, JSON.stringify({ mcpServers: { roadboard: { type: 'http', url: String(p.roadboardMcpUrl), headers: { Authorization: 'Bearer ' + String(p.roadboardMcpToken) } } } }), { mode: 0o600 });
         mcpFlags = ['--mcp-config', cfgPath, '--strict-mcp-config'];
