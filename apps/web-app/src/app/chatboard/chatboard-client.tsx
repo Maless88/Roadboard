@@ -339,9 +339,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
             return (
               <button key={a.slug} onClick={() => void openDirect(a.slug)}
                 className={`mb-1 flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition-colors ${dr && activeId === dr.id ? "bg-indigo-500/15" : "hover:bg-white/5"}`}>
-                <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: colorFor(a.slug) }}>
-                  {a.name[0]?.toUpperCase() ?? "?"}
-                </span>
+                <Avatar url={a.avatarUrl} label={a.name} bg={colorFor(a.slug)} size={40} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold text-zinc-100">{a.name}</span>
                   <span className="block truncate text-xs text-zinc-500">{dr?.lastMessage ?? a.capability}</span>
@@ -376,9 +374,13 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
           <>
             <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
               <button onClick={() => { setActiveId(null); setDetail(null); setPicker(null); }} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/5 md:hidden">←</button>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
-                {detail.kind === "group" ? roomAgents(detail).length : (nameOf(roomAgents(detail)[0] ?? "?")[0]?.toUpperCase() ?? "?")}
-              </span>
+              {detail.kind === "group" ? (
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
+                  {roomAgents(detail).length}
+                </span>
+              ) : (
+                <Avatar url={avatars.get(roomAgents(detail)[0] ?? "")} label={nameOf(roomAgents(detail)[0] ?? "?")} bg={AV} size={36} />
+              )}
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-zinc-100">{detail.title || roomAgents(detail).map(nameOf).join(", ") || "Stanza"}</span>
                 <span className="block truncate text-xs text-emerald-400">{roomAgents(detail).map(nameOf).join(" · ")}</span>

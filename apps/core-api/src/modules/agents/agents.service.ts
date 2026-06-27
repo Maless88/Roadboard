@@ -103,6 +103,20 @@ export class AgentsService {
       return acc + (Number.isFinite(c) ? Math.round(c / 4) : 0);
     }, 0);
 
+    // resolve roomId -> human label for the recent activity rows
+    const roomIds = [...new Set(events.map((e) => (e.metadata as Record<string, unknown> | null)?.roomId).filter(Boolean))] as string[];
+    const roomLabel: Record<string, string> = {};
+    if (roomIds.length) {
+      const rooms = await this.prisma.chatRoom.findMany({ where: { id: { in: roomIds } }, include: { participants: true } }).catch(() => []);
+      const slugs = [...new Set(rooms.flatMap((r) => r.participants.filter((p) => p.kind === "agent").map((p) => p.refId)))];
+      const cfgs = slugs.length ? await this.prisma.agentConfig.findMany({ where: { slug: { in: slugs } }, select: { slug: true, name: true } }) : [];
+      const nm = new Map(cfgs.map((c) => [c.slug, c.name]));
+      for (const r of rooms) {
+        const agentNames = r.participants.filter((p) => p.kind === "agent").map((p) => nm.get(p.refId) ?? p.refId);
+        roomLabel[r.id] = r.kind === "group" ? (r.title ?? `Gruppo: ${agentNames.join(", ")}`) : "Chat diretta";
+      }
+    }
+
     return {
       name: a.name, slug: a.slug, capability: a.capability,
       trustTier: (a as { trustTier?: string }).trustTier ?? "restricted",
@@ -118,7 +132,10 @@ export class AgentsService {
         lastRun: completed[0]?.createdAt ?? null,
         tokensApprox: tokens,
       },
-      recent: events.slice(0, 8).map((e) => ({ eventType: e.eventType, createdAt: e.createdAt, metadata: e.metadata })),
+      recent: events.slice(0, 8).map((e) => {
+        const rid = (e.metadata as Record<string, unknown> | null)?.roomId as string | undefined;
+        return { eventType: e.eventType, createdAt: e.createdAt, metadata: e.metadata, roomId: rid ?? null, roomLabel: rid ? (roomLabel[rid] ?? null) : null };
+      }),
     };
   }
 

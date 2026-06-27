@@ -10,6 +10,7 @@ interface Contact {
   model: string;
   lastMessage: string | null;
   lastMessageAt: string | null;
+  avatarUrl?: string | null;
 }
 interface Msg { role: "user" | "assistant"; content: string }
 interface Handoff { from?: string; to: string; reason: string }
@@ -127,8 +128,11 @@ export function BoardChatClient({ initialContacts }: { initialContacts: Contact[
                   active?.slug === c.slug ? "bg-indigo-500/15" : "hover:bg-white/5"
                 }`}
               >
-                <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
-                  {c.name.charAt(0).toUpperCase()}
+                <span className="relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: c.avatarUrl ? undefined : AV }}>
+                  {c.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.avatarUrl} alt={c.name} className="h-10 w-10 rounded-full object-cover" />
+                  ) : c.name.charAt(0).toUpperCase()}
                   <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-zinc-950 bg-emerald-400" />
                 </span>
                 <span className="min-w-0 flex-1">
@@ -147,9 +151,14 @@ export function BoardChatClient({ initialContacts }: { initialContacts: Contact[
           <>
             <header className="flex items-center gap-3 border-b border-white/10 px-5 py-3">
               <button onClick={() => setActive(null)} className="inline-flex h-8 w-8 items-center justify-center rounded-full text-zinc-300 hover:bg-white/5 md:hidden">←</button>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
-                {active.name.charAt(0).toUpperCase()}
-              </span>
+              {active.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={active.avatarUrl} alt={active.name} className="h-9 w-9 shrink-0 rounded-full object-cover" />
+              ) : (
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: AV }}>
+                  {active.name.charAt(0).toUpperCase()}
+                </span>
+              )}
               <span>
                 <span className="block text-sm font-semibold text-zinc-100">{active.name}</span>
                 <span className="block text-xs text-emerald-400">{active.provider} · online</span>
