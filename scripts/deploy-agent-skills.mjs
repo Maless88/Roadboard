@@ -14,7 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SRC = join(ROOT, "packages", "agent-skills");
-const DEST = join(homedir(), ".claude", "skills");
+// Agents load skills from this dedicated dir (symlinked into each bridge request
+// cwd as the project .claude/skills, with --setting-sources project) — NOT the
+// user's personal ~/.claude/skills.
+const DEST = process.env.AGENT_SKILLS_DIR || join(homedir(), ".config", "roadboard-agents", "skills");
 
 function parseFrontmatter(md) {
   const m = md.match(/^---\s*\n([\s\S]*?)\n---/);

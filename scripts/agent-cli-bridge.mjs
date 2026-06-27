@@ -74,6 +74,10 @@ function roadboardToolFlags(slug, disallowed, hasLocalMcp, extraAllowed) {
   return flags;
 }
 const WS_BASE = process.env.AGENT_CLI_BRIDGE_WS_BASE || '/home/alessio/agent-workspaces';
+// Methodology skills the agents may load. Symlinked into each request cwd as the
+// project .claude/skills, and loaded via --setting-sources project so agents do
+// NOT inherit the user's personal ~/.claude skills/settings.
+const AGENT_SKILLS_DIR = process.env.AGENT_SKILLS_DIR || ((process.env.HOME || '/home/alessio') + '/.config/roadboard-agents/skills');
 // Shared per-project repo clone (T0.2): ONE clone per project, outside any working tree.
 // Ada (dev) = rw and may commit on explicit user request; readers (e.g. security) = ro on the same path.
 const REPOS_BASE = process.env.AGENT_REPOS_BASE || ((process.env.HOME || '/home/alessio') + '/agent-repos');
@@ -138,12 +142,17 @@ const handler = (req, res) => {
     const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
+      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), '--setting-sources', 'project', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
         const _ctx = p.contextMd + (repoPath ? ('\n\n## Repo del progetto\nIl repository del progetto e clonato in: ' + repoPath + ' (accesso ' + repoAccess + '). Lavora lì con path assoluti; non toccare altri percorsi del sistema.') : '');
         fs.writeFileSync(path.join(reqCwd, 'CLAUDE.md'), _ctx);
+        // project-scope skills: only the methodology set, never the user's personal skills
+        const cdir = path.join(reqCwd, '.claude'); fs.mkdirSync(cdir, { recursive: true });
+        const slink = path.join(cdir, 'skills');
+        try { fs.unlinkSync(slink); } catch {}
+        try { fs.symlinkSync(AGENT_SKILLS_DIR, slink); } catch {}
         const ag = path.join(reqCwd, 'AGENTS.md');
         try { fs.unlinkSync(ag); } catch {}
         try { fs.symlinkSync('CLAUDE.md', ag); } catch {}
