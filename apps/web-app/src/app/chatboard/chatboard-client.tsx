@@ -2,6 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const MD_COMPONENTS: any = {
+  code: (pr: any) => /language-/.test(pr.className || "")
+    ? <code className={pr.className}>{pr.children}</code>
+    : <code className="rounded bg-black/40 px-1 text-[0.85em] text-emerald-300">{pr.children}</code>,
+  pre: (pr: any) => <pre className="my-1 overflow-x-auto rounded-lg bg-black/50 p-2 text-xs leading-snug text-zinc-200">{pr.children}</pre>,
+  ul: (pr: any) => <ul className="my-1 list-disc pl-5">{pr.children}</ul>,
+  ol: (pr: any) => <ol className="my-1 list-decimal pl-5">{pr.children}</ol>,
+  li: (pr: any) => <li className="my-0.5">{pr.children}</li>,
+  a: (pr: any) => <a href={pr.href} target="_blank" rel="noreferrer" className="text-indigo-300 underline">{pr.children}</a>,
+  p: (pr: any) => <p className="my-1 whitespace-pre-wrap">{pr.children}</p>,
+  h1: (pr: any) => <p className="my-1 text-sm font-bold">{pr.children}</p>,
+  h2: (pr: any) => <p className="my-1 text-sm font-bold">{pr.children}</p>,
+  h3: (pr: any) => <p className="my-1 text-sm font-semibold">{pr.children}</p>,
+  strong: (pr: any) => <strong className="font-semibold text-zinc-100">{pr.children}</strong>,
+};
+function Markdown({ text }: { text: string }) {
+  return <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{text}</ReactMarkdown>;
+}
 
 interface RoomListItem {
   id: string;
@@ -400,7 +422,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
                         const txt = sep === -1 ? m.content : m.content.slice(0, sep);
                         const img = sep === -1 ? null : m.content.slice(sep + 1);
                         return (<>
-                          <span className="inline-block max-w-full whitespace-pre-wrap rounded-2xl bg-white/5 px-3 py-2 text-sm text-zinc-200">{txt || (busy ? "\u2026" : "")}</span>
+                          <span className="inline-block max-w-full rounded-2xl bg-white/5 px-3 py-2 text-sm text-zinc-200">{txt ? <Markdown text={txt} /> : (busy ? "\u2026" : "")}</span>
                           {img ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img src={img} alt="immagine generata" className="mt-1 block max-w-[78%] rounded-2xl border border-white/10" />
