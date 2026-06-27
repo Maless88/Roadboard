@@ -40,7 +40,7 @@ function claudeDisallowed(policy, repoRw) {
 }
 // RoadBoard MCP per-agent access (slug derived from cwd). Read tool list enumerated
 // 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
-const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot'];
+const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot','list_scheduled_activities'];
 // RB access levels: 'full' (all tools) | 'archive' (read + persist artifacts via
 // create_memory_entry/create_handoff) | 'read' (read-only) | 'none'.
 const RB_ACCESS = { dev: 'full', researcher: 'archive', grafico: 'archive', sysadmin: 'read', argo: 'read',
@@ -49,7 +49,7 @@ const RB_ARCHIVE_WRITE = ['create_memory_entry', 'create_handoff'];
 // All write/mutating RoadBoard tools. For MCP tools claude's allow-list does NOT
 // default-deny the rest, so read/archive levels must DENY these explicitly (deny
 // is enforced) to guarantee read-only / archive-only access.
-const RB_WRITE = ['create_task','update_task','update_task_status','delete_task','create_phase','update_phase','create_memory_entry','create_handoff','create_decision','update_decision','create_project','ingest_architecture','create_architecture_repository','create_architecture_node','create_architecture_edge','create_architecture_link','create_architecture_annotation','link_task_to_node'];
+const RB_WRITE = ['create_task','update_task','update_task_status','delete_task','create_phase','update_phase','create_memory_entry','create_handoff','create_decision','update_decision','create_project','ingest_architecture','create_architecture_repository','create_architecture_node','create_architecture_edge','create_architecture_link','create_architecture_annotation','link_task_to_node','create_scheduled_activity','pause_scheduled_activity','delete_scheduled_activity'];
 function roadboardToolFlags(slug, disallowed, hasLocalMcp, extraAllowed) {
   const allowed = [...(extraAllowed || [])];
   const level = RB_ACCESS[slug] || 'none';

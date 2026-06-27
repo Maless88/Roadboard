@@ -198,6 +198,8 @@ services:
       AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
       AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:3003:3003"
     depends_on:

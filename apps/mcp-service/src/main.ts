@@ -712,6 +712,45 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
       required: ["skills"],
     },
   },
+  {
+    name: "create_scheduled_activity",
+    description:
+      "Schedule a recurring or one-off activity: an agent runs `promptTemplate` on a cadence. kind=cron (cronExpr, 5-field), kind=interval (everyMs), kind=once (runAt ISO). The run is delivered into the agent's room. Use to set up periodic agent work (e.g. a daily digest).",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Short human title." },
+        agentSlug: { type: "string", description: "Slug of the agent that runs each occurrence." },
+        promptTemplate: { type: "string", description: "The instruction given to the agent on every run." },
+        kind: { type: "string", enum: ["cron", "interval", "once"], description: "Schedule kind." },
+        cronExpr: { type: "string", description: "5-field cron expression (kind=cron), evaluated in tz." },
+        everyMs: { type: "number", description: "Interval in milliseconds (kind=interval)." },
+        runAt: { type: "string", description: "ISO datetime for a one-off run (kind=once)." },
+        tz: { type: "string", description: "IANA timezone (default Europe/Rome)." },
+        projectId: { type: "string", description: "Optional project to associate." },
+        deliveryRoomId: { type: "string", description: "Room to deliver into; omit to auto-use the agent's direct room." },
+      },
+      required: ["title", "agentSlug", "promptTemplate", "kind"],
+    },
+  },
+  {
+    name: "list_scheduled_activities",
+    description: "List the caller's scheduled activities (optionally filtered by projectId).",
+    inputSchema: {
+      type: "object" as const,
+      properties: { projectId: { type: "string", description: "Optional project filter." } },
+    },
+  },
+  {
+    name: "pause_scheduled_activity",
+    description: "Pause a scheduled activity (stops future runs until resumed).",
+    inputSchema: { type: "object" as const, properties: { id: { type: "string" } }, required: ["id"] },
+  },
+  {
+    name: "delete_scheduled_activity",
+    description: "Permanently delete a scheduled activity.",
+    inputSchema: { type: "object" as const, properties: { id: { type: "string" } }, required: ["id"] },
+  },
 ];
 
 
@@ -747,6 +786,10 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   attach_skill: "project.write",
   detach_skill: "project.write",
   sync_skills_catalog: "project.write",
+  list_scheduled_activities: "project.read",
+  create_scheduled_activity: "project.write",
+  pause_scheduled_activity: "project.write",
+  delete_scheduled_activity: "project.write",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
   get_architecture_snapshot: "codeflow.read",
@@ -1122,6 +1165,37 @@ export async function handleToolCall(
       const result = await client.syncSkillsCatalog(
         (args.skills as { name: string; description?: string }[]) ?? [],
       );
+      return jsonResponse(result);
+    }
+
+    case "create_scheduled_activity": {
+      const result = await client.createScheduledActivity({
+        title: args.title as string,
+        agentSlug: args.agentSlug as string,
+        promptTemplate: args.promptTemplate as string,
+        kind: args.kind as "cron" | "once" | "interval",
+        cronExpr: args.cronExpr as string | undefined,
+        everyMs: args.everyMs as number | undefined,
+        runAt: args.runAt as string | undefined,
+        tz: args.tz as string | undefined,
+        projectId: args.projectId as string | undefined,
+        deliveryRoomId: args.deliveryRoomId as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
+    case "list_scheduled_activities": {
+      const result = await client.listScheduledActivities(args.projectId as string | undefined);
+      return jsonResponse(result);
+    }
+
+    case "pause_scheduled_activity": {
+      const result = await client.pauseScheduledActivity(args.id as string);
+      return jsonResponse(result);
+    }
+
+    case "delete_scheduled_activity": {
+      const result = await client.deleteScheduledActivity(args.id as string);
       return jsonResponse(result);
     }
 

@@ -727,6 +727,40 @@ export class CoreApiClient {
   }
 
 
+  async createScheduledActivity(data: {
+    title: string; agentSlug: string; promptTemplate: string;
+    kind: "cron" | "once" | "interval";
+    cronExpr?: string; everyMs?: number; runAt?: string; tz?: string;
+    projectId?: string; deliveryRoomId?: string; notify?: boolean; expiresAt?: string;
+  }): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/scheduling`, {
+      method: "POST", headers: this.headers(), body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`core-api createScheduledActivity failed: ${res.status} ${await res.text()}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async listScheduledActivities(projectId?: string): Promise<unknown> {
+    const url = projectId ? `${BASE_URL}/scheduling?projectId=${encodeURIComponent(projectId)}` : `${BASE_URL}/scheduling`;
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`core-api listScheduledActivities failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async pauseScheduledActivity(id: string): Promise<unknown> {
+    // no body → omit Content-Type so the JSON body parser doesn't 400 on empty input
+    const res = await fetch(`${BASE_URL}/scheduling/${encodeURIComponent(id)}/pause`, { method: "POST", headers: { Authorization: `Bearer ${this.token}` } });
+    if (!res.ok) throw new Error(`core-api pauseScheduledActivity failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async deleteScheduledActivity(id: string): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/scheduling/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${this.token}` } });
+    if (!res.ok) throw new Error(`core-api deleteScheduledActivity failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+
   private headers(): Record<string, string> {
 
     return {
