@@ -761,6 +761,13 @@ export class CoreApiClient {
   }
 
 
+  async notify(data: { title: string; body?: string; level?: string; from?: string }): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/notifications`, { method: "POST", headers: this.headers(), body: JSON.stringify(data) });
+    if (!res.ok) throw new Error(`core-api notify failed: ${res.status} ${await res.text()}`);
+    return res.json() as Promise<unknown>;
+  }
+
+
   private headers(): Record<string, string> {
 
     return {

@@ -713,6 +713,21 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     },
   },
   {
+    name: "notify",
+    description:
+      "Send a proactive notification to the user (delivered via Telegram by the notification hub). Use for things worth telling the user without being asked. Keep it short.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Short headline." },
+        body: { type: "string", description: "Optional detail." },
+        level: { type: "string", enum: ["info", "warn", "alert"], description: "Severity (default info)." },
+        from: { type: "string", description: "Your agent slug, for attribution (optional)." },
+      },
+      required: ["title"],
+    },
+  },
+  {
     name: "create_scheduled_activity",
     description:
       "Schedule a recurring or one-off activity: an agent runs `promptTemplate` on a cadence. kind=cron (cronExpr, 5-field), kind=interval (everyMs), kind=once (runAt ISO). The run is delivered into the agent's room. Use to set up periodic agent work (e.g. a daily digest).",
@@ -786,6 +801,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   attach_skill: "project.write",
   detach_skill: "project.write",
   sync_skills_catalog: "project.write",
+  notify: "project.write",
   list_scheduled_activities: "project.read",
   create_scheduled_activity: "project.write",
   pause_scheduled_activity: "project.write",
@@ -1165,6 +1181,16 @@ export async function handleToolCall(
       const result = await client.syncSkillsCatalog(
         (args.skills as { name: string; description?: string }[]) ?? [],
       );
+      return jsonResponse(result);
+    }
+
+    case "notify": {
+      const result = await client.notify({
+        title: args.title as string,
+        body: args.body as string | undefined,
+        level: args.level as string | undefined,
+        from: args.from as string | undefined,
+      });
       return jsonResponse(result);
     }
 

@@ -19,6 +19,7 @@ import { ChatbotModule } from "./modules/chatbot/chatbot.module";
 import { OpsModule } from "./modules/ops/ops.module";
 import { AgentsModule } from "./modules/agents/agents.module";
 import { SchedulingModule } from "./modules/scheduling/scheduling.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 
 
 @Module({
@@ -42,6 +43,7 @@ import { SchedulingModule } from "./modules/scheduling/scheduling.module";
     OpsModule,
     AgentsModule,
     SchedulingModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
