@@ -3,6 +3,7 @@ import { PrismaClient } from "@roadboard/database";
 import { optionalEnv } from "@roadboard/config";
 import type { AgentExecConfig, AgentRuntime } from "./agent-executor.service";
 import { AgentCredentialsService } from "./credentials.service";
+import { AgentSkillsService } from "./skills.service";
 
 const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/home/alessio/agent-workspaces");
 function wsFor(slug: string): string { return `${WS_BASE}/${slug}`; }
@@ -26,6 +27,14 @@ export function buildAgentContext(a: AgentRow): string {
   const dont = bullets(a.doesNotText);
   if (dont) parts.push(`## Cosa non fa\n${dont}`);
   parts.push("Rispondi in italiano, conciso e diretto, niente preamboli.");
+  parts.push(
+    "## Regole (anti-allucinazione)\n" +
+    "- Non affermare MAI di aver eseguito un'azione (creato/aggiornato task, memory, decisioni, file, commit, o chiamato un tool) se non l'hai davvero eseguita: ogni affermazione di azione deve corrispondere a una chiamata di tool realmente avvenuta in questo turno.\n" +
+    "- Riporta solo risultati provenienti da output reali dei tool. Se un tool fallisce o non restituisce dati, dillo; non simulare il successo e non inventare l'output.\n" +
+    "- Non inventare ID, nomi, percorsi, valori, conteggi o citazioni. Se non hai il dato, recuperalo con un tool; se non lo trovi, dichiara che non lo sai.\n" +
+    "- Non inventare nomi o firme di tool/campi: in caso di dubbio verifica la fonte (es. initial_instructions per i tool RoadBoard).\n" +
+    "- Distingui sempre ciò che hai fatto da ciò che proponi o che andrebbe fatto. In caso di incertezza, chiedi invece di indovinare.",
+  );
   parts.push("Puoi consultare un altro agente del team: scrivi su una riga separata ESATTAMENTE [[ASK:<slug>]] seguito dalla domanda (es. [[ASK:dev]] quanti progetti ho?). La risposta dell'agente comparira nella chat e poi la sintetizzi tu. Usalo solo quando serve davvero un altro agente, una sola volta per messaggio.");
   return parts.join("\n\n");
 }
@@ -46,6 +55,7 @@ export class AgentsService {
   constructor(
     @Inject("PRISMA") private readonly prisma: PrismaClient,
     @Inject(AgentCredentialsService) private readonly creds: AgentCredentialsService,
+    @Inject(AgentSkillsService) private readonly skills: AgentSkillsService,
   ) {}
 
   list(): Promise<unknown> {
@@ -68,6 +78,8 @@ export class AgentsService {
 
     const a = await this.prisma.agentConfig.findFirst({ where: { slug, enabled: true } });
     if (!a) return null;
+
+    const skills = await this.skills.attachedFor(slug).catch(() => []);
 
     const events = await this.prisma.activityEvent.findMany({
       where: { targetId: slug, eventType: { startsWith: "agent." } },
@@ -98,6 +110,7 @@ export class AgentsService {
       runtime: a.runtime, provider: a.provider, model: a.model,
       description: a.description, avatarUrl: a.avatarUrl,
       doesText: a.doesText, doesNotText: a.doesNotText,
+      skills,
       workspacePath: wsFor(a.slug),
       stats: {
         runsToday: events.filter((e) => e.createdAt >= todayStart).length,

@@ -77,6 +77,22 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ s
               </div>
             </div>
 
+            <div className="mt-4 rounded-2xl border border-white/10 bg-zinc-900/60 p-4">
+              <h2 className="mb-2 text-sm font-semibold text-violet-300">Skill</h2>
+              {p.skills && p.skills.length > 0 ? (
+                <ul className="space-y-2">
+                  {p.skills.map((s) => (
+                    <li key={s.name} className="rounded-xl border border-white/10 bg-zinc-900/60 px-3 py-2">
+                      <span className="rounded-md bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-300">{s.name}</span>
+                      {s.description ? <p className="mt-1 text-xs text-zinc-400">{s.description}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-zinc-500">Nessuna skill assegnata.</p>
+              )}
+            </div>
+
             <div className="mt-4 grid grid-cols-4 gap-3 rounded-2xl border border-white/10 bg-zinc-900/40 p-4">
               <div><div className="text-xs text-zinc-500">Run oggi</div><div className="text-lg font-bold text-zinc-100">{p.stats.runsToday}</div></div>
               <div><div className="text-xs text-zinc-500">Latenza media</div><div className="text-lg font-bold text-zinc-100">{p.stats.avgLatencyMs != null ? `${(p.stats.avgLatencyMs/1000).toFixed(1)}s` : "—"}</div></div>

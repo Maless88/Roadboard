@@ -658,6 +658,60 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
       required: ["projectId", "repository", "nodes"],
     },
   },
+  {
+    name: "list_skills",
+    description:
+      "List the agent-skills catalog. Without args returns the full catalog ({name, description}). With `agentSlug`, returns each skill plus an `attached` flag for that agent.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agentSlug: { type: "string", description: "Agent slug to annotate attachment for (optional)." },
+      },
+    },
+  },
+  {
+    name: "attach_skill",
+    description: "Attach a skill (by catalog name) to an agent. Surfaces in the agent profile card.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agentSlug: { type: "string", description: "Agent slug." },
+        name: { type: "string", description: "Skill name (must exist in the catalog)." },
+      },
+      required: ["agentSlug", "name"],
+    },
+  },
+  {
+    name: "detach_skill",
+    description: "Detach a skill from an agent.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        agentSlug: { type: "string", description: "Agent slug." },
+        name: { type: "string", description: "Skill name." },
+      },
+      required: ["agentSlug", "name"],
+    },
+  },
+  {
+    name: "sync_skills_catalog",
+    description:
+      "Upsert the skills catalog from the host SKILL.md frontmatters. Pass `skills` as an array of {name, description}.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        skills: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, description: { type: "string" } },
+            required: ["name"],
+          },
+        },
+      },
+      required: ["skills"],
+    },
+  },
 ];
 
 
@@ -689,6 +743,10 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   create_decision: "decision.write",
   update_decision: "decision.write",
   create_project: "project.admin",
+  list_skills: "project.read",
+  attach_skill: "project.write",
+  detach_skill: "project.write",
+  sync_skills_catalog: "project.write",
   get_architecture_map: "codeflow.read",
   get_node_context: "codeflow.read",
   get_architecture_snapshot: "codeflow.read",
@@ -1042,6 +1100,28 @@ export async function handleToolCall(
         title: `Progetto creato: ${proj.name as string}`,
         body: args.description ? `${args.description as string}` : undefined,
       }).catch(() => null);
+      return jsonResponse(result);
+    }
+
+    case "list_skills": {
+      const result = await client.listSkills(args.agentSlug as string | undefined);
+      return jsonResponse(result);
+    }
+
+    case "attach_skill": {
+      const result = await client.attachSkill(args.agentSlug as string, args.name as string);
+      return jsonResponse(result);
+    }
+
+    case "detach_skill": {
+      const result = await client.detachSkill(args.agentSlug as string, args.name as string);
+      return jsonResponse(result);
+    }
+
+    case "sync_skills_catalog": {
+      const result = await client.syncSkillsCatalog(
+        (args.skills as { name: string; description?: string }[]) ?? [],
+      );
       return jsonResponse(result);
     }
 

@@ -693,6 +693,40 @@ export class CoreApiClient {
   }
 
 
+  async listSkills(slug?: string): Promise<unknown> {
+    const url = slug
+      ? `${BASE_URL}/agents/skills/agent/${encodeURIComponent(slug)}`
+      : `${BASE_URL}/agents/skills/catalog`;
+    const res = await fetch(url, { headers: this.headers() });
+    if (!res.ok) throw new Error(`core-api listSkills failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async attachSkill(slug: string, name: string): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/agents/skills/agent/${encodeURIComponent(slug)}/attach`, {
+      method: "POST", headers: this.headers(), body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`core-api attachSkill failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async detachSkill(slug: string, name: string): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/agents/skills/agent/${encodeURIComponent(slug)}/detach`, {
+      method: "POST", headers: this.headers(), body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`core-api detachSkill failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+  async syncSkillsCatalog(skills: { name: string; description?: string }[]): Promise<unknown> {
+    const res = await fetch(`${BASE_URL}/agents/skills/sync`, {
+      method: "POST", headers: this.headers(), body: JSON.stringify({ skills }),
+    });
+    if (!res.ok) throw new Error(`core-api syncSkillsCatalog failed: ${res.status}`);
+    return res.json() as Promise<unknown>;
+  }
+
+
   private headers(): Record<string, string> {
 
     return {

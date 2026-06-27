@@ -1584,6 +1584,7 @@ export interface AgentProfile {
   name: string; slug: string; capability: string; runtime: string; provider: string; model: string;
   trustTier: string; ownerUserId: string | null;
   description: string | null; avatarUrl: string | null; doesText: string | null; doesNotText: string | null;
+  skills: { name: string; description: string }[];
   workspacePath: string;
   stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number };
   recent: { eventType: string; createdAt: string; metadata: Record<string, unknown> | null }[];
