@@ -201,7 +201,7 @@ export class RoomOrchestratorService {
             .map((a) => `- ${a.slug} (${a.name ?? a.slug}) — ${a.capability || "text"}`)
             .join("\n");
           if (roster) {
-            config.systemPrompt = `${config.systemPrompt || ""}\n\n## Team del momento (usa SOLO questi slug per [[ASK:<slug>]])\n${roster}\nSe l'utente chiede "tutti gli agenti", consultali TUTTI uno per volta (verrai richiamato in automatico).`;
+            config.systemPrompt = `${config.systemPrompt || ""}\n\n## Team del momento (usa SOLO questi slug per [[ASK:<slug>]])\n${roster}\nSe l'utente chiede "tutti gli agenti", consultali TUTTI uno per volta (verrai richiamato in automatico).\nScrivi SEMPRE in italiano, anche eventuali note. Quando deleghi emetti SOLO la direttiva [[ASK:slug]] domanda, niente testo o righe di stato/progresso (es. Done so far / Remaining) prima.`;
           }
 
           // Durable memory — RECALL: inject the most relevant memories for (user, project)
@@ -234,7 +234,7 @@ export class RoomOrchestratorService {
           // This lets a single user message drive a full multi-agent task without the
           // user having to re-prompt between consultations. Depth 1 (delegates don't chain).
           const ASK_RE = /\[\[ASK:\s*([a-zA-Z0-9_-]+)\s*\]\]\s*([\s\S]+?)\s*$/;
-          const MAX_STEPS = 12;                // cap: bounds Opus calls per user turn
+          const MAX_STEPS = 18;                // cap: bounds Opus calls per user turn
           const convo: ChatMessage[] = [...messages];
           let totalChars = 0, steps = 0;
           for (let iter = 0; !cancelled; iter++) {
@@ -261,7 +261,6 @@ export class RoomOrchestratorService {
             }
             // Unknown / self target -> inform and let it recover on the next pass.
             if (target === slug || !capBySlug.has(target)) {
-              if (lead) await rooms.appendMessage(roomId, "agent", slug, lead);
               convo.push({ role: "assistant", content: (lead ? lead + "\n" : "") + `[[ASK:${target}]] ...` });
               convo.push({ role: "user", content: `[sistema] Agente "${target}" non disponibile. Prosegui senza consultarlo; se non ti servono altri agenti dai la risposta finale.` });
               continue;
@@ -271,7 +270,7 @@ export class RoomOrchestratorService {
             // Question = only the first paragraph after [[ASK]] (avoid capturing trailing reasoning).
             const question = ask[2].split(/\n\s*\n/)[0].replace(/\s+/g, " ").trim().slice(0, 600) || "(domanda)";
             const tName = (agentList.find((a) => a.slug === target) as unknown as { name?: string } | undefined)?.name ?? target;
-            if (lead) await rooms.appendMessage(roomId, "agent", slug, lead);
+            // intermediate lead kept in convo for continuity, not persisted to chat
             const askLine = `↪ Chiedo a ${tName}: ${question}`;
             if (!cancelled) subscriber.next({ data: `\n${askLine}\n` });
             await rooms.appendMessage(roomId, "agent", slug, askLine);
