@@ -7,7 +7,9 @@ export async function GET(req: Request): Promise<Response> {
   if (process.env.AGENTS_ENABLED !== "true") return new Response(empty, { status: 200, headers: { "Content-Type": "application/json" } });
   const token = await getToken();
   if (!token) return new Response(empty, { status: 200, headers: { "Content-Type": "application/json" } });
-  const limit = new URL(req.url).searchParams.get("limit") ?? "30";
-  const r = await fetch(`${CORE_API}/notifications?limit=${encodeURIComponent(limit)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
+  const sp = new URL(req.url).searchParams;
+  const limit = sp.get("limit") ?? "30";
+  const scope = sp.get("scope") === "all" ? "&scope=all" : "";
+  const r = await fetch(`${CORE_API}/notifications?limit=${encodeURIComponent(limit)}${scope}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
   return new Response(await r.text(), { status: r.status, headers: { "Content-Type": "application/json" } });
 }

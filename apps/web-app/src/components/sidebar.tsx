@@ -305,6 +305,13 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             </svg>
             {!collapsed && <span>Agenda</span>}
           </Link>
+          <Link href="/notifications" title="Notifiche"
+            className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/notifications' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" />
+            </svg>
+            {!collapsed && <span>Notifiche</span>}
+          </Link>
         </div>
 
       </nav>

@@ -94,6 +94,20 @@ export function NotificationBell() {
     } catch { /* ignore */ }
   }, [load]);
 
+  const dismissAll = useCallback(async () => {
+    // optimistic: clear the bell (items stay in the /notifications archive)
+    setItems([]);
+    setUnread(0);
+    try {
+      await fetch('/api/notifications/dismiss', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      load();
+    } catch { /* ignore */ }
+  }, [load]);
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -117,13 +131,20 @@ export function NotificationBell() {
           style={{ top: pos.top, left: pos.left, width: `min(320px, calc(100vw - 16px))` }}
           className="fixed z-[60] overflow-hidden rounded-xl border border-white/10 bg-[#15171c] shadow-2xl"
         >
-          <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
+          <div className="flex items-center justify-between gap-2 border-b border-white/10 px-3 py-2">
             <span className="text-sm font-semibold text-white">Notifiche</span>
-            {unread > 0 && (
-              <button type="button" onClick={() => markRead()} className="text-xs text-indigo-300 hover:text-indigo-200">
-                Segna tutte lette
-              </button>
-            )}
+            <span className="flex items-center gap-2">
+              {unread > 0 && (
+                <button type="button" onClick={() => markRead()} className="text-xs text-indigo-300 hover:text-indigo-200">
+                  Segna lette
+                </button>
+              )}
+              {items.length > 0 && (
+                <button type="button" onClick={dismissAll} className="text-xs text-gray-400 hover:text-white">
+                  Pulisci
+                </button>
+              )}
+            </span>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {items.length === 0 ? (
@@ -159,6 +180,13 @@ export function NotificationBell() {
               })
             )}
           </div>
+          <a
+            href="/notifications"
+            onClick={() => setOpen(false)}
+            className="block border-t border-white/10 px-3 py-2 text-center text-xs font-medium text-indigo-300 hover:bg-white/5"
+          >
+            Vedi tutte
+          </a>
         </div>
       ), document.body)}
     </div>
