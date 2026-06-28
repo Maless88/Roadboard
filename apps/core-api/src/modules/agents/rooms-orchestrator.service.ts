@@ -8,6 +8,7 @@ import { AgentsService } from "./agents.service";
 import { CoordinatorService } from "./coordinator.service";
 import { RoomsService } from "./rooms.service";
 import { ImageGenService } from "./image-gen.service";
+import { AgentMemoryService } from "./agent-memory.service";
 
 export interface RoomAgent { slug: string; capability: string }
 
@@ -83,10 +84,11 @@ export class RoomOrchestratorService {
     @Inject(AgentExecutorService) private readonly executor: AgentExecutorService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ImageGenService) private readonly imageGen: ImageGenService,
+    @Inject(AgentMemoryService) private readonly memory: AgentMemoryService,
   ) {}
 
   runTurn(user: AuthUser, roomId: string, message: string): Observable<{ data: string }> {
-    const { rooms, agents, coordinator, executor, audit, imageGen } = this;
+    const { rooms, agents, coordinator, executor, audit, imageGen, memory } = this;
 
     return new Observable<{ data: string }>((subscriber) => {
 
@@ -111,6 +113,14 @@ export class RoomOrchestratorService {
             messages: { senderKind: string; senderId: string; content: string }[];
           };
           const repoUrl = room.projectId ? await rooms.getProjectRepoUrl(room.projectId) : null;
+
+          // Durable memory — CAPTURE: explicit "ricordati/ricorda/impara/segnati … (che) X".
+          // Server-side so it works even for agents without MCP (e.g. Vera). Best-effort.
+          const memMatch = message.match(/\b(?:ricordati|ricorda|impara|segnati|tieni a mente|memorizza)\b(?:\s+che)?\s*[:,]?\s*([\s\S]{3,})/i);
+          if (memMatch) {
+            void memory.remember(user.userId, memMatch[1].trim(), { projectId: room.projectId ?? null, source: "user", importance: 4 })
+              .catch(() => { /* best-effort */ });
+          }
 
           const agentList = (await agents.list()) as { slug: string; capability: string }[];
           const capBySlug = new Map(agentList.map((a) => [a.slug, (a.capability ?? "").toLowerCase()]));
@@ -189,6 +199,15 @@ export class RoomOrchestratorService {
           if (roster) {
             config.systemPrompt = `${config.systemPrompt || ""}\n\n## Team del momento (usa SOLO questi slug per [[ASK:<slug>]])\n${roster}\nSe l'utente chiede "tutti gli agenti", consultali TUTTI uno per volta (verrai richiamato in automatico).`;
           }
+
+          // Durable memory — RECALL: inject the most relevant memories for (user, project)
+          // into the responder's context (works for every agent, incl. Vera). Best-effort.
+          try {
+            const mems = await memory.recall(user.userId, message, { projectId: room.projectId ?? null, limit: 6 });
+            if (mems.length) {
+              config.systemPrompt = `${config.systemPrompt || ""}\n\n## Memoria (cose apprese su Alessio / contesto persistente — usale se pertinenti)\n${mems.map((m) => `- ${m.content}`).join("\n")}`;
+            }
+          } catch { /* memory is best-effort, never block a turn */ }
           // Feed prior agent turns back WITHOUT the streamed markers (↪ / _→ tool_) or
           // leaked meta, so the model doesn't parrot that syntax in new turns.
           const messages: ChatMessage[] = [];

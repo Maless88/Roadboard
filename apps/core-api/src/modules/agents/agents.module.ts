@@ -13,11 +13,12 @@ import { AgentCredentialsController } from "./credentials.controller";
 import { AgentSkillsService } from "./skills.service";
 import { AgentSkillsController } from "./skills.controller";
 import { ImageGenService } from "./image-gen.service";
+import { AgentMemoryService } from "./agent-memory.service";
 
 @Module({
   imports: [AuditModule],
   controllers: [AgentsController, RoomsController, AgentCredentialsController, AgentSkillsController],
-  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService, AgentCredentialsService, AgentSkillsService, ImageGenService],
-  exports: [AgentExecutorService],
+  providers: [AgentExecutorService, AgentsService, ChatService, CoordinatorService, RoomsService, RoomOrchestratorService, AgentCredentialsService, AgentSkillsService, ImageGenService, AgentMemoryService],
+  exports: [AgentExecutorService, AgentMemoryService],
 })
 export class AgentsModule {}
