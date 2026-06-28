@@ -2,6 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PrismaClient } from "@roadboard/database";
 
 export interface PendingNotification { id: string; user_id: string; agent_slug: string; title: string; body: string; level: string; }
+export interface UserNotification { id: string; agent_slug: string; title: string; body: string; level: string; status: string; created_at: Date; read_at: Date | null; }
 
 /** Agent -> user notification hub. Agents emit (via the `notify` MCP tool); a
  *  dispatcher delivers pending rows to Telegram. Raw SQL (table created by migration). */
@@ -30,5 +31,31 @@ export class AgentNotificationsService {
     const list = safe.map((x) => `'${x}'`).join(",");
     const sentAt = status === "sent" ? ", \"sent_at\"=now()" : "";
     await this.prisma.$executeRawUnsafe(`UPDATE "agent_notifications" SET "status"='${status}'${sentAt} WHERE "id" IN (${list})`);
+  }
+
+  /** In-app bell: a user's recent notifications (most recent first) + unread count. */
+  async listForUser(userId: string, limit = 30): Promise<{ items: UserNotification[]; unread: number }> {
+    const items = await this.prisma.$queryRawUnsafe<UserNotification[]>(
+      `SELECT "id","agent_slug","title","body","level","status","created_at","read_at"
+       FROM "agent_notifications" WHERE "user_id"=$1 ORDER BY "created_at" DESC LIMIT ${Math.max(1, Math.min(100, Number(limit) || 30))}`,
+      userId,
+    );
+    const rows = await this.prisma.$queryRawUnsafe<{ count: bigint }[]>(
+      `SELECT count(*)::int AS count FROM "agent_notifications" WHERE "user_id"=$1 AND "read_at" IS NULL`,
+      userId,
+    );
+    return { items, unread: Number(rows[0]?.count ?? 0) };
+  }
+
+  /** Mark the user's notifications read. Empty ids => mark all unread as read. */
+  async markRead(userId: string, ids?: string[]): Promise<{ ok: boolean }> {
+    const safe = (ids || []).filter((x) => /^[a-z0-9-]+$/i.test(x));
+    if (ids && ids.length && !safe.length) return { ok: true };
+    const idClause = safe.length ? ` AND "id" IN (${safe.map((x) => `'${x}'`).join(",")})` : "";
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE "agent_notifications" SET "read_at"=now() WHERE "user_id"=$1 AND "read_at" IS NULL${idClause}`,
+      userId,
+    );
+    return { ok: true };
   }
 }

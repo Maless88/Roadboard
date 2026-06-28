@@ -7,6 +7,7 @@ import { logoutAction } from '@/app/actions';
 import { useDict } from '@/lib/i18n/locale-context';
 import { LanguageSwitcher } from './language-switcher';
 import { ThemeToggle } from './theme-toggle';
+import { NotificationBell } from './notification-bell';
 import { formatBuildLabel } from '@/lib/build-label';
 import type { Locale } from '@/lib/i18n';
 
@@ -128,6 +129,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
           </svg>
         </button>
         <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
+        <div className="ml-auto"><NotificationBell /></div>
       </div>
 
       {/* backdrop when drawer open (mobile only) */}
@@ -165,6 +167,9 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             </div>
           )}
         </Link>
+        {!collapsed && (
+          <div className="hidden md:block mr-1"><NotificationBell /></div>
+        )}
         {!collapsed && (
           <button type="button" aria-label="Comprimi sidebar" onClick={toggleCollapsed}
             className="hidden md:inline-flex h-8 w-8 mr-2 items-center justify-center rounded-lg text-gray-500 hover:bg-white/5 hover:text-gray-200">
