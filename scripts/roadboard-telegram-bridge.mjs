@@ -73,7 +73,7 @@ async function rb(pathname, opts = {}) {
 }
 
 // run one turn and return the assistant's reply text
-async function runTurn(message) {
+async function runTurn(message, onProgress) {
   let slug = "assistant";
   let text = message;
   const m = message.match(/^[@/]([a-z0-9_-]+)\s+([\s\S]+)$/i);
@@ -92,6 +92,7 @@ async function runTurn(message) {
     const val = curr.join("\n"); curr = [];
     if (val === "[DONE]") return;
     out += val;
+    if (onProgress) { try { onProgress(splitSender(out)); } catch { /* best-effort */ } }
   };
   for (;;) {
     const { value, done } = await reader.read();
@@ -105,7 +106,23 @@ async function runTurn(message) {
     }
   }
   flush();
-  return splitSender(out).trim();
+  return cleanReply(splitSender(out));
+}
+
+// strip stream artifacts that shouldn't reach the user: `_→ tool_` action lines,
+// [[ASK:slug]] delegation tokens, and collapse the resulting blank lines.
+function cleanReply(s) {
+  let t = s
+    .split("\n")
+    .filter((l) => !/^\s*_→ .*_\s*$/.test(l))
+    .join("\n")
+    .replace(/\[\[ASK:[a-z0-9_-]+\]\]/gi, "");
+  // drop leading "thinking-out-loud" paragraphs (English meta) before the real answer
+  const meta = /\b(let me|i should|i'?ll|i will|i need to|the user|i don'?t|i do not|i can'?t|we already|note (that|the)|as vera|let'?s|i'?m going to|first,? )\b/i;
+  const paras = t.split(/\n\s*\n/);
+  let i = 0;
+  while (i < paras.length - 1 && meta.test(paras[i])) i++;
+  return paras.slice(i).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 async function handleUpdate(u) {
@@ -119,12 +136,33 @@ async function handleUpdate(u) {
   }
   state.lastChat = chatId; writeState(state);
   console.error(`[tg] in from ${fromId} chat ${chatId}: ${msg.text.slice(0, 80)}`);
-  await tg("sendChatAction", { chat_id: chatId, action: "typing" });
+  // Method A: keep a live "typing…" indicator for the whole turn, post each agent
+  // step (`_→ tool_`) as its own message as it happens, then a final message with the
+  // clean answer. Pure presentation over the same stream — no extra model tokens.
+  await tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+  let typing = setInterval(() => tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {}), 4000);
+  const stopTyping = () => { if (typing) { clearInterval(typing); typing = null; } };
+  let queue = Promise.resolve();                   // serialize sends so steps keep their order
+  const enqueue = (fn) => { queue = queue.then(fn).catch(() => {}); };
+  let emitted = 0;
+  const onProgress = (partial) => {
+    const steps = [...(partial || "").matchAll(/^\s*_→ (.+?)_\s*$/gm)].map((m) => m[1].trim());
+    for (; emitted < steps.length; emitted++) {
+      const tool = steps[emitted];
+      enqueue(() => tg("sendMessage", { chat_id: chatId, text: `🔧 <i>${escHtml(tool)}</i>`, parse_mode: "HTML", disable_web_page_preview: true }));
+    }
+  };
   try {
-    const reply = await runTurn(msg.text.trim());
-    await sendMessage(chatId, reply);
+    const reply = await runTurn(msg.text.trim(), onProgress);
+    await queue;                                    // flush queued step messages first
+    stopTyping();
+    const clean = reply && reply.trim() ? reply : (emitted ? "" : "(nessuna risposta)");
+    if (clean.trim()) await sendMessage(chatId, clean);
   } catch (e) {
+    stopTyping();
     await sendMessage(chatId, `[errore] ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    stopTyping();
   }
 }
 
