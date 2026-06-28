@@ -180,6 +180,15 @@ export class RoomOrchestratorService {
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
           config.projectId = room.projectId ?? null; config.source = "chat"; config.repoUrl = repoUrl;
+          // Inject the LIVE team roster so the delegating agent knows every slug it can
+          // [[ASK]] (avoids relying on a stale hardcoded list in the system prompt).
+          const roster = (agentList as { slug: string; capability: string; name?: string }[])
+            .filter((a) => a.slug !== slug)
+            .map((a) => `- ${a.slug} (${a.name ?? a.slug}) — ${a.capability || "text"}`)
+            .join("\n");
+          if (roster) {
+            config.systemPrompt = `${config.systemPrompt || ""}\n\n## Team del momento (usa SOLO questi slug per [[ASK:<slug>]])\n${roster}\nSe l'utente chiede "tutti gli agenti", consultali TUTTI uno per volta (verrai richiamato in automatico).`;
+          }
           // Feed prior agent turns back WITHOUT the streamed markers (↪ / _→ tool_) or
           // leaked meta, so the model doesn't parrot that syntax in new turns.
           const messages: ChatMessage[] = [];
