@@ -13,6 +13,26 @@ export interface RoomAgent { slug: string; capability: string }
 
 const ROUTER_CAPABILITY = "routing";
 
+// Rooms with a turn in flight — guards against overlapping turns on the same room.
+const busyRooms = new Set<string>();
+
+const MARKER_RE = /^\s*(↪ Chiedo a |_→ .*_\s*$)/;
+const META_RE = /\b(let me\b|i should\b|i'?ll\b|i will\b|i need to\b|the user\b|i don'?t\b|i can'?t\b|we already\b|note (that|the)\b|as vera\b|let'?s\b|i'?m going to\b|first,? |continue the loop\b|looking at the (conversation|transcript)\b|the deferred tools\b)/i;
+
+/** Strip the agent's "thinking out loud" + streamed markers (↪ / _→ tool_ / [[..]] / <br>)
+ *  before persisting a message or feeding it back into the model's context. */
+export function stripAgentMeta(s: string): string {
+  let t = (s || "")
+    .replace(/\[\[ASK:[a-z0-9_-]+\]\]/gi, "")
+    .replace(/\[\[IMG\]\]/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n");
+  t = t.split("\n").filter((l) => !MARKER_RE.test(l)).join("\n");
+  const paras = t.split(/\n\s*\n/);
+  let i = 0;
+  while (i < paras.length - 1 && META_RE.test(paras[i])) i++;
+  return paras.slice(i).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Extract @mentions (slug tokens) from a message, lowercased and de-duped. */
 /** Strip the embedded image data-URL (caption + "\x1f" + dataURL) so generated
  * images are never fed back into the LLM prompt on subsequent turns. */
@@ -74,6 +94,15 @@ export class RoomOrchestratorService {
       const started = Date.now();
 
       void (async () => {
+        // Per-room lock: reject a second turn while one is already running.
+        if (busyRooms.has(roomId)) {
+          subscriber.next({ data: `\x1e${JSON.stringify({ senderKind: "agent", senderId: "assistant" })}\n` });
+          subscriber.next({ data: "Sto già elaborando una richiesta in questa stanza — attendi che finisca." });
+          subscriber.next({ data: "[DONE]" });
+          subscriber.complete();
+          return;
+        }
+        busyRooms.add(roomId);
         try {
           await rooms.postMessage(user.userId, roomId, message); // membership-gated
           const room = (await rooms.getRoom(user.userId, roomId)) as {
@@ -151,11 +180,17 @@ export class RoomOrchestratorService {
 
           const { slug, config } = await agents.resolveForChat(decision.slug, user.userId);
           config.projectId = room.projectId ?? null; config.source = "chat"; config.repoUrl = repoUrl;
-          const messages: ChatMessage[] = room.messages.map((m) => {
-            if (m.senderKind === "user") return { role: "user", content: forLlmContent(m.content) };
-            if (m.senderId === slug) return { role: "assistant", content: forLlmContent(m.content) };
-            return { role: "user", content: `[${m.senderId}]: ${forLlmContent(m.content)}` };
-          });
+          // Feed prior agent turns back WITHOUT the streamed markers (↪ / _→ tool_) or
+          // leaked meta, so the model doesn't parrot that syntax in new turns.
+          const messages: ChatMessage[] = [];
+          for (const m of room.messages) {
+            if (m.senderKind === "user") { messages.push({ role: "user", content: forLlmContent(m.content) }); continue; }
+            const cleaned = stripAgentMeta(forLlmContent(m.content));
+            if (!cleaned) continue;
+            messages.push(m.senderId === slug
+              ? { role: "assistant", content: cleaned }
+              : { role: "user", content: `[${m.senderId}]: ${cleaned}` });
+          }
 
           void audit.recordForUser(user, "agent.run.started", "agent", slug, undefined, {
             provider: config.provider, model: config.model, runtime: config.runtime, roomId,
@@ -167,7 +202,7 @@ export class RoomOrchestratorService {
           // This lets a single user message drive a full multi-agent task without the
           // user having to re-prompt between consultations. Depth 1 (delegates don't chain).
           const ASK_RE = /\[\[ASK:\s*([a-zA-Z0-9_-]+)\s*\]\]\s*([\s\S]+?)\s*$/;
-          const MAX_STEPS = 6;                 // cap: bounds Opus calls per user turn
+          const MAX_STEPS = 12;                // cap: bounds Opus calls per user turn
           const convo: ChatMessage[] = [...messages];
           let totalChars = 0, steps = 0;
           for (let iter = 0; !cancelled; iter++) {
@@ -184,7 +219,8 @@ export class RoomOrchestratorService {
             totalChars += reply.length;
             const ask = forceFinal ? null : reply.match(ASK_RE);
             const target = ask ? ask[1].toLowerCase() : null;
-            const lead = ask && typeof ask.index === "number" ? reply.slice(0, ask.index).trim() : reply.trim();
+            const rawLead = ask && typeof ask.index === "number" ? reply.slice(0, ask.index) : reply;
+            const lead = stripAgentMeta(rawLead);   // drop the agent's thinking-out-loud + markers
 
             // No (more) delegation -> this is the final answer.
             if (!ask || !target) {
@@ -194,13 +230,14 @@ export class RoomOrchestratorService {
             // Unknown / self target -> inform and let it recover on the next pass.
             if (target === slug || !capBySlug.has(target)) {
               if (lead) await rooms.appendMessage(roomId, "agent", slug, lead);
-              convo.push({ role: "assistant", content: reply.trim() });
+              convo.push({ role: "assistant", content: (lead ? lead + "\n" : "") + `[[ASK:${target}]] ...` });
               convo.push({ role: "user", content: `[sistema] Agente "${target}" non disponibile. Prosegui senza consultarlo; se non ti servono altri agenti dai la risposta finale.` });
               continue;
             }
             // Consult the target agent, persist its reply, feed it back, loop.
             steps++;
-            const question = ask[2].trim();
+            // Question = only the first paragraph after [[ASK]] (avoid capturing trailing reasoning).
+            const question = ask[2].split(/\n\s*\n/)[0].replace(/\s+/g, " ").trim().slice(0, 600) || "(domanda)";
             const tName = (agentList.find((a) => a.slug === target) as unknown as { name?: string } | undefined)?.name ?? target;
             if (lead) await rooms.appendMessage(roomId, "agent", slug, lead);
             const askLine = `↪ Chiedo a ${tName}: ${question}`;
@@ -211,13 +248,14 @@ export class RoomOrchestratorService {
             tConfig.projectId = room.projectId ?? null; tConfig.source = "chat"; tConfig.repoUrl = repoUrl;
             let tReply = "";
             for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) { if (cancelled) break; tReply += chunk; }
-            tReply = tReply.split("[[")[0].trim() || "(nessuna risposta)";
+            tReply = stripAgentMeta(tReply.split("[[")[0]) || "(nessuna risposta)";
             await rooms.appendMessage(roomId, "agent", tSlug, tReply);
             void audit.recordForUser(user, "agent.run.completed", "agent", tSlug, undefined, { ok: true, durationMs: Date.now() - started, delegatedFrom: slug, roomId });
 
             const nearCap = iter + 1 >= MAX_STEPS;
+            // Feed back a CLEAN turn (no markers/reasoning) so the model doesn't parrot syntax.
             convo.push({ role: "assistant", content: (lead ? lead + "\n" : "") + `[[ASK:${target}]] ${question}` });
-            convo.push({ role: "user", content: `[sistema] ${tName} ha risposto:\n${tReply}\n\nProsegui la richiesta dell'utente. ${nearCap ? "Dai ORA la risposta finale, senza altre consultazioni." : "Se ti serve un altro agente emetti una nuova [[ASK:<slug>]]; altrimenti dai la risposta finale, concisa."}` });
+            convo.push({ role: "user", content: `[sistema] ${tName} ha risposto:\n${tReply}\n\nProsegui la richiesta dell'utente. ${nearCap ? "Dai ORA la risposta finale, senza altre consultazioni." : "Se ti serve un altro agente emetti una nuova [[ASK:<slug>]] (una sola); altrimenti dai la risposta finale, concisa. NON scrivere ragionamento o righe tipo '_→' o '↪'."}` });
           }
 
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
@@ -228,6 +266,8 @@ export class RoomOrchestratorService {
         } catch (err) {
           subscriber.next({ data: `[ERROR] ${err instanceof Error ? err.message : String(err)}` });
           subscriber.complete();
+        } finally {
+          busyRooms.delete(roomId);
         }
       })();
 
