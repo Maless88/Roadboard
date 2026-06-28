@@ -793,6 +793,23 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     },
   },
   {
+    name: "create_reminder",
+    description:
+      "Set a reminder for the user. At the scheduled time the `text` is delivered straight to the user (Telegram) — no agent run, no cost. Provide exactly one of: at (ISO datetime, one-off), cron (5-field, recurring), every_minutes (recurring interval). Use for 'remind me…' requests, birthdays, recurring nudges.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        text: { type: "string", description: "The reminder message delivered to the user." },
+        at: { type: "string", description: "ISO datetime for a one-off reminder (kind=once)." },
+        cron: { type: "string", description: "5-field cron expression for a recurring reminder, evaluated in tz." },
+        every_minutes: { type: "number", description: "Recurring interval in minutes." },
+        title: { type: "string", description: "Optional short title (defaults to the text)." },
+        tz: { type: "string", description: "IANA timezone (default Europe/Rome)." },
+      },
+      required: ["text"],
+    },
+  },
+  {
     name: "list_scheduled_activities",
     description: "List the caller's scheduled activities (optionally filtered by projectId).",
     inputSchema: {
@@ -851,6 +868,7 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   notify: "project.write",
   list_scheduled_activities: "project.read",
   create_scheduled_activity: "project.write",
+  create_reminder: "project.write",
   pause_scheduled_activity: "project.write",
   delete_scheduled_activity: "project.write",
   get_architecture_map: "codeflow.read",
@@ -1295,6 +1313,31 @@ export async function handleToolCall(
         tz: args.tz as string | undefined,
         projectId: args.projectId as string | undefined,
         deliveryRoomId: args.deliveryRoomId as string | undefined,
+      });
+      return jsonResponse(result);
+    }
+
+    case "create_reminder": {
+      const text = args.text as string;
+      if (!text) return errorResponse("create_reminder: 'text' is required.");
+      const at = args.at as string | undefined;
+      const cron = args.cron as string | undefined;
+      const everyMin = args.every_minutes as number | undefined;
+      let kind: "once" | "cron" | "interval";
+      if (at) kind = "once";
+      else if (cron) kind = "cron";
+      else if (everyMin && everyMin > 0) kind = "interval";
+      else return errorResponse("create_reminder: provide exactly one of 'at', 'cron', or 'every_minutes'.");
+      const title = (args.title as string) || (text.length > 80 ? text.slice(0, 77) + "…" : text);
+      const result = await client.createScheduledActivity({
+        title,
+        agentSlug: "__reminder__", // sentinel: dispatcher delivers text directly, no agent run
+        promptTemplate: text,
+        kind,
+        runAt: at,
+        cronExpr: cron,
+        everyMs: everyMin ? Math.round(everyMin * 60000) : undefined,
+        tz: args.tz as string | undefined,
       });
       return jsonResponse(result);
     }

@@ -5,9 +5,11 @@ import { ScheduledActivityService } from "./scheduled-activity.service";
 import { SchedulingController } from "./scheduling.controller";
 import { SchedulingDispatcher } from "./scheduling.dispatcher";
 import { QUEUE_AGENT_RUN } from "./scheduling.constants";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
   imports: [
+    NotificationsModule,
     BullModule.forRoot({
       connection: {
         host: optionalEnv("REDIS_HOST", "localhost"),

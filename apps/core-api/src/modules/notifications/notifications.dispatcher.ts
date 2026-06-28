@@ -17,9 +17,20 @@ export class NotificationsDispatcher {
     const token = optionalEnv("NOTIFY_TOKEN", "");
     const sent: string[] = [], failed: string[] = [];
     for (const n of pending) {
-      const tag = n.level === "alert" ? "🚨" : n.level === "warn" ? "⚠️" : "🔔";
-      const who = n.agent_slug ? ` [${n.agent_slug}]` : "";
-      const text = `${tag}${who} ${n.title}${n.body ? `\n${n.body}` : ""}`;
+      // The Telegram bridge /send runs this through mdToHtml, so use Markdown (not raw HTML).
+      const title = (n.title || "").trim();
+      const body = (n.body || "").trim();
+      let text: string;
+      if (n.agent_slug === "reminder") {
+        text = `⏰ **Promemoria**\n${title}`;
+        if (body && body !== title) text += `\n${body}`;
+      } else {
+        const tag = n.level === "alert" ? "🚨" : n.level === "warn" ? "⚠️" : "🔔";
+        const lines = [`${tag} **${title}**`];
+        if (body && body !== title) lines.push(body);
+        if (n.agent_slug) lines.push(`*— ${n.agent_slug}*`);
+        text = lines.join("\n");
+      }
       try {
         const r = await fetch(url, {
           method: "POST",

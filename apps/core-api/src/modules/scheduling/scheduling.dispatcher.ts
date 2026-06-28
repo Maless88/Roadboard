@@ -5,6 +5,10 @@ import { Queue } from "bullmq";
 import { PrismaClient } from "@roadboard/database";
 import { computeNextRunAt, type ScheduleKind, type ScheduleSpec } from "./scheduled-activity.service";
 import { QUEUE_AGENT_RUN, type AgentRunJobData } from "./scheduling.constants";
+import { AgentNotificationsService } from "../notifications/notifications.service";
+
+/** Sentinel agentSlug for reminders: deliver `promptTemplate` straight to the user, no agent run. */
+const REMINDER_AGENT_SLUG = "__reminder__";
 
 /**
  * Polls for due scheduled activities every 60s. For each due activity it claims
@@ -21,6 +25,7 @@ export class SchedulingDispatcher {
   constructor(
     @Inject("PRISMA") private readonly prisma: PrismaClient,
     @InjectQueue(QUEUE_AGENT_RUN) private readonly queue: Queue<AgentRunJobData>,
+    private readonly notifications: AgentNotificationsService,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -56,6 +61,10 @@ export class SchedulingDispatcher {
       everyMs: number | null;
       tz: string;
       expiresAt: Date | null;
+      userId: string;
+      agentSlug: string;
+      title: string;
+      promptTemplate: string;
     },
     now: Date,
   ): Promise<void> {
@@ -79,6 +88,17 @@ export class SchedulingDispatcher {
     });
 
     if (claim.count !== 1) return; // lost the race to another tick
+
+    // Reminder: deliver the text straight to the user via the notification hub. No agent run, no cost.
+    if (activity.agentSlug === REMINDER_AGENT_SLUG) {
+      // agent_slug="reminder" lets the notification dispatcher render it as a ⏰ Promemoria.
+      await this.notifications.create(activity.userId, "reminder", activity.promptTemplate, "", "info");
+      await this.prisma.scheduledActivityRun.create({
+        data: { activityId: activity.id, status: "ok", outputPreview: activity.promptTemplate.slice(0, 280) },
+      });
+      this.logger.log(`[scheduling] fired reminder ${activity.id} (nextRunAt=${nextRunAt?.toISOString() ?? "none"}, status=${status})`);
+      return;
+    }
 
     const run = await this.prisma.scheduledActivityRun.create({
       data: { activityId: activity.id, status: "pending" },
