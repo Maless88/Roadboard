@@ -12,7 +12,14 @@ from urllib.parse import urlparse, parse_qs
 
 ENV = os.path.expanduser("~/.config/roadboard/email-accounts.env")
 PORT = int(os.environ.get("EMAIL_HELPER_PORT", "8789"))
-PREFIX = {"aruba": "ARUBA_IMAP_"}
+# Known mailbox accounts. Env vars per account use prefix = ACCOUNT.upper().replace("-","_")+"_IMAP_"
+# e.g. aruba -> ARUBA_IMAP_{HOST,PORT,USER,PASSWORD}; gmail-perso -> GMAIL_PERSO_IMAP_*
+ACCOUNTS = {"aruba", "gmail-perso", "gmail-xstream"}
+
+def prefix_for(account):
+    if account not in ACCOUNTS:
+        raise ValueError(f"account sconosciuto: {account}")
+    return account.upper().replace("-", "_") + "_IMAP_"
 
 def load_env(p):
     out = {}
@@ -43,9 +50,7 @@ def snippet_of(msg, n=180):
     return ""
 
 def connect(env, account):
-    pre = PREFIX.get(account)
-    if not pre:
-        raise ValueError(f"account sconosciuto: {account}")
+    pre = prefix_for(account)
     host = env.get(pre + "HOST"); port = int(env.get(pre + "PORT", "993"))
     user = env.get(pre + "USER"); pwd = env.get(pre + "PASSWORD")
     if not (host and user and pwd):
@@ -101,8 +106,7 @@ def drafts_folder(M):
     return "Drafts"
 
 def save_draft(env, account, to, subject, body, cc=None, in_reply_to=None):
-    pre = PREFIX.get(account)
-    from_addr = env.get(pre + "USER") if pre else None
+    from_addr = env.get(prefix_for(account) + "USER")
     msg = EmailMessage()
     msg["From"] = from_addr or ""
     msg["To"] = to or ""

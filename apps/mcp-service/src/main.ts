@@ -721,7 +721,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba"], description: "Mailbox to read (default aruba)." },
+        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox to read (default aruba)." },
         limit: { type: "number", description: "How many recent messages (1-30, default 10)." },
       },
     },
@@ -733,7 +733,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba"], description: "Mailbox (default aruba)." },
+        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox (default aruba)." },
         uids: { type: "array", items: { type: "number" }, description: "UIDs of the messages to mark read (from read_inbox)." },
       },
       required: ["uids"],
@@ -746,7 +746,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba"], description: "Mailbox (default aruba)." },
+        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox (default aruba)." },
         to: { type: "string", description: "Recipient address(es), comma-separated." },
         subject: { type: "string", description: "Subject line." },
         body: { type: "string", description: "Plain-text body." },
