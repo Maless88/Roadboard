@@ -118,11 +118,17 @@ function cleanReply(s) {
     .join("\n")
     .replace(/\[\[ASK:[a-z0-9_-]+\]\]/gi, "");
   // drop leading "thinking-out-loud" paragraphs (English meta) before the real answer
-  const meta = /\b(let me|i should|i'?ll|i will|i need to|the user|i don'?t|i do not|i can'?t|we already|note (that|the)|as vera|let'?s|i'?m going to|first,? )\b/i;
+  const meta = /\b(let me|i should|i'?ll|i will|i need to|the user|i don'?t|i do not|i can'?t|we already|note (that|the)|as vera|let'?s|i'?m going to|first,? |looking at the|continue the loop)\b/i;
   const paras = t.split(/\n\s*\n/);
   let i = 0;
   while (i < paras.length - 1 && meta.test(paras[i])) i++;
-  return paras.slice(i).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  let out = paras.slice(i).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  // also drop leading meta SENTENCES (inline/glued, es. "Let me recall.Dalla…")
+  const sent = out.split(/(?<=[.?!])\s+|(?<=[.?!])(?=[A-ZÀ-Ÿ])/);
+  let j = 0;
+  while (j < sent.length - 1 && meta.test(sent[j]) && sent[j].length < 240) j++;
+  if (j > 0) out = sent.slice(j).join(" ").trim();
+  return out;
 }
 
 async function handleUpdate(u) {
