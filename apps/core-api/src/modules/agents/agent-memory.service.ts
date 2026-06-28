@@ -3,6 +3,8 @@ import { PrismaClient } from "@roadboard/database";
 
 const OLLAMA_EMBED_URL = process.env.OLLAMA_EMBED_URL || "http://host.docker.internal:11434/api/embeddings";
 const EMBED_MODEL = process.env.EMBED_MODEL || "nomic-embed-text";
+const OLLAMA_GEN_URL = process.env.OLLAMA_GEN_URL || "http://host.docker.internal:11434/api/generate";
+const EXTRACT_MODEL = process.env.EXTRACT_MODEL || "llama3.2:3b";
 
 export interface MemoryRow {
   id: string;
@@ -123,6 +125,59 @@ export class AgentMemoryService {
     );
     await this.touch(rows.map((r) => r.id));
     return rows;
+  }
+
+  /** PHASE 2 — auto-extraction: pull durable user facts/preferences from a message with a
+   *  small local LLM (Ollama, format=json) and store them (dedup handled by remember()).
+   *  Local & free; best-effort & meant to run fire-and-forget (never blocks a turn). */
+  async extractAndStore(userId: string, text: string, opts: { projectId?: string | null; source?: string } = {}): Promise<number> {
+    const t = (text || "").trim();
+    if (!userId || t.length < 30) return 0;
+    let raw = "{}";
+    try {
+      const r = await fetch(OLLAMA_GEN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: EXTRACT_MODEL,
+          stream: false,
+          format: "json",
+          options: { temperature: 0.1 },
+          prompt:
+            `Sei un estrattore di MEMORIE durevoli su un utente. Dal messaggio estrai SOLO fatti o preferenze STABILI e utili a lungo termine ` +
+            `(preferenze, abitudini, dati personali, vincoli, decisioni durature). IGNORA richieste momentanee, domande, compiti una-tantum, chiacchiere. ` +
+            `Rispondi SOLO JSON: {"memories":[{"content":"<fatto conciso, in italiano, in terza persona>","type":"semantic|episodic|procedural","importance":1-5}]}. ` +
+            `Se non c'e' nulla di memorabile: {"memories":[]}.\n\nMessaggio:\n"""${t.slice(0, 3000)}"""`,
+        }),
+      });
+      if (!r.ok) return 0;
+      const d = (await r.json()) as { response?: string };
+      raw = d.response || "{}";
+    } catch (e) {
+      this.logger.warn(`[memory] extract failed: ${e instanceof Error ? e.message : String(e)}`);
+      return 0;
+    }
+    let mems: { content?: string; type?: string; importance?: number }[] = [];
+    try {
+      const p = JSON.parse(raw) as { memories?: typeof mems };
+      mems = Array.isArray(p.memories) ? p.memories : [];
+    } catch {
+      return 0;
+    }
+    let n = 0;
+    for (const m of mems.slice(0, 5)) {
+      const content = (m?.content || "").toString().trim();
+      if (content.length < 4) continue;
+      const res = await this.remember(userId, content, {
+        projectId: opts.projectId ?? null,
+        type: m?.type || "semantic",
+        importance: typeof m?.importance === "number" ? m.importance : 3,
+        source: opts.source || "extracted",
+      });
+      if (res.ok && !res.deduped) n++;
+    }
+    if (n) this.logger.log(`[memory] auto-extracted ${n} memorie per ${userId}`);
+    return n;
   }
 
   private async touch(ids: string[]): Promise<void> {

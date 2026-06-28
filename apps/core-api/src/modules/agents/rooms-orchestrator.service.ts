@@ -120,6 +120,10 @@ export class RoomOrchestratorService {
           if (memMatch) {
             void memory.remember(user.userId, memMatch[1].trim(), { projectId: room.projectId ?? null, source: "user", importance: 4 })
               .catch(() => { /* best-effort */ });
+          } else if (message.trim().length >= 30) {
+            // PHASE 2 — auto-estrazione dei fatti impliciti (LLM locale, fire-and-forget, non blocca il turno)
+            void memory.extractAndStore(user.userId, message, { projectId: room.projectId ?? null })
+              .catch(() => { /* best-effort */ });
           }
 
           const agentList = (await agents.list()) as { slug: string; capability: string }[];
