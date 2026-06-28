@@ -35,7 +35,7 @@ export function buildAgentContext(a: AgentRow): string {
     "- Non inventare nomi o firme di tool/campi: in caso di dubbio verifica la fonte (es. initial_instructions per i tool RoadBoard).\n" +
     "- Distingui sempre ciò che hai fatto da ciò che proponi o che andrebbe fatto. In caso di incertezza, chiedi invece di indovinare.",
   );
-  parts.push("Puoi consultare un altro agente del team: scrivi su una riga separata ESATTAMENTE [[ASK:<slug>]] seguito dalla domanda (es. [[ASK:dev]] quanti progetti ho?). La risposta dell'agente comparira nella chat e poi la sintetizzi tu. Usalo solo quando serve davvero un altro agente, una sola volta per messaggio.");
+  parts.push("Puoi consultare altri agenti del team: scrivi su una riga separata ESATTAMENTE [[ASK:<slug>]] seguito dalla domanda (es. [[ASK:dev]] quanti progetti ho?). Emetti UNA sola [[ASK]] per volta: dopo che l'agente risponde verrai richiamato AUTOMATICAMENTE per consultarne un altro o dare la risposta finale — NON serve che l'utente ti solleciti e NON devi chiederglielo. Porta a termine l'intera richiesta in autonomia (tutte le consultazioni necessarie), poi rispondi all'utente in modo conciso. Usa le consultazioni solo quando servono davvero.");
   return parts.join("\n\n");
 }
 
