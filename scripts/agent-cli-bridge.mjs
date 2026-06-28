@@ -160,7 +160,15 @@ const handler = (req, res) => {
       } catch (e) { /* best-effort */ }
     }
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
-    const child = spawn(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'], cwd: reqCwd || (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
+    // Extended thinking for the technical agents (dev=Ada, security=argo): claude honors
+    // MAX_THINKING_TOKENS. Kept internal — the stream parser surfaces only tool_use + the
+    // final result, never thinking blocks. Budget tunable via AGENT_THINKING_BUDGET.
+    const THINKING_SLUGS = new Set(['dev', 'argo']);
+    const childEnv = { ...process.env };
+    if ((p.provider || 'claude-code') === 'claude-code' && THINKING_SLUGS.has(slug)) {
+      childEnv.MAX_THINKING_TOKENS = process.env.AGENT_THINKING_BUDGET || '6000';
+    }
+    const child = spawn(bin, args, { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], cwd: reqCwd || (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
     if (streamMode) {
       let buf = '';
       child.stdout.on('data', (d) => {
