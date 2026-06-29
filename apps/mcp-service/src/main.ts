@@ -17,6 +17,8 @@ const AUTH_ACCESS_HOST = optionalEnv("AUTH_ACCESS_HOST", "localhost");
 const AUTH_ACCESS_PORT = optionalEnv("AUTH_ACCESS_PORT", "3002");
 const EMAIL_HELPER_URL = optionalEnv("EMAIL_HELPER_URL", "http://host.docker.internal:8789");
 const EMAIL_HELPER_TOKEN = optionalEnv("EMAIL_HELPER_TOKEN", "");
+const CALENDAR_HELPER_URL = optionalEnv("CALENDAR_HELPER_URL", "http://host.docker.internal:8790");
+const CALENDAR_HELPER_TOKEN = optionalEnv("CALENDAR_HELPER_TOKEN", "");
 const MCP_TRANSPORT = optionalEnv("MCP_TRANSPORT", "stdio");
 const MCP_HTTP_PORT = Number(optionalEnv("MCP_HTTP_PORT", "3005"));
 const MCP_TOKEN = optionalEnv("MCP_TOKEN", "");
@@ -757,6 +759,45 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     },
   },
   {
+    name: "list_events",
+    description:
+      "List the user's upcoming calendar events (Nextcloud) in the next N days. Returns start, end, summary, location, calendar. Use to check the agenda / answer 'what's coming up'.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        days: { type: "number", description: "Horizon in days (1-120, default 14)." },
+        calendar: { type: "string", description: "Optional calendar name to filter." },
+      },
+    },
+  },
+  {
+    name: "create_event",
+    description:
+      "Create a calendar event (Nextcloud). start/end are ISO datetimes (es. 2026-07-02T15:00:00, timezone Europe/Rome se senza offset) oppure una data YYYY-MM-DD per un evento tutto-il-giorno. Use to schedule meetings/appointments on the user's request.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        summary: { type: "string", description: "Event title." },
+        start: { type: "string", description: "ISO datetime or YYYY-MM-DD (all-day)." },
+        end: { type: "string", description: "Optional ISO datetime / date; default +1h (or +1 day all-day)." },
+        description: { type: "string", description: "Optional details." },
+        location: { type: "string", description: "Optional location." },
+        calendar: { type: "string", description: "Optional target calendar name (default the user's primary)." },
+      },
+      required: ["summary", "start"],
+    },
+  },
+  {
+    name: "delete_event",
+    description:
+      "Delete a calendar event by its href (the value returned by create_event / present in the event). Use only on explicit user request.",
+    inputSchema: {
+      type: "object" as const,
+      properties: { href: { type: "string", description: "Event href (CalDAV URL)." } },
+      required: ["href"],
+    },
+  },
+  {
     name: "notify",
     description:
       "Send a proactive notification to the user (delivered via Telegram by the notification hub). Use for things worth telling the user without being asked. Keep it short.",
@@ -865,6 +906,9 @@ const TOOL_REQUIRED_SCOPES: Record<string, string> = {
   read_inbox: "project.read",
   mark_read: "project.write",
   create_draft: "project.write",
+  list_events: "project.read",
+  create_event: "project.write",
+  delete_event: "project.write",
   notify: "project.write",
   list_scheduled_activities: "project.read",
   create_scheduled_activity: "project.write",
@@ -1288,6 +1332,44 @@ export async function handleToolCall(
         }),
       });
       if (!r.ok) return errorResponse(`email helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
+    }
+
+    case "list_events": {
+      const days = Math.max(1, Math.min(120, Number(args.days) || 14));
+      const cal = args.calendar ? `&calendar=${encodeURIComponent(args.calendar as string)}` : "";
+      const r = await fetch(`${CALENDAR_HELPER_URL}/events?days=${days}${cal}`, {
+        headers: CALENDAR_HELPER_TOKEN ? { Authorization: `Bearer ${CALENDAR_HELPER_TOKEN}` } : {},
+      });
+      if (!r.ok) return errorResponse(`calendar helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
+    }
+
+    case "create_event": {
+      if (!args.summary || !args.start) return errorResponse("create_event: 'summary' and 'start' are required.");
+      const r = await fetch(`${CALENDAR_HELPER_URL}/event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(CALENDAR_HELPER_TOKEN ? { Authorization: `Bearer ${CALENDAR_HELPER_TOKEN}` } : {}) },
+        body: JSON.stringify({
+          summary: args.summary as string,
+          start: args.start as string,
+          end: args.end as string | undefined,
+          description: args.description as string | undefined,
+          location: args.location as string | undefined,
+          calendar: args.calendar as string | undefined,
+        }),
+      });
+      if (!r.ok) return errorResponse(`calendar helper ${r.status}: ${await r.text()}`);
+      return jsonResponse(await r.json());
+    }
+
+    case "delete_event": {
+      if (!args.href) return errorResponse("delete_event: 'href' is required.");
+      const r = await fetch(`${CALENDAR_HELPER_URL}/event?href=${encodeURIComponent(args.href as string)}`, {
+        method: "DELETE",
+        headers: CALENDAR_HELPER_TOKEN ? { Authorization: `Bearer ${CALENDAR_HELPER_TOKEN}` } : {},
+      });
+      if (!r.ok) return errorResponse(`calendar helper ${r.status}: ${await r.text()}`);
       return jsonResponse(await r.json());
     }
 
