@@ -284,16 +284,32 @@ export class RoomOrchestratorService {
 
             const { slug: tSlug, config: tConfig } = await agents.resolveForChat(target, user.userId);
             tConfig.projectId = room.projectId ?? null; tConfig.source = "chat"; tConfig.repoUrl = repoUrl;
-            let tReply = "";
-            for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) { if (cancelled) break; tReply += chunk; }
-            tReply = stripAgentMeta(tReply.split("[[")[0]) || "(nessuna risposta)";
+            let tRaw = "";
+            for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) { if (cancelled) break; tRaw += chunk; }
+            // Image-capability agents (e.g. Frida) emit "[[IMG]] <prompt>": when consulted via
+            // delegation we must run imageGen here too (the primary responder path does it),
+            // otherwise the directive is stripped and no image is ever produced.
+            let tReply: string;
+            let tFeedback: string;
+            const tImg = capBySlug.get(target) === "image" ? tRaw.match(/\[\[IMG\]\]\s*([\s\S]+?)\s*$/i) : null;
+            if (tImg && typeof tImg.index === "number") {
+              const iPrompt = tImg[1].trim();
+              const iVisible = stripAgentMeta(tRaw.slice(0, tImg.index)).trim() || "\u{1F3A8} Ecco l'immagine.";
+              const gen = await imageGen.generate(user.userId, iPrompt);
+              if (gen.ok) { tReply = iVisible + "\x1fdata:image/png;base64," + gen.b64; tFeedback = iVisible + " (immagine generata e mostrata all'utente)"; }
+              else if (gen.error === "no-credentials") { tReply = iVisible + "\n(Per generare immagini configura la API key Cloudflare nella scheda di Frida.)"; tFeedback = tReply; }
+              else { tReply = iVisible + "\n(Generazione immagine fallita: " + gen.error + ".)"; tFeedback = tReply; }
+            } else {
+              tReply = stripAgentMeta(tRaw.split("[[")[0]) || "(nessuna risposta)";
+              tFeedback = tReply;
+            }
             await rooms.appendMessage(roomId, "agent", tSlug, tReply);
             void audit.recordForUser(user, "agent.run.completed", "agent", tSlug, undefined, { ok: true, durationMs: Date.now() - started, delegatedFrom: slug, roomId });
 
             const nearCap = iter + 1 >= MAX_STEPS;
             // Feed back a CLEAN turn (no markers/reasoning) so the model doesn't parrot syntax.
             convo.push({ role: "assistant", content: (lead ? lead + "\n" : "") + `[[ASK:${target}]] ${question}` });
-            convo.push({ role: "user", content: `[sistema] ${tName} ha risposto:\n${tReply}\n\nProsegui la richiesta dell'utente. ${nearCap ? "Dai ORA la risposta finale, senza altre consultazioni." : "Se ti serve un altro agente emetti una nuova [[ASK:<slug>]] (una sola); altrimenti dai la risposta finale, concisa. NON scrivere ragionamento o righe tipo '_→' o '↪'."}` });
+            convo.push({ role: "user", content: `[sistema] ${tName} ha risposto:\n${tFeedback}\n\nProsegui la richiesta dell'utente. ${nearCap ? "Dai ORA la risposta finale, senza altre consultazioni." : "Se ti serve un altro agente emetti una nuova [[ASK:<slug>]] (una sola); altrimenti dai la risposta finale, concisa. NON scrivere ragionamento o righe tipo '_→' o '↪'."}` });
           }
 
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
