@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma.module';
 import { CommonModule } from './common/common.module';
 import { HealthModule } from './modules/health/health.module';
@@ -14,6 +15,7 @@ import { TokensModule } from './modules/tokens/tokens.module';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 5 }]),
     PrismaModule,
     CommonModule,
     HealthModule,

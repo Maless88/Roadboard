@@ -16,6 +16,7 @@
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-fastify": "^11.0.0",
     "@nestjs/swagger": "^11.2.0",
+    "@nestjs/throttler": "^6.5.0",
     "@roadboard/auth": "workspace:*",
     "@roadboard/config": "workspace:*",
     "@roadboard/database": "workspace:*",
