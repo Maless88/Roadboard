@@ -82,8 +82,38 @@ const AGENT_SKILLS_DIR = process.env.AGENT_SKILLS_DIR || ((process.env.HOME || '
 // Ada (dev) = rw and may commit on explicit user request; readers (e.g. security) = ro on the same path.
 const REPOS_BASE = process.env.AGENT_REPOS_BASE || ((process.env.HOME || '/home/alessio') + '/agent-repos');
 const REPO_ACCESS = { dev: 'rw', argo: 'ro', tullio: 'ro' }; // argo (audit) + tullio (docs) read the clone, no write
+// Map bare names (local://roadboard) -> abs path. Format: "name=path;name2=path2".
+function parseLocalRepoMap(s) {
+  const m = {};
+  if (!s) return m;
+  for (const pair of String(s).split(/[;,]/)) {
+    const i = pair.indexOf('=');
+    if (i > 0) m[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+  }
+  return m;
+}
+// Resolve a local:// repoUrl to an existing on-disk path WITHOUT cloning.
+// Forms: local:///abs/path (verbatim) or local://name (via AGENT_LOCAL_REPOS map / AGENT_LOCAL_REPOS_BASE).
+function resolveLocalRepo(repoUrl) {
+  const rest = String(repoUrl).slice('local://'.length);
+  let abs = null;
+  if (rest.startsWith('/')) {
+    abs = path.resolve(rest);
+  } else if (rest) {
+    const map = parseLocalRepoMap(process.env.AGENT_LOCAL_REPOS);
+    if (map[rest]) abs = path.resolve(map[rest]);
+    else if (process.env.AGENT_LOCAL_REPOS_BASE) abs = path.resolve(process.env.AGENT_LOCAL_REPOS_BASE, rest);
+  }
+  if (!abs) { console.error('[repo-ensure] cannot resolve local repo', repoUrl); return null; }
+  try {
+    if (!fs.statSync(abs).isDirectory()) { console.error('[repo-ensure] local path not a dir', abs); return null; }
+  } catch (e) { console.error('[repo-ensure] local path missing', abs); return null; }
+  return abs; // used in-place, read-only; we never clone/pull/modify the user's own checkout
+}
 function ensureProjectRepo(projectId, repoUrl) {
   if (!projectId || !repoUrl) return null;
+  // Local checkout already on disk: read it in place, do NOT clone.
+  if (String(repoUrl).startsWith('local://')) return resolveLocalRepo(repoUrl);
   if (!/^[A-Za-z0-9_-]+$/.test(projectId)) return null; // safe dir name
   const dir = path.join(REPOS_BASE, projectId);
   try {
@@ -143,11 +173,11 @@ const handler = (req, res) => {
     const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), '--setting-sources', 'project', ...(p.model ? ['--model', String(p.model)] : []), ...toolFlags, ...mcpFlags];
+      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), '--setting-sources', 'project', ...(p.model ? ['--model', String(p.model)] : []), ...(repoPath ? ['--add-dir', repoPath] : []), ...toolFlags, ...mcpFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
-        const _ctx = p.contextMd + (repoPath ? ('\n\n## Repo del progetto\nIl repository del progetto e clonato in: ' + repoPath + ' (accesso ' + repoAccess + '). Lavora lì con path assoluti; non toccare altri percorsi del sistema.') : '');
+        const _ctx = p.contextMd + (repoPath ? ('\n\n## Repo del progetto\nIl repository del progetto e disponibile in locale in: ' + repoPath + ' (accesso ' + repoAccess + '). Leggilo lì con path assoluti; non toccare altri percorsi del sistema.') : '');
         fs.writeFileSync(path.join(reqCwd, 'CLAUDE.md'), _ctx);
         // project-scope skills: only the methodology set, never the user's personal skills
         const cdir = path.join(reqCwd, '.claude'); fs.mkdirSync(cdir, { recursive: true });
