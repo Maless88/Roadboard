@@ -32,6 +32,16 @@ export class RoomsController {
     return this.rooms.getRoom(user.userId, id);
   }
 
+  @Get(":id/messages")
+  messages(
+    @CurrentUser() user: AuthUser,
+    @Param("id") id: string,
+    @Query("before") before?: string,
+    @Query("limit") limit?: string,
+  ): Promise<unknown> {
+    return this.rooms.listRoomMessages(user.userId, id, before, Number(limit) || 50);
+  }
+
   @Post(":id/messages")
   postMessage(
     @CurrentUser() user: AuthUser,

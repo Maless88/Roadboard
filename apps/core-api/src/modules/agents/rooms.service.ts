@@ -88,6 +88,28 @@ export class RoomsService {
     };
   }
 
+  /** Messaggi paginati: ultimi `limit` o quelli prima del cursore `before` (id messaggio). */
+  async listRoomMessages(ownerUserId: string, roomId: string, before: string | undefined, limit: number): Promise<unknown> {
+    await this.assertMember(ownerUserId, roomId);
+    const take = Math.min(Math.max(limit || 50, 1), 100);
+    let beforeDate: Date | undefined;
+    if (before) {
+      const cur = await this.prisma.roomMessage.findUnique({ where: { id: before } });
+      if (cur) beforeDate = cur.createdAt;
+    }
+    const rows = await this.prisma.roomMessage.findMany({
+      where: { roomId, ...(beforeDate ? { createdAt: { lt: beforeDate } } : {}) },
+      orderBy: { createdAt: "desc" },
+      take: take + 1,
+    });
+    const hasMore = rows.length > take;
+    const page = rows.slice(0, take).reverse();
+    return {
+      hasMore,
+      messages: page.map((m) => ({ id: m.id, senderKind: m.senderKind, senderId: m.senderId, content: m.content, createdAt: m.createdAt })),
+    };
+  }
+
   /** Post a message authored by the owner user (auth-checked). */
   async postMessage(ownerUserId: string, roomId: string, content: string): Promise<unknown> {
     await this.assertMember(ownerUserId, roomId);
