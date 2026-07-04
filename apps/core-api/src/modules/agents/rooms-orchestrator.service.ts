@@ -43,6 +43,8 @@ export function stripAgentMeta(s: string): string {
 /** Extract @mentions (slug tokens) from a message, lowercased and de-duped. */
 /** Strip the embedded image data-URL (caption + "\x1f" + dataURL) so generated
  * images are never fed back into the LLM prompt on subsequent turns. */
+const CONTEXT_MSG_CAP = 40; // messaggi max passati al modello per turno
+
 export function forLlmContent(content: string): string {
   const i = content.indexOf("\x1f");
   return i === -1 ? content : content.slice(0, i);
@@ -164,7 +166,7 @@ export class RoomOrchestratorService {
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
             const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
             gconfig.projectId = room.projectId ?? null; gconfig.source = "chat"; gconfig.repoUrl = repoUrl;
-            const gmsgs: ChatMessage[] = room.messages.map((mm) => {
+            const gmsgs: ChatMessage[] = room.messages.slice(-CONTEXT_MSG_CAP).map((mm) => {
               if (mm.senderKind === "user") return { role: "user", content: forLlmContent(mm.content) };
               if (mm.senderId === gslug) return { role: "assistant", content: forLlmContent(mm.content) };
               return { role: "user", content: `[${mm.senderId}]: ${forLlmContent(mm.content)}` };
@@ -221,7 +223,7 @@ export class RoomOrchestratorService {
           // Feed prior agent turns back WITHOUT the streamed markers (↪ / _→ tool_) or
           // leaked meta, so the model doesn't parrot that syntax in new turns.
           const messages: ChatMessage[] = [];
-          for (const m of room.messages) {
+          for (const m of room.messages.slice(-CONTEXT_MSG_CAP)) { // context-window: ultimi N msg al modello (i piu vecchi coperti dalla memoria durevole)
             if (m.senderKind === "user") { messages.push({ role: "user", content: forLlmContent(m.content) }); continue; }
             const cleaned = stripAgentMeta(forLlmContent(m.content));
             if (!cleaned) continue;
