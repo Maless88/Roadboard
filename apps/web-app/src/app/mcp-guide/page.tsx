@@ -1,6 +1,10 @@
-import type { Metadata } from 'next';
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { Suspense } from 'react';
-import { getDict } from '@/lib/i18n';
+import { getDict } from "@/lib/i18n";
+import { getToken } from "@/lib/auth";
+import { validateSession } from "@/lib/api";
+import { isLifeOsUser } from "@/lib/access";
 import { Wizard } from './_components/Wizard';
 
 
@@ -16,6 +20,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
 
 export default async function McpGuidePage() {
+
+  const token = await getToken();
+
+  if (!token) redirect('/login');
+
+  const session = await validateSession(token);
+
+  if (!session) redirect('/login');
+  if (!isLifeOsUser(session)) redirect('/dashboard');
 
   const dict = await getDict();
   const wDict = dict.mcp.wizard;

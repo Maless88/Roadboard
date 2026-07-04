@@ -3,6 +3,7 @@ import { getToken } from "@/lib/auth";
 import { validateSession, getAgentContacts, getAgentActivity } from "@/lib/api";
 import type { AgentContact, AgentActivity } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { isLifeOsUser } from "@/lib/access";
 import { HomeClient } from "./home-client";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export default async function HomePage() {
   if (!token) redirect("/login");
   const session = await validateSession(token);
   if (!session) redirect("/login");
+  if (!isLifeOsUser(session)) redirect("/dashboard");
 
   const enabled = process.env.AGENTS_ENABLED === "true";
   let contacts: AgentContact[] = [];

@@ -9,6 +9,7 @@ import { useDict } from '@/lib/i18n/locale-context';
 import { useTheme } from '@/lib/theme-context';
 import { useToast } from '@/lib/toast-context';
 import { withToast } from '@/lib/with-toast';
+import { isLifeOsUser } from '@/lib/access';
 import {
   changePasswordAction,
   createTokenAction,
@@ -154,7 +155,6 @@ function SecurityTab() {
   const dict = useDict();
   const [state, action, pending] = useActionState(changePasswordAction, {});
   const formRef = useRef<HTMLFormElement>(null);
-
   useEffect(() => {
 
     if (state.success) formRef.current?.reset();
@@ -193,6 +193,7 @@ const MCP_TOKEN_SCOPES: { value: string; defaultChecked: boolean }[] = [
 function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTokens: McpTokenInfo[] }) {
 
   const dict = useDict();
+  const showMcpGuide = isLifeOsUser(session);
   const { showToast } = useToast();
   const [tokens, setTokens] = useState(initialTokens);
   const [createState, createAction, createPending] = useActionState(createTokenAction, {});
@@ -340,6 +341,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
         </form>
       </Card>
 
+      {showMcpGuide && (
       <Card>
         <p className="text-xs text-gray-500 leading-relaxed">
           {dict.settings.tokens.helpText}{' '}
@@ -348,6 +350,7 @@ function TokensTab({ session, initialTokens }: { session: SessionInfo; initialTo
           </a>
         </p>
       </Card>
+      )}
     </div>
   );
 }

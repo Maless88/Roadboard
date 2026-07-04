@@ -1,5 +1,9 @@
-import type { Metadata } from 'next';
-import { getDict } from '@/lib/i18n';
+import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { getDict } from "@/lib/i18n";
+import { getToken } from "@/lib/auth";
+import { validateSession } from "@/lib/api";
+import { isLifeOsUser } from "@/lib/access";
 import type { Dictionary } from '@/lib/i18n/types';
 
 
@@ -122,6 +126,15 @@ function buildTools(dict: Dictionary): { name: string; desc: string; category: '
 
 
 export default async function McpGuidePage() {
+
+  const token = await getToken();
+
+  if (!token) redirect('/login');
+
+  const session = await validateSession(token);
+
+  if (!session) redirect('/login');
+  if (!isLifeOsUser(session)) redirect('/dashboard');
 
   const dict = await getDict();
 

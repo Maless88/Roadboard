@@ -4,6 +4,7 @@ import { getToken } from "@/lib/auth";
 import { validateSession, getAgentActivity, getOpsStatus } from "@/lib/api";
 import type { AgentActivity, OpsStatus } from "@/lib/api";
 import { AppShell } from "@/components/app-shell";
+import { isLifeOsUser } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function AgentiSistemaPage() {
   if (!token) redirect("/login");
   const session = await validateSession(token);
   if (!session) redirect("/login");
+  if (!isLifeOsUser(session)) redirect("/dashboard");
 
   const enabled = process.env.AGENTS_ENABLED === "true";
 

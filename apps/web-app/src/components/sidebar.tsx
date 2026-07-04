@@ -10,6 +10,7 @@ import { ThemeToggle } from './theme-toggle';
 import { NotificationBell } from './notification-bell';
 import { formatBuildLabel } from '@/lib/build-label';
 import type { Locale } from '@/lib/i18n';
+import { isLifeOsUser } from '@/lib/access';
 
 
 interface ActiveProject {
@@ -46,6 +47,7 @@ const STATUS_DOT: Record<string, string> = {
 export function Sidebar({ username, displayName, activeProject, userProjects = [], locale }: SidebarProps) {
 
   const dict = useDict();
+  const showLifeOs = isLifeOsUser({ username });
   const [menuOpen, setMenuOpen] = useState(false);
   const [projectSwitcherOpen, setProjectSwitcherOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -276,6 +278,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
         )}
         {/* Navigazione principale */}
         <div className="mt-3 px-1">
+          {showLifeOs && (<>
           {!collapsed && <p className="px-2 mb-1 text-[10px] font-mono text-gray-600 uppercase tracking-wider">Navigazione</p>}
           <Link href="/home" title="Home"
             className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/home' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
@@ -312,6 +315,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
             </svg>
             {!collapsed && <span>Notifiche</span>}
           </Link>
+          </>)}
         </div>
 
       </nav>
@@ -320,6 +324,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
       <div className="px-2 py-3 space-y-0.5" style={{ borderTop: '1px solid var(--border-soft)' }}>
 
         {/* Guida (secondaria, in fondo) */}
+        {showLifeOs && (
         <Link href="/guida" title="Guida"
           className={`flex items-center gap-2.5 py-2 rounded-lg text-xs transition-colors hover:text-white hover:bg-white/5 ${pathname === '/guida' ? 'text-white bg-white/5' : 'text-gray-400'} ${collapsed ? 'justify-center px-0' : 'px-3'}`}>
           <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -327,6 +332,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
           </svg>
           {!collapsed && <span>Guida</span>}
         </Link>
+        )}
 
         {/* User menu */}
         <div ref={menuRef} className="relative mt-1">
