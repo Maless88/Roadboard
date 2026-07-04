@@ -23,7 +23,25 @@ export interface AgentExecConfig {
   repoUrl?: string | null;
 }
 
+export interface AgentUsage {
+  in: number;
+  out: number;
+  cc: number;
+  cr: number;
+}
+
+/**
+ * Mutable bag populated by streamCli when the bridge emits a __rb_tok__ sentinel.
+ * Callers pass an empty object and read .usage after the stream ends.
+ */
+export interface AgentRunSidecar {
+  usage?: AgentUsage;
+}
+
 const API_PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama"];
+
+// Sentinel emitted by the bridge after the result text.
+const USAGE_SENTINEL = "\n__rb_tok__:";
 
 /**
  * Runs an agent against an LLM, selecting provider/runtime per AgentExecConfig.
@@ -33,10 +51,10 @@ const API_PROVIDERS: readonly ProviderName[] = ["openai", "anthropic", "ollama"]
  */
 export class AgentExecutor {
 
-  stream(agent: AgentExecConfig, messages: ChatMessage[]): AsyncIterable<string> {
+  stream(agent: AgentExecConfig, messages: ChatMessage[], sidecar?: AgentRunSidecar): AsyncIterable<string> {
 
     if (agent.runtime === "cli") {
-      return this.streamCli(agent, messages);
+      return this.streamCli(agent, messages, sidecar);
     }
 
     const full: ChatMessage[] = agent.systemPrompt
@@ -57,6 +75,7 @@ export class AgentExecutor {
   private async *streamCli(
     agent: AgentExecConfig,
     messages: ChatMessage[],
+    sidecar?: AgentRunSidecar,
   ): AsyncIterable<string> {
 
     const url = optionalEnv("AGENT_CLI_BRIDGE_URL", "http://host.docker.internal:8787/run");
@@ -78,11 +97,54 @@ export class AgentExecutor {
 
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
+    // Buffer up to len(USAGE_SENTINEL) extra chars to avoid splitting sentinel across chunks.
+    let trail = "";
 
     while (true) {
       const { value, done } = await reader.read();
-      if (done) break;
-      yield decoder.decode(value, { stream: true });
+
+      if (done) {
+        if (trail) {
+          const idx = trail.indexOf(USAGE_SENTINEL);
+
+          if (idx !== -1) {
+            if (idx > 0) yield trail.slice(0, idx);
+            if (sidecar) {
+              try { sidecar.usage = JSON.parse(trail.slice(idx + USAGE_SENTINEL.length).trim()) as AgentUsage; } catch { /* ignore malformed */ }
+            }
+          } else {
+            yield trail;
+          }
+        }
+        break;
+      }
+
+      const text = decoder.decode(value, { stream: true });
+      trail += text;
+
+      const idx = trail.indexOf(USAGE_SENTINEL);
+
+      if (idx !== -1) {
+        if (idx > 0) yield trail.slice(0, idx);
+        const after = trail.slice(idx + USAGE_SENTINEL.length);
+        // JSON complete when it ends with '}'
+        if (after.trimEnd().endsWith("}")) {
+          if (sidecar) {
+            try { sidecar.usage = JSON.parse(after.trim()) as AgentUsage; } catch { /* ignore malformed */ }
+          }
+          trail = "";
+        } else {
+          // Incomplete JSON — keep buffering without re-emitting the sentinel prefix
+          trail = USAGE_SENTINEL + after;
+        }
+      } else {
+        // No sentinel yet: yield safe prefix (all but last USAGE_SENTINEL.length chars)
+        const safeLen = Math.max(0, trail.length - USAGE_SENTINEL.length);
+        if (safeLen > 0) {
+          yield trail.slice(0, safeLen);
+          trail = trail.slice(safeLen);
+        }
+      }
     }
   }
 

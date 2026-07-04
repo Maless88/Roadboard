@@ -7,6 +7,7 @@ import type { AuthUser } from "../../common/auth-user";
 import { AuditService } from "../audit/audit.service";
 import type { ChatMessage } from "../chatbot/providers";
 import { AgentExecutorService } from "./agent-executor.service";
+import type { AgentRunSidecar } from "@roadboard/agent-runtime";
 import { AgentsService } from "./agents.service";
 import { ChatService } from "./chat.service";
 import { CoordinatorService } from "./coordinator.service";
@@ -103,16 +104,19 @@ export class AgentsController {
 
         try {
           const messages: ChatMessage[] = [{ role: "user", content: message ?? "" }];
-          for await (const chunk of executor.stream(runConfig, messages)) {
+          const sidecar: AgentRunSidecar = {};
+          for await (const chunk of executor.stream(runConfig, messages, sidecar)) {
             if (cancelled) return;
             reply += chunk;
             subscriber.next({ data: chunk });
           }
           if (reply.length > 0) await chat.appendMessage(thread.id, "assistant", reply);
+          const u = sidecar.usage;
           void audit.recordForUser(user, "agent.run.completed", "agent", runSlug, undefined, {
             ok: true,
             durationMs: Date.now() - started,
             chars: reply.length,
+            ...(u ? { tokensIn: u.in, tokensOut: u.out, tokensCacheCreate: u.cc, tokensCacheRead: u.cr, tokensTotal: u.in + u.out + u.cc + u.cr } : {}),
           });
           subscriber.next({ data: "[DONE]" });
           subscriber.complete();

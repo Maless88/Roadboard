@@ -215,8 +215,17 @@ const handler = (req, res) => {
                 res.write('\n_\u2192 ' + nm + '_\n');
               }
             }
-          } else if (ev.type === 'result' && typeof ev.result === 'string') {
-            res.write('\n' + ev.result);
+          } else if (ev.type === 'result') {
+            if (typeof ev.result === 'string') res.write('\n' + ev.result);
+            if (ev.usage && typeof ev.usage === 'object') {
+              const u = ev.usage;
+              res.write('\n__rb_tok__:' + JSON.stringify({
+                in: (u.input_tokens || 0),
+                out: (u.output_tokens || 0),
+                cc: (u.cache_creation_input_tokens || 0),
+                cr: (u.cache_read_input_tokens || 0),
+              }));
+            }
           }
         }
       });

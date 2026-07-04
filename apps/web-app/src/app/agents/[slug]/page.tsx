@@ -97,7 +97,7 @@ export default async function AgentProfilePage({ params }: { params: Promise<{ s
               <div><div className="text-xs text-zinc-500">Run oggi</div><div className="text-lg font-bold text-zinc-100">{p.stats.runsToday}</div></div>
               <div><div className="text-xs text-zinc-500">Latenza media</div><div className="text-lg font-bold text-zinc-100">{p.stats.avgLatencyMs != null ? `${(p.stats.avgLatencyMs/1000).toFixed(1)}s` : "—"}</div></div>
               <div><div className="text-xs text-zinc-500">Ultimo run</div><div className="text-lg font-bold text-zinc-100">{p.stats.lastRun ? new Date(p.stats.lastRun).toLocaleTimeString() : "—"}</div></div>
-              <div><div className="text-xs text-zinc-500">Token ~ (storico)</div><div className="text-lg font-bold text-zinc-100">{p.stats.tokensApprox}</div></div>
+              <div><div className="text-xs text-zinc-500">{p.stats.tokensHaveReal ? "Token (storico)" : "Token ~ (storico)"}</div><div className="text-lg font-bold text-zinc-100">{p.stats.tokensApprox}</div></div>
             </div>
 
             <h2 className="mt-6 mb-2 text-sm font-semibold text-zinc-200">Attività recente</h2>

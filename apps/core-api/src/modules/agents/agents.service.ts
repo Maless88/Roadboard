@@ -98,7 +98,10 @@ export class AgentsService {
     };
     const durations = completed.map((e) => num(e, "durationMs")).filter((n) => Number.isFinite(n));
     const avg = durations.length ? Math.round(durations.reduce((x, y) => x + y, 0) / durations.length) : null;
+    let hasRealTokens = false;
     const tokens = completed.reduce((acc, e) => {
+      const total = num(e, "tokensTotal");
+      if (Number.isFinite(total)) { hasRealTokens = true; return acc + total; }
       const c = num(e, "chars");
       return acc + (Number.isFinite(c) ? Math.round(c / 4) : 0);
     }, 0);
@@ -131,6 +134,7 @@ export class AgentsService {
         avgLatencyMs: avg,
         lastRun: completed[0]?.createdAt ?? null,
         tokensApprox: tokens,
+        tokensHaveReal: hasRealTokens,
       },
       recent: events.slice(0, 8).map((e) => {
         const rid = (e.metadata as Record<string, unknown> | null)?.roomId as string | undefined;

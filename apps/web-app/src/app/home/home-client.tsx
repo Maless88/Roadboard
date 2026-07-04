@@ -100,7 +100,7 @@ interface Profile {
   name: string; slug: string; capability: string; provider: string; model: string; runtime: string;
   trustTier: string; description: string | null; avatarUrl: string | null; doesText: string | null; doesNotText: string | null;
   skills: { name: string; description: string }[];
-  stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number };
+  stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number; tokensHaveReal?: boolean };
   recent: RecentItem[];
 }
 function useProfile(slug: string) {
@@ -187,7 +187,7 @@ function LogModal({ agent, onClose }: { agent: Contact; onClose: () => void }) {
         ) : (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {[["Run oggi", String(p.stats.runsToday)], ["Latenza", p.stats.avgLatencyMs != null ? `${(p.stats.avgLatencyMs / 1000).toFixed(1)}s` : "—"], ["Ultimo run", p.stats.lastRun ? timeAgo(p.stats.lastRun) : "—"], ["Token ~", String(p.stats.tokensApprox)]].map(([k, v]) => (
+              {[["Run oggi", String(p.stats.runsToday)], ["Latenza", p.stats.avgLatencyMs != null ? `${(p.stats.avgLatencyMs / 1000).toFixed(1)}s` : "—"], ["Ultimo run", p.stats.lastRun ? timeAgo(p.stats.lastRun) : "—"], [p.stats.tokensHaveReal ? "Token" : "Token ~", String(p.stats.tokensApprox)]].map(([k, v]) => (
                 <div key={k} className="rounded-xl border border-white/10 bg-zinc-900/50 p-3">
                   <div className="text-[11px] text-zinc-500">{k}</div>
                   <div className="text-base font-bold text-zinc-100">{v}</div>
@@ -230,6 +230,15 @@ function ActivityDetail({ item, onBack }: { item: RecentItem; onBack: () => void
   const m = item.metadata ?? {};
   const ms = evNum(m, "durationMs");
   const ch = evNum(m, "chars");
+  const tokTotal = evNum(m, "tokensTotal");
+  const tokIn = evNum(m, "tokensIn");
+  const tokOut = evNum(m, "tokensOut");
+  const tokCc = evNum(m, "tokensCacheCreate");
+  const tokCr = evNum(m, "tokensCacheRead");
+  const tokenLabel = tokTotal != null ? "Token" : "Token ~";
+  const tokenValue = tokTotal != null
+    ? `${tokTotal} (in ${tokIn ?? "?"} · out ${tokOut ?? "?"} · cache_wr ${tokCc ?? 0} · cache_rd ${tokCr ?? 0})`
+    : ch != null ? `~${Math.round(ch / 4)} (${ch} char)` : "—";
   const rows: [string, string][] = [
     ["Esito", EV_LABEL[kind] ?? kind],
     ["Quando", new Date(item.createdAt).toLocaleString()],
@@ -238,7 +247,7 @@ function ActivityDetail({ item, onBack }: { item: RecentItem; onBack: () => void
     ["Runtime", typeof m.runtime === "string" ? m.runtime : "—"],
     ["Provider", typeof m.provider === "string" ? m.provider : "—"],
     ["Durata", ms != null ? `${(ms / 1000).toFixed(1)}s` : "—"],
-    ["Token ~", ch != null ? `~${Math.round(ch / 4)} (${ch} char)` : "—"],
+    [tokenLabel, tokenValue],
     ["Delega a", typeof m.to === "string" ? m.to : "—"],
     ["Room id", item.roomId ?? "—"],
   ];

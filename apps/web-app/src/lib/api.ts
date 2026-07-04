@@ -1586,7 +1586,7 @@ export interface AgentProfile {
   description: string | null; avatarUrl: string | null; doesText: string | null; doesNotText: string | null;
   skills: { name: string; description: string }[];
   workspacePath: string;
-  stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number };
+  stats: { runsToday: number; avgLatencyMs: number | null; lastRun: string | null; tokensApprox: number; tokensHaveReal?: boolean };
   recent: { eventType: string; createdAt: string; metadata: Record<string, unknown> | null }[];
 }
 

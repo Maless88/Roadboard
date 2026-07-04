@@ -4,6 +4,7 @@ import { AuditService } from "../audit/audit.service";
 import type { AuthUser } from "../../common/auth-user";
 import type { ChatMessage } from "../chatbot/providers/types";
 import { AgentExecutorService } from "./agent-executor.service";
+import type { AgentRunSidecar } from "@roadboard/agent-runtime";
 import { AgentsService } from "./agents.service";
 import { CoordinatorService } from "./coordinator.service";
 import { RoomsService } from "./rooms.service";
@@ -245,16 +246,22 @@ export class RoomOrchestratorService {
           const MAX_STEPS = 12;                // cap: bounds Opus calls per user turn
           const convo: ChatMessage[] = [...messages];
           let totalChars = 0, steps = 0;
+          let totalUsageIn = 0, totalUsageOut = 0, totalUsageCc = 0, totalUsageCr = 0;
           for (let iter = 0; !cancelled; iter++) {
             const forceFinal = iter >= MAX_STEPS;   // last pass: no more delegation, must answer
             let reply = "";
             let shown = 0;
-            for await (const chunk of executor.stream(config, convo)) {
+            const iterSidecar: AgentRunSidecar = {};
+            for await (const chunk of executor.stream(config, convo, iterSidecar)) {
               if (cancelled) break;
               reply += chunk;
               const cut = reply.indexOf("[[");
               const safeEnd = cut === -1 ? reply.length : cut;
               if (safeEnd > shown && !cancelled) { subscriber.next({ data: reply.slice(shown, safeEnd) }); shown = safeEnd; }
+            }
+            if (iterSidecar.usage) {
+              totalUsageIn += iterSidecar.usage.in; totalUsageOut += iterSidecar.usage.out;
+              totalUsageCc += iterSidecar.usage.cc; totalUsageCr += iterSidecar.usage.cr;
             }
             totalChars += reply.length;
             const ask = forceFinal ? null : reply.match(ASK_RE);
@@ -287,7 +294,8 @@ export class RoomOrchestratorService {
             const { slug: tSlug, config: tConfig } = await agents.resolveForChat(target, user.userId);
             tConfig.projectId = room.projectId ?? null; tConfig.source = "chat"; tConfig.repoUrl = repoUrl;
             let tRaw = "";
-            for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }])) { if (cancelled) break; tRaw += chunk; }
+            const tSidecar: AgentRunSidecar = {};
+            for await (const chunk of executor.stream(tConfig, [{ role: "user", content: question }], tSidecar)) { if (cancelled) break; tRaw += chunk; }
             // Image-capability agents (e.g. Frida) emit "[[IMG]] <prompt>": when consulted via
             // delegation we must run imageGen here too (the primary responder path does it),
             // otherwise the directive is stripped and no image is ever produced.
@@ -306,7 +314,8 @@ export class RoomOrchestratorService {
               tFeedback = tReply;
             }
             await rooms.appendMessage(roomId, "agent", tSlug, tReply);
-            void audit.recordForUser(user, "agent.run.completed", "agent", tSlug, undefined, { ok: true, durationMs: Date.now() - started, delegatedFrom: slug, roomId });
+            const tu = tSidecar.usage;
+            void audit.recordForUser(user, "agent.run.completed", "agent", tSlug, undefined, { ok: true, durationMs: Date.now() - started, delegatedFrom: slug, roomId, ...(tu ? { tokensIn: tu.in, tokensOut: tu.out, tokensCacheCreate: tu.cc, tokensCacheRead: tu.cr, tokensTotal: tu.in + tu.out + tu.cc + tu.cr } : {}) });
 
             const nearCap = iter + 1 >= MAX_STEPS;
             // Feed back a CLEAN turn (no markers/reasoning) so the model doesn't parrot syntax.
@@ -314,8 +323,10 @@ export class RoomOrchestratorService {
             convo.push({ role: "user", content: `[sistema] ${tName} ha risposto:\n${tFeedback}\n\nProsegui la richiesta dell'utente. ${nearCap ? "Dai ORA la risposta finale, senza altre consultazioni." : "Se ti serve un altro agente emetti una nuova [[ASK:<slug>]] (una sola); altrimenti dai la risposta finale, concisa. NON scrivere ragionamento o righe tipo '_→' o '↪'."}` });
           }
 
+          const hasRealTokens = totalUsageIn + totalUsageOut + totalUsageCc + totalUsageCr > 0;
           void audit.recordForUser(user, "agent.run.completed", "agent", slug, undefined, {
             ok: true, durationMs: Date.now() - started, chars: totalChars, roomId,
+            ...(hasRealTokens ? { tokensIn: totalUsageIn, tokensOut: totalUsageOut, tokensCacheCreate: totalUsageCc, tokensCacheRead: totalUsageCr, tokensTotal: totalUsageIn + totalUsageOut + totalUsageCc + totalUsageCr } : {}),
           });
           subscriber.next({ data: "[DONE]" });
           subscriber.complete();
