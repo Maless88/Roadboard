@@ -2,6 +2,7 @@ import { Controller, Get, Inject, Param, Query, Sse, UseGuards } from "@nestjs/c
 import { Observable } from "rxjs";
 import { optionalEnv } from "@roadboard/config";
 import { AuthGuard } from "../../common/auth.guard";
+import { LifeOsGuard } from "../../common/lifeos.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { AuditService } from "../audit/audit.service";
@@ -12,7 +13,7 @@ import { AgentsService } from "./agents.service";
 import { ChatService } from "./chat.service";
 import { CoordinatorService } from "./coordinator.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, LifeOsGuard)
 @Controller("agents")
 export class AgentsController {
 

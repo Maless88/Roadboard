@@ -2,13 +2,14 @@ import { Body, Controller, Get, Inject, Param, Post, Query, Sse, UseGuards } fro
 import { Observable } from "rxjs";
 import { optionalEnv } from "@roadboard/config";
 import { AuthGuard } from "../../common/auth.guard";
+import { LifeOsGuard } from "../../common/lifeos.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { RoomsService } from "./rooms.service";
 import type { CreateRoomInput } from "./rooms.service";
 import { RoomOrchestratorService } from "./rooms-orchestrator.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, LifeOsGuard)
 @Controller("agents/rooms")
 export class RoomsController {
 

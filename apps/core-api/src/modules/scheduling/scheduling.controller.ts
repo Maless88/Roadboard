@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { AuthGuard } from "../../common/auth.guard";
+import { LifeOsGuard } from "../../common/lifeos.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { ScheduledActivityService } from "./scheduled-activity.service";
@@ -19,7 +20,7 @@ import type {
   UpdateScheduledActivityInput,
 } from "./scheduled-activity.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, LifeOsGuard)
 @Controller("scheduling")
 export class SchedulingController {
 

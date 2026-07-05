@@ -1,10 +1,11 @@
 import { Body, Controller, Get, Inject, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../../common/auth.guard";
+import { LifeOsGuard } from "../../common/lifeos.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { AgentCredentialsService } from "./credentials.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, LifeOsGuard)
 @Controller("agents/credentials")
 export class AgentCredentialsController {
 

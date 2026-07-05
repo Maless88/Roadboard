@@ -1,12 +1,13 @@
 import { Body, Controller, Get, Inject, Param, Post, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../../common/auth.guard";
+import { LifeOsGuard } from "../../common/lifeos.guard";
 import { AgentSkillsService } from "./skills.service";
 
 /**
  * Agent skills endpoints. Reached both by the web-app (session token) and by
  * the RoadBoard MCP service (per-user token) — both flow through AuthGuard.
  */
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, LifeOsGuard)
 @Controller("agents/skills")
 export class AgentSkillsController {
 
