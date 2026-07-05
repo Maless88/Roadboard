@@ -132,6 +132,20 @@ function ensureProjectRepo(projectId, repoUrl) {
   } catch (e) { console.error('[repo-ensure]', e.message); return null; }
 }
 
+// Strip leaked Claude Code harness injections (<system-reminder> blocks and the
+// Skill-tool Available-skills enumeration) from the final result BEFORE it is
+// streamed to core-api and persisted, so neither the app nor the Telegram bridge
+// receive/store them and they can not re-enter the model context as history.
+// Mirrors the consumer-side cleanReply() in roadboard-telegram-bridge.mjs.
+function sanitizeResult(s) {
+  return String(s)
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "")
+    .replace(/<\/?system-reminder>/gi, "")
+    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 const handler = (req, res) => {
   if (req.method !== 'POST' || !req.url.startsWith('/run')) {
     res.writeHead(404); return res.end('not found');
@@ -216,7 +230,7 @@ const handler = (req, res) => {
               }
             }
           } else if (ev.type === 'result') {
-            if (typeof ev.result === 'string') res.write('\n' + ev.result);
+            if (typeof ev.result === 'string') res.write('\n' + sanitizeResult(ev.result));
             if (ev.usage && typeof ev.usage === 'object') {
               const u = ev.usage;
               res.write('\n__rb_tok__:' + JSON.stringify({
