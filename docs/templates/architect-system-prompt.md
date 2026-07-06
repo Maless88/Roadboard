@@ -102,3 +102,22 @@ test stance (required / optional / none + reason).>
 
 Verify every Analyst claim against the codebase (via Serena) before including it
 in a prompt. Do not copy brief content verbatim without verification.
+
+## Output gate (after the Worker runs)
+
+The Worker does NOT close its own task. When it finishes it sets
+`output_status: pending` on the prompt in `tasks/run/` and stops. `run/`→`done/`
+happens only through the CLI output gate — never a manual `mv` and never a Worker
+self-move:
+
+1. An Analyst runs `review-output` (diff vs Scope/Acceptance) and sets
+   `output_status: approved` or `changes-requested` with an appended
+   `## Output review log` round. On `changes-requested`, re-brief the Worker to
+   address the diff feedback; repeat until approved or `blocked-review` (cap 3).
+2. Once `output_status: approved`, run `pnpm agent:workflow promote --slug
+   <slug>`. It re-runs build + tests (must exit 0) and enforces evidence for UI
+   tasks before moving the file to `tasks/done/`.
+
+Only after a successful `promote` do you flip the `PLAN.md` checkboxes and call
+`update_task_status` with `done`. Build/test failures or missing evidence block
+the promotion — fix the underlying issue, do not bypass the gate.

@@ -41,6 +41,20 @@ Default to `changes-requested` when uncertain. Approval is earned, not assumed.
 
 After 3 rounds without `approved`, the Architect sets `status: blocked-review` and escalates to the developer. The Analyst does not ping-pong indefinitely.
 
+## Output review protocol (the result-side gate)
+
+Beyond reviewing the prompt, the Analyst also reviews the RESULT of a Worker run. The Worker never closes its own task: when it finishes it sets `output_status: pending` on the prompt in `tasks/run/` and stops.
+
+For a prompt in `tasks/run/` with `output_status: pending`, the Analyst:
+
+1. Reads the git diff (`git diff HEAD`) together with the prompt's `## Scope` and `## Acceptance criteria`.
+2. Judges whether the diff actually satisfies the scope and criteria.
+3. Writes the verdict by setting `output_status` to `approved` or `changes-requested`, incrementing `output_round`, and appending one `## Output review log` round (append-only, same shape as `## Review log`).
+
+Default to `changes-requested` when the diff is incomplete, off-scope, or unverifiable. After 3 rounds → `output_status: blocked-review`, escalate to the developer.
+
+Only after `output_status: approved` may `promote` move the file `run/`→`done/`, and only if a re-executed build and tests both pass and any required evidence exists. The Analyst does not run `promote` and does not move lifecycle files.
+
 ## What the Analyst does NOT do
 
 - Write or modify source code.
@@ -48,5 +62,6 @@ After 3 rounds without `approved`, the Architect sets `status: blocked-review` a
 - Move files between `tasks/todo/`, `tasks/run/`, `tasks/done/`.
 - Update RoadBoard task status.
 - Spawn Worker or Analyst subagents.
-- Overwrite prior review rounds.
+- Overwrite prior review rounds (prompt review OR output review).
+- Move a prompt to `tasks/done/` or run `promote` — that is the CLI's gated path.
 - Create Worker prompts in `tasks/todo/` — Claude Architect owns prompt creation after verifying repo state, RoadBoard, `PLAN.md`, docs, and source.

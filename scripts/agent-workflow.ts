@@ -7,8 +7,14 @@
  * (status, review_round) and an append-only "## Review log" section.
  * A prompt is spawnable only when `status: approved`.
  *
- * Subcommands: status, lint, ready, sync, review, run, adapters, config
+ * Subcommands: status, lint, ready, sync, review, run, review-output, promote, adapters, config
  * Run via: pnpm agent:workflow <command> [options]
+ *
+ * OUTPUT-GATE: run→done is gated. The Worker no longer closes its own task; on
+ * completion it sets `output_status: pending`. An Analyst then reviews the diff
+ * (`review-output`), and only `promote` — the single run→done path — moves the
+ * file to done/, and only after (a) output_status:approved, (b) a re-executed
+ * build+tests that exit 0, and (c) evidence when required.
  */
 
 import * as child_process from "node:child_process";
@@ -39,18 +45,54 @@ export const PROMPT_STATUSES = [
 
 export type PromptStatus = (typeof PROMPT_STATUSES)[number];
 
+/**
+ * Valid `output_status` values — the result-side gate for a prompt in run/.
+ * A prompt may be promoted (run→done) only when `output_status: approved`.
+ * `blocked-review` mirrors the review-round cap in runReviewOutput.
+ */
+export const OUTPUT_STATUSES = [
+  "none",
+  "pending",
+  "approved",
+  "changes-requested",
+  "blocked-review",
+] as const;
+
+export type OutputStatus = (typeof OUTPUT_STATUSES)[number];
+
+/** Valid values for the build/tests fields of the verification block. */
+export const VERIFICATION_STATES = ["unknown", "pass", "fail"] as const;
+
+export type VerificationState = (typeof VERIFICATION_STATES)[number];
+
+export interface Verification {
+  build: VerificationState;
+  tests: VerificationState;
+  evidence: string;
+}
+
 export interface FolderCount {
   folder: string;
   count: number;
 }
 
+export interface OutputStatusCounts {
+  pending: number;
+  approved: number;
+  "changes-requested": number;
+}
+
 export interface StatusResult {
   counts: FolderCount[];
+  runOutput: OutputStatusCounts;
 }
 
 export interface PromptFrontmatter {
   status: PromptStatus | null;
   reviewRound: number | null;
+  outputStatus: OutputStatus | null;
+  outputRound: number | null;
+  verification: Verification | null;
   raw: Record<string, string>;
 }
 
@@ -120,9 +162,15 @@ export interface RoleConfig {
   systemPromptPath?: string;
 }
 
+export interface VerifyConfig {
+  build?: string;
+  tests?: string;
+}
+
 export interface AdaptersConfig {
   adapters: Record<string, AdapterConfig>;
   roles?: Record<string, RoleConfig>;
+  verify?: VerifyConfig;
 }
 
 export interface ConfigInitResult {
@@ -181,13 +229,39 @@ export function countFilesInFolder(folderPath: string): number {
  * Returns per-folder file counts for the three lifecycle folders.
  * Missing folders report count = 0.
  */
-export function getStatus(): StatusResult {
+export function getStatus(options: { tasksDir?: string } = {}): StatusResult {
+  const tasksDir = options.tasksDir ?? TASKS_DIR;
   const counts = LIFECYCLE_FOLDERS.map((folder) => ({
     folder,
-    count: countFilesInFolder(path.join(TASKS_DIR, folder)),
+    count: countFilesInFolder(path.join(tasksDir, folder)),
   }));
 
-  return { counts };
+  return { counts, runOutput: countRunOutputStatuses(tasksDir) };
+}
+
+/**
+ * Tallies the `output_status` of prompts currently in run/. Only the three
+ * "live" output states are surfaced (pending / approved / changes-requested);
+ * `none` and `blocked-review` are not counted here.
+ */
+export function countRunOutputStatuses(tasksDir?: string): OutputStatusCounts {
+  const runDir = path.join(tasksDir ?? TASKS_DIR, "run");
+  const counts: OutputStatusCounts = { pending: 0, approved: 0, "changes-requested": 0 };
+
+  if (!fs.existsSync(runDir)) {
+    return counts;
+  }
+
+  for (const file of fs.readdirSync(runDir).filter((f) => f.endsWith(".md"))) {
+    const parsed = parsePrompt(fs.readFileSync(path.join(runDir, file), "utf-8"));
+    const os = parsed.frontmatter.outputStatus;
+
+    if (os === "pending" || os === "approved" || os === "changes-requested") {
+      counts[os]++;
+    }
+  }
+
+  return counts;
 }
 
 // ---------------------------------------------------------------------------
@@ -196,14 +270,23 @@ export function getStatus(): StatusResult {
 
 /**
  * Parses YAML frontmatter (a leading `---` ... `---` block) plus the body.
- * Only flat `key: value` pairs are supported — enough for status/review_round.
+ * Flat `key: value` pairs are captured in `raw`. One level of nesting is
+ * recognised for the `verification:` map (its `build`/`tests`/`evidence` keys),
+ * enough for status/review_round and the output-gate fields.
  */
 export function parsePrompt(content: string): ParsedPrompt {
   const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
 
   if (!fmMatch) {
     return {
-      frontmatter: { status: null, reviewRound: null, raw: {} },
+      frontmatter: {
+        status: null,
+        reviewRound: null,
+        outputStatus: null,
+        outputRound: null,
+        verification: null,
+        raw: {},
+      },
       body: content,
       hasFrontmatter: false,
     };
@@ -211,14 +294,50 @@ export function parsePrompt(content: string): ParsedPrompt {
 
   const raw: Record<string, string> = {};
   const fmBlock = fmMatch[1];
+  const clean = (v: string): string =>
+    v.replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "").trim();
+
+  // Nested `verification:` map — collected from indented child lines.
+  let verification: Verification | null = null;
+  let inVerification = false;
 
   for (const line of fmBlock.split(/\r?\n/)) {
+    // A top-level `verification:` header with no inline value opens the block.
+    if (/^verification\s*:\s*$/.test(line)) {
+      inVerification = true;
+      verification = { build: "unknown", tests: "unknown", evidence: "" };
+      continue;
+    }
+
+    // Indented child of the verification block: `  build: pass`
+    const child = line.match(/^\s+([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
+
+    if (inVerification && child) {
+      const key = child[1];
+      const val = clean(child[2]);
+
+      if (verification && (key === "build" || key === "tests" || key === "evidence")) {
+        if (key === "evidence") {
+          verification.evidence = val;
+        }
+
+        else {
+          verification[key] = (VERIFICATION_STATES as readonly string[]).includes(val)
+            ? (val as VerificationState)
+            : "unknown";
+        }
+      }
+
+      continue;
+    }
+
+    // Any non-indented line ends the verification block.
+    inVerification = false;
+
     const kv = line.match(/^\s*([A-Za-z0-9_]+)\s*:\s*(.*?)\s*$/);
 
     if (kv) {
-      // Strip inline comments and surrounding quotes
-      const value = kv[2].replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "").trim();
-      raw[kv[1]] = value;
+      raw[kv[1]] = clean(kv[2]);
     }
   }
 
@@ -232,8 +351,18 @@ export function parsePrompt(content: string): ParsedPrompt {
   const reviewRound =
     roundRaw !== undefined && /^\d+$/.test(roundRaw) ? Number.parseInt(roundRaw, 10) : null;
 
+  const outStatusRaw = raw["output_status"] ?? null;
+  const outputStatus =
+    outStatusRaw !== null && (OUTPUT_STATUSES as readonly string[]).includes(outStatusRaw)
+      ? (outStatusRaw as OutputStatus)
+      : null;
+
+  const outRoundRaw = raw["output_round"];
+  const outputRound =
+    outRoundRaw !== undefined && /^\d+$/.test(outRoundRaw) ? Number.parseInt(outRoundRaw, 10) : null;
+
   return {
-    frontmatter: { status, reviewRound, raw },
+    frontmatter: { status, reviewRound, outputStatus, outputRound, verification, raw },
     body: fmMatch[2],
     hasFrontmatter: true,
   };
@@ -326,6 +455,54 @@ export function lintPromptContent(content: string): PromptLintResult {
     warnings.push(
       `status is "${parsed.frontmatter.status}" but no ## Review log section is present`,
     );
+  }
+
+  // --- Output-gate fields (optional) -----------------------------------------
+  // output_status: validate only when present.
+  if (parsed.frontmatter.raw["output_status"] !== undefined && parsed.frontmatter.outputStatus === null) {
+    errors.push(
+      `invalid frontmatter output_status: "${parsed.frontmatter.raw["output_status"]}" ` +
+      `(expected one of: ${OUTPUT_STATUSES.join(", ")})`,
+    );
+  }
+
+  // output_round: validate only when present.
+  if (parsed.frontmatter.raw["output_round"] !== undefined && parsed.frontmatter.outputRound === null) {
+    errors.push(
+      `invalid frontmatter output_round: "${parsed.frontmatter.raw["output_round"]}" (expected a non-negative integer)`,
+    );
+  }
+
+  // verification: when the block is present, build/tests must be valid states.
+  // Read the raw frontmatter lines (the parser coerces unknowns to "unknown",
+  // so validate against the source text to catch typos like `build: green`).
+  const fmForVerify = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+
+  if (fmForVerify && /^verification\s*:\s*$/m.test(fmForVerify[1])) {
+    for (const field of ["build", "tests"] as const) {
+      const line = fmForVerify[1].match(new RegExp(`^\\s+${field}\\s*:\\s*(.*?)\\s*$`, "m"));
+
+      if (line) {
+        const val = line[1].replace(/\s+#.*$/, "").replace(/^["']|["']$/g, "").trim();
+
+        if (!(VERIFICATION_STATES as readonly string[]).includes(val)) {
+          errors.push(
+            `invalid verification.${field}: "${val}" (expected one of ${VERIFICATION_STATES.join(", ")})`,
+          );
+        }
+      }
+    }
+  }
+
+  // ## Output review log — when present, must have at least one round heading.
+  const outputLogMatch = content.match(/## Output review log\s*([\s\S]*?)(?=\n## |\s*$)/i);
+
+  if (outputLogMatch) {
+    if (!/###\s+Round\s+\d+\s*[—-]/i.test(outputLogMatch[1])) {
+      errors.push(
+        "malformed ## Output review log: expected at least one '### Round N — <verdict>' entry",
+      );
+    }
   }
 
   // --- Warnings --------------------------------------------------------------
@@ -734,6 +911,10 @@ const STARTER_CONFIG: AdaptersConfig = {
       systemPromptPath: "docs/templates/architect-system-prompt.md",
     },
   },
+  verify: {
+    build: "pnpm build",
+    tests: "pnpm test",
+  },
 };
 
 /**
@@ -952,6 +1133,95 @@ export function setPromptStatus(filePath: string, status: PromptStatus): void {
   fs.writeFileSync(filePath, updated, "utf-8");
 }
 
+/**
+ * Sets a flat top-level frontmatter scalar field in place. If the field already
+ * exists its value is rewritten; otherwise the `key: value` line is appended to
+ * the end of the frontmatter block (just before the closing `---`).
+ * Throws if the file has no frontmatter block.
+ */
+export function setFrontmatterField(filePath: string, key: string, value: string): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const existing = new RegExp(`^(---\\r?\\n[\\s\\S]*?\\b${key}:[ \\t]*)([^\\r\\n]*)`, "m");
+
+  if (existing.test(content)) {
+    fs.writeFileSync(filePath, content.replace(existing, `$1${value}`), "utf-8");
+
+    return;
+  }
+
+  // Insert before the closing frontmatter fence.
+  const closing = content.match(/^(---\r?\n[\s\S]*?)(\r?\n---\r?\n?)/);
+
+  if (!closing) {
+    throw new Error(`Cannot set frontmatter field "${key}": no frontmatter block in ${filePath}`);
+  }
+
+  const updated = content.replace(
+    /^(---\r?\n[\s\S]*?)(\r?\n---\r?\n?)/,
+    `$1\n${key}: ${value}$2`,
+  );
+  fs.writeFileSync(filePath, updated, "utf-8");
+}
+
+/** Set the frontmatter `output_status:` (inserting the field if missing). */
+export function setOutputStatus(filePath: string, status: OutputStatus): void {
+  setFrontmatterField(filePath, "output_status", status);
+}
+
+/** Set the frontmatter `output_round:` (inserting the field if missing). */
+export function setOutputRound(filePath: string, round: number): void {
+  setFrontmatterField(filePath, "output_round", String(round));
+}
+
+/**
+ * Writes the nested `verification:` block into the frontmatter. Replaces an
+ * existing block or appends a new one just before the closing `---` fence.
+ */
+export function setVerification(filePath: string, v: Verification): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const block =
+    `verification:\n` +
+    `  build: ${v.build}\n` +
+    `  tests: ${v.tests}\n` +
+    `  evidence: ${v.evidence}`;
+
+  // Existing block: `verification:` header + its indented children.
+  const existing = /^verification:\r?\n(?:[ \t]+[^\r\n]*\r?\n?)*/m;
+
+  if (existing.test(content)) {
+    fs.writeFileSync(filePath, content.replace(existing, block + "\n"), "utf-8");
+
+    return;
+  }
+
+  const closing = content.match(/^(---\r?\n[\s\S]*?)(\r?\n---\r?\n?)/);
+
+  if (!closing) {
+    throw new Error(`Cannot set verification: no frontmatter block in ${filePath}`);
+  }
+
+  const updated = content.replace(
+    /^(---\r?\n[\s\S]*?)(\r?\n---\r?\n?)/,
+    `$1\n${block}$2`,
+  );
+  fs.writeFileSync(filePath, updated, "utf-8");
+}
+
+/**
+ * Finds a prompt file in tasks/<folder>/ matching the slug (case-insensitive).
+ * Returns the first match or throws if none found.
+ */
+function findPromptFileInFolder(slug: string, folder: string, tasksDir?: string): string {
+  const dir = path.join(tasksDir ?? TASKS_DIR, folder);
+  const files = matchingFiles(dir, slug);
+
+  if (files.length === 0) {
+    throw new Error(`No prompt file found in tasks/${folder}/ matching slug: "${slug}"`);
+  }
+
+  return path.join(dir, files[0]);
+}
+
 function buildArchitectPrompt(relPath: string, status: PromptStatus | null): string {
   const action =
     status === "changes-requested"
@@ -1093,12 +1363,329 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
 }
 
 
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: review-output — review the Worker's diff + verdict
+// ---------------------------------------------------------------------------
+
+/** Extract the `## Scope` and `## Acceptance criteria` sections from a prompt body. */
+function extractScopeAndCriteria(content: string): string {
+  const grab = (heading: string): string => {
+    const re = new RegExp(`(^${heading}[\\s\\S]*?)(?=\\n## |\\s*$)`, "im");
+    const m = content.match(re);
+
+    return m ? m[1].trim() : "";
+  };
+
+  return [grab("## Scope"), grab("## Acceptance criteria")].filter(Boolean).join("\n\n");
+}
+
+/** Compute the relevant git diff (working tree + staged) via `git diff HEAD`. */
+function computeGitDiff(repoRoot: string): string {
+  const r = child_process.spawnSync("git", ["diff", "HEAD"], {
+    cwd: repoRoot,
+    encoding: "utf-8",
+    maxBuffer: 20 * 1024 * 1024,
+  });
+
+  return r.stdout ?? "";
+}
+
+export interface ReviewOutputOptions {
+  tasksDir?: string;
+  configPath?: string;
+  maxRounds?: number;
+  repoRoot?: string;
+  /**
+   * Injectable review function. Receives the diff plus scope/criteria context
+   * and returns a verdict. In production this can invoke the Analyst adapter;
+   * tests inject a fake verdict. Defaults to `changes-requested` if it throws
+   * or returns anything unrecognised.
+   */
+  reviewFn?: (input: { diff: string; context: string; promptFile: string }) =>
+    "approved" | "changes-requested";
+  diffFn?: (repoRoot: string) => string;
+  logFn?: (msg: string) => void;
+}
+
+export interface ReviewOutputResult {
+  slug: string;
+  promptFile: string;
+  outputStatus: OutputStatus;
+  outputRound: number;
+  verdict: "approved" | "changes-requested" | "blocked-review";
+}
+
+/**
+ * Reviews the RESULT of a Worker run for a prompt in run/.
+ *
+ * Computes the git diff, passes it (plus Scope + Acceptance criteria) to an
+ * injectable review function, then writes the verdict: sets `output_status`,
+ * increments `output_round`, and appends a `### Round N — <verdict>` section to
+ * `## Output review log` (append-only, mirroring `## Review log`).
+ *
+ * Defaults to `changes-requested` when uncertain. After `maxRounds` (default 3)
+ * without approval the verdict is `blocked-review`, mirroring runReview's cap.
+ */
+export function runReviewOutput(slug: string, options: ReviewOutputOptions = {}): ReviewOutputResult {
+  if (!slug || slug.trim() === "") {
+    throw new Error("--slug is required for review-output command");
+  }
+
+  const tasksDir = options.tasksDir ?? TASKS_DIR;
+  const repoRoot = options.repoRoot ?? ROOT;
+  const maxRounds = options.maxRounds ?? 3;
+  const log = options.logFn ?? ((msg: string) => console.log(msg));
+  const diffFn = options.diffFn ?? computeGitDiff;
+  const reviewFn =
+    options.reviewFn ??
+    (() => {
+      // No real reviewer wired in — be conservative.
+      return "changes-requested" as const;
+    });
+
+  const promptFile = findPromptFileInFolder(slug, "run", tasksDir);
+  const content = fs.readFileSync(promptFile, "utf-8");
+  const parsed = parsePrompt(content);
+  const prevRound = parsed.frontmatter.outputRound ?? 0;
+  const nextRound = prevRound + 1;
+
+  // Round cap → blocked-review (mirrors runReview).
+  if (prevRound >= maxRounds) {
+    setOutputStatus(promptFile, "blocked-review");
+    appendOutputReviewRound(promptFile, nextRound, "blocked-review", [
+      `Reached max ${maxRounds} output-review rounds without approval — escalate to developer.`,
+    ]);
+    setOutputRound(promptFile, nextRound);
+    log(`[review-output] round ${nextRound}: blocked-review (cap reached).`);
+
+    return { slug, promptFile, outputStatus: "blocked-review", outputRound: nextRound, verdict: "blocked-review" };
+  }
+
+  const diff = diffFn(repoRoot);
+  const context = extractScopeAndCriteria(content);
+
+  let verdict: "approved" | "changes-requested";
+
+  try {
+    const v = reviewFn({ diff, context, promptFile });
+    verdict = v === "approved" ? "approved" : "changes-requested";
+  }
+
+  catch {
+    verdict = "changes-requested";
+  }
+
+  const notes =
+    verdict === "approved"
+      ? ["Diff satisfies Scope and Acceptance criteria."]
+      : ["Diff does not yet satisfy Scope / Acceptance criteria — see requested changes."];
+
+  appendOutputReviewRound(promptFile, nextRound, verdict, notes);
+  setOutputStatus(promptFile, verdict);
+  setOutputRound(promptFile, nextRound);
+  log(`[review-output] round ${nextRound} verdict: ${verdict}`);
+
+  return { slug, promptFile, outputStatus: verdict, outputRound: nextRound, verdict };
+}
+
+/** Append a `### Round N — <verdict>` block under `## Output review log` (append-only). */
+function appendOutputReviewRound(
+  filePath: string,
+  round: number,
+  verdict: string,
+  notes: string[],
+): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const entry =
+    `### Round ${round} — ${verdict}\n` + notes.map((n) => `- ${n}`).join("\n") + "\n";
+
+  if (/## Output review log/i.test(content)) {
+    // Append the round to the end of the file (log section is last by convention).
+    const trimmed = content.replace(/\s*$/, "\n");
+    fs.writeFileSync(filePath, `${trimmed}\n${entry}`, "utf-8");
+
+    return;
+  }
+
+  const trimmed = content.replace(/\s*$/, "\n");
+  fs.writeFileSync(filePath, `${trimmed}\n## Output review log\n\n${entry}`, "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: promote — the SINGLE run→done path, with executed verification
+// ---------------------------------------------------------------------------
+
+/** Default verification commands when none are configured. */
+const DEFAULT_VERIFY: Required<VerifyConfig> = { build: "pnpm build", tests: "pnpm test" };
+
+export interface PromoteOptions {
+  tasksDir?: string;
+  configPath?: string;
+  repoRoot?: string;
+  dryRun?: boolean;
+  /**
+   * Injectable command runner for build/tests. Returns the exit code.
+   * Tests point the configured commands at `true`/`false` and/or inject this.
+   */
+  runCmdFn?: (command: string, repoRoot: string) => number;
+  logFn?: (msg: string) => void;
+}
+
+export interface PromoteResult {
+  slug: string;
+  promptFile: string;
+  dryRun: boolean;
+  moved: boolean;
+  fromPath: string;
+  toPath: string;
+  verification: Verification;
+}
+
+/**
+ * Promotes a prompt from run/ to done/ — the ONLY run→done path.
+ *
+ * Guards, in order (each throws with a clear message on failure):
+ *   1. output_status === "approved".
+ *   2. Re-runs build and tests (configurable via .agent/workflow-adapters.json
+ *      `verify: { build, tests }`; defaults: `pnpm build`, `pnpm test`), and
+ *      requires exit 0. Records the outcome in the `verification` block.
+ *   3. Evidence rule: if `verification.evidence` is non-empty, the referenced
+ *      file MUST exist. If the prompt requires evidence — `requires_evidence:
+ *      true` OR a `label: ui` / `labels: […ui…]` UI convention — then evidence
+ *      MUST be non-empty AND the file must exist.
+ *
+ * Only when all guards pass is the file moved run/→done/. `--dry-run` reports
+ * what would happen without running commands or moving the file.
+ */
+export function runPromote(slug: string, options: PromoteOptions = {}): PromoteResult {
+  if (!slug || slug.trim() === "") {
+    throw new Error("--slug is required for promote command");
+  }
+
+  const tasksDir = options.tasksDir ?? TASKS_DIR;
+  const repoRoot = options.repoRoot ?? ROOT;
+  const configPath = options.configPath ?? ADAPTERS_CONFIG_PATH;
+  const dryRun = options.dryRun ?? false;
+  const log = options.logFn ?? ((msg: string) => console.log(msg));
+  const runCmd =
+    options.runCmdFn ??
+    ((command: string, cwd: string) => {
+      const r = child_process.spawnSync(command, { cwd, shell: true, stdio: "inherit" });
+
+      return r.status ?? 1;
+    });
+
+  const promptFile = findPromptFileInFolder(slug, "run", tasksDir);
+  const parsed = parsePrompt(fs.readFileSync(promptFile, "utf-8"));
+
+  // --- Guard 1: output approved ---------------------------------------------
+  if (parsed.frontmatter.outputStatus !== "approved") {
+    throw new Error(
+      `Refusing to promote: prompt "${path.basename(promptFile)}" has ` +
+      `output_status="${parsed.frontmatter.outputStatus ?? "none"}". ` +
+      "Run `review-output` until output_status: approved before promoting.",
+    );
+  }
+
+  // --- Resolve verify commands ----------------------------------------------
+  const config = loadAdaptersConfig(configPath);
+  const buildCmd = config?.verify?.build?.trim() || DEFAULT_VERIFY.build;
+  const testsCmd = config?.verify?.tests?.trim() || DEFAULT_VERIFY.tests;
+
+  const fromPath = promptFile;
+  const toPath = path.join(tasksDir, "done", path.basename(promptFile));
+
+  if (dryRun) {
+    log(
+      `[dry-run] would verify: build="${buildCmd}", tests="${testsCmd}"; ` +
+      `then move ${path.relative(tasksDir, fromPath)} → ${path.relative(tasksDir, toPath)}`,
+    );
+
+    return {
+      slug,
+      promptFile,
+      dryRun: true,
+      moved: false,
+      fromPath,
+      toPath,
+      verification: parsed.frontmatter.verification ?? { build: "unknown", tests: "unknown", evidence: "" },
+    };
+  }
+
+  // --- Guard 2: executed build + tests --------------------------------------
+  const verification: Verification = {
+    build: "unknown",
+    tests: "unknown",
+    evidence: parsed.frontmatter.verification?.evidence ?? "",
+  };
+
+  log(`[promote] verifying build: ${buildCmd}`);
+  const buildCode = runCmd(buildCmd, repoRoot);
+  verification.build = buildCode === 0 ? "pass" : "fail";
+
+  if (buildCode !== 0) {
+    setVerification(promptFile, verification);
+    throw new Error(`Refusing to promote: build failed (exit ${buildCode}) — "${buildCmd}".`);
+  }
+
+  log(`[promote] verifying tests: ${testsCmd}`);
+  const testsCode = runCmd(testsCmd, repoRoot);
+  verification.tests = testsCode === 0 ? "pass" : "fail";
+
+  if (testsCode !== 0) {
+    setVerification(promptFile, verification);
+    throw new Error(`Refusing to promote: tests failed (exit ${testsCode}) — "${testsCmd}".`);
+  }
+
+  // --- Guard 3: evidence -----------------------------------------------------
+  const raw = parsed.frontmatter.raw;
+  const requiresEvidence =
+    raw["requires_evidence"] === "true" ||
+    /(^|[,\s])ui([,\s]|$)/i.test(raw["label"] ?? "") ||
+    /(^|[,\s\[])ui([,\s\]]|$)/i.test(raw["labels"] ?? "");
+
+  const evidence = verification.evidence.trim();
+
+  if (requiresEvidence && evidence === "") {
+    setVerification(promptFile, verification);
+    throw new Error(
+      "Refusing to promote: this prompt requires evidence " +
+      "(requires_evidence: true or a UI label) but verification.evidence is empty.",
+    );
+  }
+
+  if (evidence !== "") {
+    const evidencePath = path.isAbsolute(evidence) ? evidence : path.join(repoRoot, evidence);
+
+    if (!fs.existsSync(evidencePath)) {
+      setVerification(promptFile, verification);
+      throw new Error(
+        `Refusing to promote: verification.evidence "${evidence}" does not exist at ${evidencePath}.`,
+      );
+    }
+  }
+
+  // Persist the passing verification, then move run/→done/.
+  setVerification(promptFile, verification);
+  fs.mkdirSync(path.dirname(toPath), { recursive: true });
+  fs.renameSync(fromPath, toPath);
+  log(`[promote] moved ${path.basename(fromPath)} → tasks/done/`);
+
+  return { slug, promptFile: toPath, dryRun: false, moved: true, fromPath, toPath, verification };
+}
+
 function printStatus(result: StatusResult): void {
   console.log("Task folder counts:");
 
   for (const { folder, count } of result.counts) {
     console.log(`  ${folder.padEnd(8)} ${count}`);
   }
+
+  const ro = result.runOutput;
+  console.log(
+    `run/ output_status: pending=${ro.pending}, approved=${ro.approved}, ` +
+    `changes-requested=${ro["changes-requested"]}`,
+  );
 
   const stale = checkTaskListStale();
 
@@ -1340,6 +1927,39 @@ function main(): void {
       }
     }
 
+    else if (command === "review-output") {
+      const result = runReviewOutput(slug ?? "", { maxRounds });
+      console.log(
+        `[review-output] ${result.verdict} — output_status: ${result.outputStatus} ` +
+        `(round ${result.outputRound})`,
+      );
+
+      if (result.outputStatus === "approved") {
+        console.log(`  Promotable: pnpm agent:workflow promote --slug ${result.slug}`);
+      }
+
+      else {
+        process.exit(2);
+      }
+    }
+
+    else if (command === "promote") {
+      const result = runPromote(slug ?? "", { dryRun });
+
+      if (result.dryRun) {
+        console.log(
+          `[dry-run] would promote ${path.basename(result.promptFile)} run/→done/ after build+tests pass`,
+        );
+      }
+
+      else {
+        console.log(
+          `Promoted ${path.basename(result.toPath)} → tasks/done/ ` +
+          `(build=${result.verification.build}, tests=${result.verification.tests})`,
+        );
+      }
+    }
+
     else if (command === "config") {
       if (init) {
         const result = configInit();
@@ -1362,7 +1982,7 @@ function main(): void {
     else {
       console.error(
         `Unknown command: "${command}"\n` +
-        `Usage: pnpm agent:workflow <status|lint|ready|sync|review|adapters|config|run> [--slug <slug>] [--adapter <name>] [--dir <dir>] [--dry-run] [--analyst <codex|claude>] [--max-rounds <n>]`,
+        `Usage: pnpm agent:workflow <status|lint|ready|sync|review|review-output|promote|adapters|config|run> [--slug <slug>] [--adapter <name>] [--dir <dir>] [--dry-run] [--analyst <codex|claude>] [--max-rounds <n>]`,
       );
       process.exit(1);
     }

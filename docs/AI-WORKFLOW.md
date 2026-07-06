@@ -65,11 +65,23 @@ In planning-only mode, convergence means the analysis or proposal is ready for D
 12. **GO to Worker is always a manual action.** The CLI never spawns Workers and never moves files from `todo/` to `run`.
 13. Architect moves a prompt from `tasks/todo/` to `tasks/run/` and spawns a Worker subagent.
 
-### Worker execution loop
+### Worker execution loop (with output gate)
 
-14. Worker implements and verifies exactly that prompt.
-15. Worker moves the prompt to `tasks/done/` when all acceptance criteria pass.
-16. Architect reviews the result and updates RoadBoard / `PLAN.md` per `CLAUDE.md`.
+14. Worker implements and self-verifies exactly that prompt.
+15. **Worker does NOT close its own task.** On completion it sets frontmatter `output_status: pending` on the prompt in `tasks/run/` and stops. It does not move the file.
+16. **`review-output`** — an Analyst reviews the RESULT: the CLI computes `git diff HEAD` and passes it, plus the prompt's `## Scope` and `## Acceptance criteria`, to the reviewer. The verdict is written back into the prompt: `output_status` → `approved` / `changes-requested`, `output_round` incremented, and one `### Round N — <verdict>` appended to `## Output review log` (append-only). Defaults to `changes-requested` when uncertain; caps at 3 rounds → `output_status: blocked-review`.
+17. **`promote`** — the single `run/`→`done/` path. It refuses unless, in order: (a) `output_status: approved`; (b) a re-executed build AND tests both exit 0 (configurable, defaults `pnpm build` / `pnpm test`), recorded in the `verification` block; (c) evidence is satisfied (see below). Only then does it move `run/`→`done/`. `PLAN.md` flips and RoadBoard updates stay manual.
+18. Architect reviews the result and updates RoadBoard / `PLAN.md` per `CLAUDE.md`.
+
+**Done requires**: `output_status: approved` **and** build + tests green **and** evidence when required. `tasks/done/` is unreachable by a Worker self-move.
+
+**Evidence rule**: if a non-empty `verification.evidence` path is set, that file must exist. If the prompt declares it needs evidence — `requires_evidence: true`, or a UI convention (`label: ui` / `labels: [… ui …]`) — then `verification.evidence` must be non-empty **and** point to an existing file. UI tasks therefore cannot be promoted without a screenshot/log artifact.
+
+Configure the verification commands in `.agent/workflow-adapters.json`:
+
+```json
+{ "verify": { "build": "pnpm build", "tests": "pnpm test" } }
+```
 
 ### Conversation history in reports
 
@@ -122,6 +134,8 @@ pnpm agent:workflow <command> [options]
 | `ready` | — | List `.md` files in `tasks/todo/` that pass lint with 0 errors |
 | `sync` | — | Regenerate `TASK_LIST.md` from `tasks/todo/`, `tasks/run/`, and `tasks/done/` |
 | `run` | `--slug <slug> [--dry-run] [--planning-only]` | Run the Analyst↔Architect loop; `--planning-only` forbids Worker prompt creation |
+| `review-output` | `--slug <slug> [--max-rounds <n>]` | Review a Worker result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round |
+| `promote` | `--slug <slug> [--dry-run]` | The single `run/`→`done/` path: requires `output_status: approved`, re-runs build + tests (exit 0), and enforces evidence before moving the file |
 | `adapters <sub>` | see below | Optional model CLI adapter layer (opt-in, safe by default) |
 
 ### Command details

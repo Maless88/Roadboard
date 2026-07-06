@@ -297,7 +297,7 @@ Runs as a subagent spawned by the Architect via the Agent tool. The Architect's 
 
 Never picks up prompts autonomously. Worker does not scan `tasks/todo/`, does not infer which prompt to run next, and does not chain from one prompt to another. The Architect's briefing names the prompt; Worker executes only that prompt.
 
-In the subagent model the Architect already moved the file to `tasks/run/` before spawning. Worker moves it to `tasks/done/` on completion.
+In the subagent model the Architect already moved the file to `tasks/run/` before spawning. **The Worker does NOT close its own task.** When implementation is complete it sets frontmatter `output_status: pending` on the prompt in `tasks/run/` and stops. It does not move the file to `tasks/done/`. The output-gate (`review-output` → `promote`) is the only path to `done/` (see §Output gate).
 
 Worker may modify any source code, build config, tests, lockfiles, or generated assets required by the prompt.
 
@@ -345,10 +345,17 @@ Every Worker prompt begins with YAML frontmatter:
 ---
 status: draft        # draft | in-review | changes-requested | approved | blocked-review
 review_round: 0      # incremented by Architect on each resubmission
+# --- output-gate fields (optional; populated after the Worker runs) ---
+output_status: none  # none | pending | approved | changes-requested | blocked-review
+output_round: 0      # incremented by review-output on each verdict
+verification:        # filled by `promote` (build/tests) and by the Worker (evidence)
+  build: unknown     # unknown | pass | fail
+  tests: unknown     # unknown | pass | fail
+  evidence: ""       # relative path to a screenshot/log; required for UI tasks
 ---
 ```
 
-The Architect spawns a Worker ONLY when `status: approved`. The filesystem + frontmatter are the single source of truth.
+The Architect spawns a Worker ONLY when `status: approved`. A prompt is promoted `run/`→`done/` ONLY when `output_status: approved`. The filesystem + frontmatter are the single source of truth.
 
 ### Review log (MANDATORY, append-only)
 
@@ -366,6 +373,23 @@ The Analyst appends one section per round; never overwrites prior rounds.
 - <what was resolved; any residual notes>
 ```
 
+### Output gate (run → done)
+
+`run/`→`done/` is a gated transition, not a Worker self-move. Two steps stand between a finished implementation and `done/`:
+
+1. **`review-output --slug <slug>`** — an Analyst reviews the actual RESULT. The CLI computes the git diff (`git diff HEAD`) and passes it, plus the prompt's `## Scope` and `## Acceptance criteria`, to a review function (Analyst adapter). The verdict is written into the prompt: `output_status` → `approved` / `changes-requested`, `output_round` incremented, and a round appended to `## Output review log` (append-only, same shape as `## Review log`). Defaults to `changes-requested` when uncertain; after 3 rounds → `output_status: blocked-review`.
+2. **`promote --slug <slug>`** — the ONLY run→done path. It refuses unless, in order: (a) `output_status: approved`; (b) a re-executed build AND tests both exit 0 (commands configurable in `.agent/workflow-adapters.json` under `verify: { build, tests }`; defaults `pnpm build` / `pnpm test`) — the outcome is recorded in the `verification` block; (c) evidence is satisfied — if the prompt sets `requires_evidence: true` or carries a UI label (`label: ui` / `labels: [… ui …]`), `verification.evidence` must be a non-empty path to an existing file, and any non-empty `evidence` must point to a file that exists. Only when all guards pass does it move `run/`→`done/`. `--dry-run` reports what it would do without running commands or moving the file. `PLAN.md` flips and RoadBoard updates stay manual, as before.
+
+```markdown
+## Output review log
+
+### Round 1 — changes-requested
+- <what the diff is missing vs Scope / Acceptance criteria>
+
+### Round 2 — approved
+- <diff satisfies scope and criteria>
+```
+
 ### Transitions
 
 | From    | To      | Who           | When                                                  |
@@ -373,10 +397,12 @@ The Analyst appends one section per round; never overwrites prior rounds.
 | (new)   | `todo/` | Architect     | Drafts a prompt (`status: draft`)                     |
 | `todo/` | `todo/` | Analyst       | Writes verdict + appends a Review log round           |
 | `todo/` | `run/`  | **Architect** | Prompt is `approved`; before spawning the Worker      |
-| `run/`  | `done/` | **Worker**    | All acceptance criteria `[x]` and verification passes |
+| `run/`  | `run/`  | **Worker**    | Implementation done — sets `output_status: pending`, stops (does NOT move) |
+| `run/`  | `run/`  | Analyst       | `review-output` writes an `output_status` verdict + Output review log round |
+| `run/`  | `done/` | **`promote`** | `output_status: approved` + build/tests exit 0 + evidence satisfied  |
 | `run/`  | `run/`  | **Worker**    | Blocked — Worker appends `## Failure note` and stops  |
 
-Single-writer discipline: only Architect writes new files into `todo/` and is the only role that moves files between folders (Worker moves `run/`→`done/`). A file stuck in `run/` with a `## Failure note`, or in `todo/` with `status: blocked-review`, signals human review is needed. Filesystem state is the single source of truth for task status.
+Single-writer discipline: only Architect writes new files into `todo/`. The `run/`→`done/` move happens ONLY via `promote` (never a Worker self-move). A file stuck in `run/` with a `## Failure note`, with `output_status: changes-requested`, or with `output_status: blocked-review`, signals human review is needed. Filesystem state is the single source of truth for task status.
 
 ### RoadBoard ↔ filesystem alignment (MANDATORY)
 

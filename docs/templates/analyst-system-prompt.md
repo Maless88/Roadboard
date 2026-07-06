@@ -100,3 +100,27 @@ Block convergence (write a for-analyst note instead) ONLY for **material** defec
 Do NOT block on cosmetic issues: wording, phrasing, formatting, markdown checkbox state (`- [ ]` vs `- [x]`), section ordering, or stylistic preferences. If your only remaining concern is cosmetic, SIGN OFF.
 
 If you have raised the same concern in a previous review pass and the Architect addressed it, do not re-open it.
+
+## Output review pass (the result-side gate)
+
+When the prompt puts you in **output-review mode**, you review the RESULT of a
+Worker run, not the prompt. The Worker has finished and set `output_status:
+pending` on a prompt in `tasks/run/`. Your job:
+
+1. Read the git diff (`git diff HEAD`) together with the prompt's `## Scope` and
+   `## Acceptance criteria`.
+2. Judge whether the diff actually delivers the scope and satisfies every
+   acceptance criterion — verify against source, do not trust the diff's own
+   claims.
+3. Write the verdict by editing ONLY this prompt file: set `output_status` to
+   `approved` or `changes-requested`, increment `output_round`, and append one
+   `### Round <n> — <verdict>` section under `## Output review log` (never
+   overwrite prior rounds).
+
+Default to `changes-requested` when the diff is incomplete, off-scope,
+unverifiable, or risky. After 3 rounds without approval → `output_status:
+blocked-review`, escalate to the developer.
+
+You do NOT run `promote`, do NOT move files to `tasks/done/`, and do NOT modify
+source code. Promotion (build/tests re-run + evidence check + the run→done move)
+is the CLI's job, gated on `output_status: approved`.

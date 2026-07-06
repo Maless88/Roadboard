@@ -22,6 +22,12 @@ import {
   runWorker,
   buildRoleInvocation,
   setPromptStatus,
+  setOutputStatus,
+  setOutputRound,
+  setVerification,
+  runReviewOutput,
+  runPromote,
+  countRunOutputStatuses,
 } from "./agent-workflow";
 
 // ---------------------------------------------------------------------------
@@ -1241,5 +1247,521 @@ describe("runReview", () => {
     expect(result.outcome).toBe("approved");
     // both architect and analyst invoked the claude binary
     expect(seen.every((c) => c === "claude")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: frontmatter setters round-trip
+// ---------------------------------------------------------------------------
+
+describe("output-gate frontmatter setters", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("setOutputStatus inserts the field when absent, then rewrites it", () => {
+    const f = path.join(tmpDir, "p.md");
+    fs.writeFileSync(f, "---\nstatus: approved\nreview_round: 1\n---\n# body\n");
+
+    setOutputStatus(f, "pending");
+    let parsed = parsePrompt(fs.readFileSync(f, "utf-8"));
+    expect(parsed.frontmatter.outputStatus).toBe("pending");
+    expect(parsed.frontmatter.status).toBe("approved"); // untouched
+    expect(fs.readFileSync(f, "utf-8")).toContain("# body");
+
+    setOutputStatus(f, "approved");
+    parsed = parsePrompt(fs.readFileSync(f, "utf-8"));
+    expect(parsed.frontmatter.outputStatus).toBe("approved");
+  });
+
+  it("setOutputRound round-trips an integer", () => {
+    const f = path.join(tmpDir, "p.md");
+    fs.writeFileSync(f, "---\nstatus: approved\nreview_round: 1\noutput_round: 0\n---\n# x\n");
+
+    setOutputRound(f, 2);
+    expect(parsePrompt(fs.readFileSync(f, "utf-8")).frontmatter.outputRound).toBe(2);
+  });
+
+  it("setVerification writes a well-formed nested block that parses back", () => {
+    const f = path.join(tmpDir, "p.md");
+    fs.writeFileSync(f, "---\nstatus: approved\nreview_round: 1\n---\n# x\n");
+
+    setVerification(f, { build: "pass", tests: "pass", evidence: "docs/shot.png" });
+    const parsed = parsePrompt(fs.readFileSync(f, "utf-8"));
+
+    expect(parsed.frontmatter.verification).toEqual({
+      build: "pass",
+      tests: "pass",
+      evidence: "docs/shot.png",
+    });
+  });
+
+  it("setVerification replaces an existing block rather than duplicating it", () => {
+    const f = path.join(tmpDir, "p.md");
+    fs.writeFileSync(
+      f,
+      "---\nstatus: approved\nreview_round: 1\nverification:\n  build: unknown\n  tests: unknown\n  evidence: \n---\n# x\n",
+    );
+
+    setVerification(f, { build: "pass", tests: "fail", evidence: "" });
+    const content = fs.readFileSync(f, "utf-8");
+
+    expect(content.match(/verification:/g)?.length).toBe(1);
+    const parsed = parsePrompt(content);
+    expect(parsed.frontmatter.verification?.build).toBe("pass");
+    expect(parsed.frontmatter.verification?.tests).toBe("fail");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: lint of the new fields
+// ---------------------------------------------------------------------------
+
+describe("lintPromptContent — output-gate fields", () => {
+  const BASE = `---
+status: approved
+review_round: 1
+output_status: pending
+output_round: 1
+verification:
+  build: pass
+  tests: pass
+  evidence: ""
+---
+
+# feat-x: x
+
+## Context
+
+RoadBoard task abc — phase.
+
+## Scope
+
+- Something
+
+## Acceptance criteria
+
+- [x] Done
+
+## Review log
+
+### Round 1 — approved
+- ok
+
+## Output review log
+
+### Round 1 — approved
+- diff ok
+`;
+
+  it("accepts valid output-gate fields with no errors", () => {
+    const result = lintPromptContent(BASE);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("rejects an invalid output_status value", () => {
+    const bad = BASE.replace("output_status: pending", "output_status: shipping");
+    const result = lintPromptContent(bad);
+    expect(result.errors.some((e) => e.includes("invalid frontmatter output_status"))).toBe(true);
+  });
+
+  it("rejects a non-numeric output_round", () => {
+    const bad = BASE.replace("output_round: 1", "output_round: two");
+    const result = lintPromptContent(bad);
+    expect(result.errors.some((e) => e.includes("invalid frontmatter output_round"))).toBe(true);
+  });
+
+  it("rejects an invalid verification.build state", () => {
+    const bad = BASE.replace("build: pass", "build: green");
+    const result = lintPromptContent(bad);
+    expect(result.errors.some((e) => e.includes("invalid verification.build"))).toBe(true);
+  });
+
+  it("rejects a malformed ## Output review log", () => {
+    const bad = BASE.replace(
+      "### Round 1 — approved\n- diff ok",
+      "freeform text with no round heading",
+    );
+    const result = lintPromptContent(bad);
+    expect(result.errors.some((e) => e.includes("malformed ## Output review log"))).toBe(true);
+  });
+
+  it("does not require output-gate fields (absent is valid)", () => {
+    expect(lintPromptContent(VALID_PROMPT).errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: countRunOutputStatuses
+// ---------------------------------------------------------------------------
+
+describe("countRunOutputStatuses", () => {
+  let tmpDir: string;
+  let tasksDir: string;
+  let runDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    tasksDir = path.join(tmpDir, "tasks");
+    runDir = path.join(tasksDir, "run");
+    fs.mkdirSync(runDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("tallies pending/approved/changes-requested in run/", () => {
+    writeFile(runDir, "a.md", "---\nstatus: approved\nreview_round: 1\noutput_status: pending\n---\n# a");
+    writeFile(runDir, "b.md", "---\nstatus: approved\nreview_round: 1\noutput_status: approved\n---\n# b");
+    writeFile(runDir, "c.md", "---\nstatus: approved\nreview_round: 1\noutput_status: changes-requested\n---\n# c");
+    writeFile(runDir, "d.md", "---\nstatus: approved\nreview_round: 1\n---\n# d (no output_status)");
+
+    const counts = countRunOutputStatuses(tasksDir);
+    expect(counts.pending).toBe(1);
+    expect(counts.approved).toBe(1);
+    expect(counts["changes-requested"]).toBe(1);
+  });
+
+  it("returns zeros when run/ is missing", () => {
+    const counts = countRunOutputStatuses(path.join(tmpDir, "nope"));
+    expect(counts).toEqual({ pending: 0, approved: 0, "changes-requested": 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: runReviewOutput
+// ---------------------------------------------------------------------------
+
+describe("runReviewOutput", () => {
+  let tmpDir: string;
+  let tasksDir: string;
+  let runDir: string;
+
+  const RUN_PROMPT = `---
+status: approved
+review_round: 2
+output_status: pending
+output_round: 0
+---
+
+# feat-y: y
+
+## Scope
+
+- Implement Y
+
+## Acceptance criteria
+
+- [x] Y works
+`;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    tasksDir = path.join(tmpDir, "tasks");
+    runDir = path.join(tasksDir, "run");
+    fs.mkdirSync(runDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("throws when slug is empty", () => {
+    expect(() => runReviewOutput("", { tasksDir })).toThrow("--slug is required");
+  });
+
+  it("throws when no matching prompt in run/", () => {
+    expect(() => runReviewOutput("ghost", { tasksDir })).toThrow(
+      'No prompt file found in tasks/run/ matching slug: "ghost"',
+    );
+  });
+
+  it("writes approved verdict, increments round, appends Output review log", () => {
+    const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    const result = runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "diff --git a/x b/x",
+      reviewFn: () => "approved",
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("approved");
+    expect(result.outputStatus).toBe("approved");
+    expect(result.outputRound).toBe(1);
+
+    const parsed = parsePrompt(fs.readFileSync(file, "utf-8"));
+    expect(parsed.frontmatter.outputStatus).toBe("approved");
+    expect(parsed.frontmatter.outputRound).toBe(1);
+    expect(fs.readFileSync(file, "utf-8")).toMatch(/## Output review log[\s\S]*### Round 1 — approved/);
+  });
+
+  it("passes diff + Scope/Acceptance context to the review function", () => {
+    writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    let seen: { diff: string; context: string } | null = null;
+
+    runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "MY-DIFF",
+      reviewFn: (input) => {
+        seen = input;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(seen!.diff).toBe("MY-DIFF");
+    expect(seen!.context).toContain("## Scope");
+    expect(seen!.context).toContain("## Acceptance criteria");
+  });
+
+  it("writes changes-requested verdict", () => {
+    const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    const result = runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "d",
+      reviewFn: () => "changes-requested",
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("changes-requested");
+    expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputStatus).toBe("changes-requested");
+  });
+
+  it("defaults to changes-requested when the review function throws", () => {
+    writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    const result = runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "d",
+      reviewFn: () => {
+        throw new Error("boom");
+      },
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("changes-requested");
+  });
+
+  it("caps at maxRounds → blocked-review", () => {
+    // Prompt already at output_round: 3 with maxRounds 3 → next call is blocked.
+    const file = writeFile(
+      runDir,
+      "feat-cap.md",
+      RUN_PROMPT.replace("output_round: 0", "output_round: 3"),
+    );
+
+    const result = runReviewOutput("cap", {
+      tasksDir,
+      maxRounds: 3,
+      diffFn: () => "d",
+      reviewFn: () => "changes-requested",
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("blocked-review");
+    expect(result.outputStatus).toBe("blocked-review");
+    expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputStatus).toBe("blocked-review");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OUTPUT-GATE: runPromote (the single run→done path)
+// ---------------------------------------------------------------------------
+
+describe("runPromote", () => {
+  let tmpDir: string;
+  let tasksDir: string;
+  let runDir: string;
+  let doneDir: string;
+  let configPath: string;
+  let repoRoot: string;
+
+  const APPROVED = `---
+status: approved
+review_round: 2
+output_status: approved
+output_round: 1
+verification:
+  build: unknown
+  tests: unknown
+  evidence: ""
+---
+
+# feat-z: z
+
+## Scope
+
+- Z
+
+## Acceptance criteria
+
+- [x] Z done
+`;
+
+  function writeConfig(build: string, tests: string): void {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ adapters: {}, verify: { build, tests } }),
+      "utf-8",
+    );
+  }
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    repoRoot = tmpDir;
+    tasksDir = path.join(tmpDir, "tasks");
+    runDir = path.join(tasksDir, "run");
+    doneDir = path.join(tasksDir, "done");
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.mkdirSync(doneDir, { recursive: true });
+    configPath = path.join(tmpDir, "adapters.json");
+    writeConfig("true", "true");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("throws when slug is empty", () => {
+    expect(() => runPromote("", { tasksDir, configPath, repoRoot })).toThrow("--slug is required");
+  });
+
+  it("REFUSES when output_status is not approved", () => {
+    writeFile(runDir, "feat-z.md", APPROVED.replace("output_status: approved", "output_status: pending"));
+
+    expect(() => runPromote("z", { tasksDir, configPath, repoRoot, runCmdFn: () => 0, logFn: () => undefined }))
+      .toThrow(/output_status="pending"/);
+  });
+
+  it("REFUSES and does not move when build fails", () => {
+    writeConfig("BUILDCMD", "TESTCMD");
+    const file = writeFile(runDir, "feat-z.md", APPROVED);
+
+    expect(() =>
+      runPromote("z", {
+        tasksDir, configPath, repoRoot, logFn: () => undefined,
+        runCmdFn: (cmd) => (cmd === "BUILDCMD" ? 1 : 0),
+      }),
+    ).toThrow(/build failed/);
+
+    expect(fs.existsSync(file)).toBe(true);
+    expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.verification?.build).toBe("fail");
+  });
+
+  it("REFUSES and does not move when tests fail", () => {
+    writeConfig("BUILDCMD", "TESTCMD");
+    const file = writeFile(runDir, "feat-z.md", APPROVED);
+
+    expect(() =>
+      runPromote("z", {
+        tasksDir, configPath, repoRoot, logFn: () => undefined,
+        runCmdFn: (cmd) => (cmd === "TESTCMD" ? 1 : 0),
+      }),
+    ).toThrow(/tests failed/);
+
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("REFUSES when evidence is required (requires_evidence) but empty", () => {
+    writeFile(
+      runDir,
+      "feat-z.md",
+      APPROVED.replace("output_round: 1", "output_round: 1\nrequires_evidence: true"),
+    );
+
+    expect(() =>
+      runPromote("z", { tasksDir, configPath, repoRoot, runCmdFn: () => 0, logFn: () => undefined }),
+    ).toThrow(/requires evidence/);
+  });
+
+  it("REFUSES when verification.evidence points to a missing file", () => {
+    writeFile(
+      runDir,
+      "feat-z.md",
+      APPROVED.replace('evidence: ""', "evidence: docs/nope.png"),
+    );
+
+    expect(() =>
+      runPromote("z", { tasksDir, configPath, repoRoot, runCmdFn: () => 0, logFn: () => undefined }),
+    ).toThrow(/does not exist/);
+  });
+
+  it("SUCCEEDS and moves run/→done/ in the happy path", () => {
+    const file = writeFile(runDir, "feat-z.md", APPROVED);
+    const calls: string[] = [];
+
+    const result = runPromote("z", {
+      tasksDir, configPath, repoRoot, logFn: () => undefined,
+      runCmdFn: (cmd) => {
+        calls.push(cmd);
+        return 0;
+      },
+    });
+
+    expect(result.moved).toBe(true);
+    expect(result.verification.build).toBe("pass");
+    expect(result.verification.tests).toBe("pass");
+    expect(fs.existsSync(file)).toBe(false);
+    expect(fs.existsSync(path.join(doneDir, "feat-z.md"))).toBe(true);
+    expect(calls).toEqual(["true", "true"]);
+  });
+
+  it("SUCCEEDS with a UI label when evidence file exists", () => {
+    fs.mkdirSync(path.join(repoRoot, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(repoRoot, "docs", "shot.png"), "img");
+    writeFile(
+      runDir,
+      "feat-z.md",
+      APPROVED
+        .replace("output_round: 1", "output_round: 1\nlabel: ui")
+        .replace('evidence: ""', "evidence: docs/shot.png"),
+    );
+
+    const result = runPromote("z", {
+      tasksDir, configPath, repoRoot, runCmdFn: () => 0, logFn: () => undefined,
+    });
+
+    expect(result.moved).toBe(true);
+    expect(fs.existsSync(path.join(doneDir, "feat-z.md"))).toBe(true);
+  });
+
+  it("--dry-run reports without running commands or moving the file", () => {
+    const file = writeFile(runDir, "feat-z.md", APPROVED);
+    let called = false;
+
+    const result = runPromote("z", {
+      tasksDir, configPath, repoRoot, dryRun: true, logFn: () => undefined,
+      runCmdFn: () => {
+        called = true;
+        return 0;
+      },
+    });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.moved).toBe(false);
+    expect(called).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("uses default verify commands when config has no verify block", () => {
+    fs.writeFileSync(configPath, JSON.stringify({ adapters: {} }), "utf-8");
+    writeFile(runDir, "feat-z.md", APPROVED);
+    const calls: string[] = [];
+
+    runPromote("z", {
+      tasksDir, configPath, repoRoot, logFn: () => undefined,
+      runCmdFn: (cmd) => {
+        calls.push(cmd);
+        return 0;
+      },
+    });
+
+    expect(calls).toEqual(["pnpm build", "pnpm test"]);
   });
 });
