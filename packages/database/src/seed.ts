@@ -16,18 +16,31 @@ async function main() {
 
   const defaultPassword = await hashPassword(rawPassword);
 
-  const admin = await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: { role: 'admin' },
-    create: {
-      username: 'admin',
-      displayName: 'Admin',
-      email: 'admin@roadboard.dev',
-      password: defaultPassword,
-      role: 'admin',
-      status: 'active',
-    },
+  // Idempotent bootstrap: never attempt an INSERT when the admin already exists.
+  // Prisma upsert compiles to INSERT ... ON CONFLICT (username), whose arbiter
+  // does NOT cover the unique `email`, so re-seeding an existing admin raised
+  // P2002 on email. Match by username OR email, then create only if absent.
+  const existingAdmin = await prisma.user.findFirst({
+    where: { OR: [{ username: 'admin' }, { email: 'admin@roadboard.dev' }] },
   });
+
+  const admin = existingAdmin
+    ? existingAdmin.role === 'admin'
+      ? existingAdmin
+      : await prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: { role: 'admin' },
+        })
+    : await prisma.user.create({
+        data: {
+          username: 'admin',
+          displayName: 'Admin',
+          email: 'admin@roadboard.dev',
+          password: defaultPassword,
+          role: 'admin',
+          status: 'active',
+        },
+      });
 
   console.log(`Created admin user: ${admin.username}`);
 
