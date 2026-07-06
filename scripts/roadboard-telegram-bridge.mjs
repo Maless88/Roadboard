@@ -72,12 +72,17 @@ async function rb(pathname, opts = {}) {
   return fetch(`${RB_API}${pathname}`, { ...opts, headers: { Authorization: `Bearer ${RB_TOKEN}`, ...(opts.headers || {}) } });
 }
 
+// Deterministic domain routing: segreteria (email/inbox/calendar/reminders) -> Cleo,
+// so it never depends on the assistant flakily delegating via [[ASK:cleo]].
+const INBOX_RE = /\b(e[-\s]?mail|mail|posta|inbox|casella|gmail|promemoria|reminder|calendario|appuntament|bozz[ae]|draft)\b/i;
+
 // run one turn and return the assistant's reply text
 async function runTurn(message, onProgress) {
   let slug = "assistant";
   let text = message;
   const m = message.match(/^[@/]([a-z0-9_-]+)\s+([\s\S]+)$/i);
   if (m) { slug = m[1].toLowerCase(); text = m[2]; }
+  else if (INBOX_RE.test(message)) { slug = "cleo"; }  // segreteria -> Cleo (deterministic)
   const dr = await rb("/agents/rooms/direct", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agentSlug: slug }) });
   if (!dr.ok) throw new Error(`direct room ${dr.status}`);
   const room = await dr.json();
@@ -112,6 +117,13 @@ async function runTurn(message, onProgress) {
 // strip stream artifacts that shouldn't reach the user: `_→ tool_` action lines,
 // [[ASK:slug]] delegation tokens, and collapse the resulting blank lines.
 function cleanReply(s) {
+  // strip leaked internal control text (Claude Code harness injections) so it can
+  // never reach the user as the reply: <system-reminder> blocks and the Skill-tool
+  // "Available skills (for Skill tool): ..." enumeration.
+  s = s
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
+    .replace(/<\/?system-reminder>/gi, " ")
+    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, " ");
   let t = s
     .split("\n")
     .filter((l) => !/^\s*_→ .*_\s*$/.test(l))
