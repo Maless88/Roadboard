@@ -114,6 +114,7 @@ services:
       AGENT_WORKSPACES_BASE: ${AGENT_WORKSPACES_BASE:-/home/alessio/agent-workspaces}
       NOTIFY_URL: ${NOTIFY_URL:-http://host.docker.internal:8788/send}
       NOTIFY_TOKEN: ${NOTIFY_TOKEN:-}
+      FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE:-/run/secrets/fcm-service-account.json}
       EMAIL_HELPER_URL: ${EMAIL_HELPER_URL:-http://host.docker.internal:8789}
       EMAIL_HELPER_TOKEN: ${EMAIL_HELPER_TOKEN:-}
       CALENDAR_HELPER_URL: ${CALENDAR_HELPER_URL:-http://host.docker.internal:8790}
@@ -133,6 +134,8 @@ services:
       # (roadboard-deploy.path) does git pull + docker compose up.
       # docker.sock removed 2026-06-23 (security: container == root host).
       - ${ROADBOARD_HOST_REPO_PATH:-../..}:/opt/roadboard
+      # FCM service-account (secret): mounted read-only, never in the image/repo
+      - ${FCM_SERVICE_ACCOUNT_HOST:-/home/alessio/.config/roadboard/fcm-service-account.json}:/run/secrets/fcm-service-account.json:ro
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
