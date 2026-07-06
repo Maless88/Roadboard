@@ -3,11 +3,15 @@ import { AuthGuard } from "../../common/auth.guard";
 import { CurrentUser } from "../../common/user.decorator";
 import type { AuthUser } from "../../common/auth-user";
 import { AgentNotificationsService } from "./notifications.service";
+import { PushService } from "./push.service";
 
 @UseGuards(AuthGuard)
 @Controller("notifications")
 export class AgentNotificationsController {
-  constructor(@Inject(AgentNotificationsService) private readonly svc: AgentNotificationsService) {}
+  constructor(
+    @Inject(AgentNotificationsService) private readonly svc: AgentNotificationsService,
+    @Inject(PushService) private readonly push: PushService,
+  ) {}
 
   @Post()
   async create(
@@ -35,5 +39,20 @@ export class AgentNotificationsController {
   @Post("dismiss")
   dismiss(@CurrentUser() user: AuthUser, @Body() body: { ids?: string[] }): Promise<{ ok: boolean }> {
     return this.svc.dismiss(user.userId, body?.ids);
+  }
+
+  /** Register the caller device push token (FCM/APNs). Upsert by token. */
+  @Post("devices")
+  registerDevice(
+    @CurrentUser() user: AuthUser,
+    @Body() body: { token?: string; platform?: string },
+  ): Promise<{ ok: boolean }> {
+    return this.push.registerDevice(user.userId, (body?.token || "").trim(), (body?.platform || "android").trim());
+  }
+
+  /** Unregister a device push token (e.g. on logout). */
+  @Post("devices/remove")
+  removeDevice(@CurrentUser() user: AuthUser, @Body() body: { token?: string }): Promise<{ ok: boolean }> {
+    return this.push.removeDevice(user.userId, (body?.token || "").trim());
   }
 }

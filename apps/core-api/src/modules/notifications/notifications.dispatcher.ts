@@ -2,12 +2,16 @@ import { Inject, Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { optionalEnv } from "@roadboard/config";
 import { AgentNotificationsService } from "./notifications.service";
+import { PushService } from "./push.service";
 
 /** Every minute: deliver pending agent notifications to the Telegram bridge /send. */
 @Injectable()
 export class NotificationsDispatcher {
   private readonly logger = new Logger(NotificationsDispatcher.name);
-  constructor(@Inject(AgentNotificationsService) private readonly svc: AgentNotificationsService) {}
+  constructor(
+    @Inject(AgentNotificationsService) private readonly svc: AgentNotificationsService,
+    @Inject(PushService) private readonly push: PushService,
+  ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
   async tick(): Promise<void> {
@@ -31,6 +35,8 @@ export class NotificationsDispatcher {
         if (n.agent_slug) lines.push(`*— ${n.agent_slug}*`);
         text = lines.join("\n");
       }
+      // best-effort native push (FCM/APNs); independent of Telegram delivery marking
+      this.push.sendToUser(n.user_id, (n.title || "").trim(), (n.body || "").trim()).catch(() => {});
       try {
         const r = await fetch(url, {
           method: "POST",
