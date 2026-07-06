@@ -114,6 +114,10 @@ services:
       AGENT_WORKSPACES_BASE: ${AGENT_WORKSPACES_BASE:-/home/alessio/agent-workspaces}
       NOTIFY_URL: ${NOTIFY_URL:-http://host.docker.internal:8788/send}
       NOTIFY_TOKEN: ${NOTIFY_TOKEN:-}
+      EMAIL_HELPER_URL: ${EMAIL_HELPER_URL:-http://host.docker.internal:8789}
+      EMAIL_HELPER_TOKEN: ${EMAIL_HELPER_TOKEN:-}
+      CALENDAR_HELPER_URL: ${CALENDAR_HELPER_URL:-http://host.docker.internal:8790}
+      CALENDAR_HELPER_TOKEN: ${CALENDAR_HELPER_TOKEN:-}
       GITHUB_REPO: ${GITHUB_REPO:-Maless88/Roadboard}
       GITHUB_READ_TOKEN: ${GITHUB_READ_TOKEN:-}
       ROADBOARD_REPO_PATH: /opt/roadboard
@@ -122,7 +126,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:3001:3001"
+      - "${BIND_ADDR:-127.0.0.1}:3001:3001"
     volumes:
       # Self-hosted deploy: container must be able to run
       # `git pull` on the host repo; a host systemd path-unit
@@ -149,7 +153,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
     ports:
-      - "127.0.0.1:3002:3002"
+      - "${BIND_ADDR:-127.0.0.1}:3002:3002"
     depends_on:
       db-bootstrap:
         condition: service_completed_successfully
@@ -173,6 +177,8 @@ services:
       MCP_HTTP_PORT: "3005"
       EMAIL_HELPER_URL: ${EMAIL_HELPER_URL:-http://host.docker.internal:8789}
       EMAIL_HELPER_TOKEN: ${EMAIL_HELPER_TOKEN:-}
+      CALENDAR_HELPER_URL: ${CALENDAR_HELPER_URL:-http://host.docker.internal:8790}
+      CALENDAR_HELPER_TOKEN: ${CALENDAR_HELPER_TOKEN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
