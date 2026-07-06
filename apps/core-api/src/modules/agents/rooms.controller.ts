@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Inject, Param, Post, Query, Sse, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Inject, Param, Post, Query, Sse, UseGuards } from "@nestjs/common";
 import { Observable } from "rxjs";
 import { optionalEnv } from "@roadboard/config";
 import { AuthGuard } from "../../common/auth.guard";
@@ -69,6 +69,18 @@ export class RoomsController {
     @Body() body: { agentSlug: string },
   ): Promise<unknown> {
     return this.rooms.addParticipant(user.userId, id, body.agentSlug);
+  }
+
+
+  @Delete(":id")
+  deleteRoom(@CurrentUser() user: AuthUser, @Param("id") id: string): Promise<unknown> {
+    return this.rooms.deleteRoom(user.userId, id);
+  }
+
+
+  @Delete(":id/messages")
+  clearMessages(@CurrentUser() user: AuthUser, @Param("id") id: string): Promise<unknown> {
+    return this.rooms.clearMessages(user.userId, id);
   }
 
   @Post(":id/share")

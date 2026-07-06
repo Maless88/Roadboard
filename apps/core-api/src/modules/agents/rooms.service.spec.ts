@@ -6,16 +6,21 @@ function makePrismaMock() {
   return {
     chatRoom: {
       create: vi.fn(),
+      delete: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
     roomMessage: {
       create: vi.fn(),
+      deleteMany: vi.fn(),
       findMany: vi.fn(),
     },
     chatParticipant: {
       upsert: vi.fn(),
+    },
+    agentConfig: {
+      findMany: vi.fn(),
     },
   };
 }
@@ -56,6 +61,7 @@ describe("RoomsService", () => {
   });
 
   it("listRooms projects agents and last message", async () => {
+    prisma.agentConfig.findMany.mockResolvedValue([{ slug: "researcher" }, { slug: "dev" }]);
     prisma.chatRoom.findMany.mockResolvedValue([
       {
         id: "r1", kind: "group", title: "T", projectId: null, lastMessageAt: null,
@@ -97,5 +103,54 @@ describe("RoomsService", () => {
       data: { roomId: "r1", senderKind: "agent", senderId: "researcher", content: "found it" },
     });
     expect(prisma.chatRoom.findUnique).not.toHaveBeenCalled();
+  });
+
+  it("deleteRoom removes the room after checking membership", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue({ id: "r1", ownerUserId: USER, participants: [] });
+    prisma.chatRoom.delete.mockResolvedValue({ id: "r1" });
+
+    const result = await svc.deleteRoom(USER, "r1");
+
+    expect(prisma.chatRoom.delete).toHaveBeenCalledWith({ where: { id: "r1" } });
+    expect(result).toEqual({ ok: true, id: "r1" });
+  });
+
+  it("deleteRoom rejects a non-owner", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue({ id: "r1", ownerUserId: "someone-else", participants: [] });
+
+    await expect(svc.deleteRoom(USER, "r1")).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.chatRoom.delete).not.toHaveBeenCalled();
+  });
+
+  it("deleteRoom rejects a missing room", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue(null);
+
+    await expect(svc.deleteRoom(USER, "missing")).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.chatRoom.delete).not.toHaveBeenCalled();
+  });
+
+  it("clearMessages deletes messages and resets lastMessageAt", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue({ id: "r1", ownerUserId: USER, participants: [] });
+    prisma.roomMessage.deleteMany.mockResolvedValue({ count: 3 });
+
+    const result = await svc.clearMessages(USER, "r1");
+
+    expect(prisma.roomMessage.deleteMany).toHaveBeenCalledWith({ where: { roomId: "r1" } });
+    expect(prisma.chatRoom.update).toHaveBeenCalledWith({ where: { id: "r1" }, data: { lastMessageAt: null } });
+    expect(result).toEqual({ ok: true, deleted: 3 });
+  });
+
+  it("clearMessages rejects a non-owner", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue({ id: "r1", ownerUserId: "someone-else", participants: [] });
+
+    await expect(svc.clearMessages(USER, "r1")).rejects.toBeInstanceOf(ForbiddenException);
+    expect(prisma.roomMessage.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("clearMessages rejects a missing room", async () => {
+    prisma.chatRoom.findUnique.mockResolvedValue(null);
+
+    await expect(svc.clearMessages(USER, "missing")).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.roomMessage.deleteMany).not.toHaveBeenCalled();
   });
 });

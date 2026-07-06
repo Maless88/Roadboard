@@ -48,15 +48,27 @@ export class RoomsService {
         messages: { orderBy: { createdAt: "desc" }, take: 1 },
       },
     });
-    return rooms.map((r) => ({
-      id: r.id,
-      kind: r.kind,
-      title: r.title,
-      projectId: r.projectId,
-      lastMessageAt: r.lastMessageAt,
-      agents: r.participants.filter((p) => p.kind === "agent").map((p) => p.refId),
-      lastMessage: r.messages[0]?.content?.slice(0, 80) ?? null,
-    }));
+    // Only surface user-facing agents: hide internal/disabled ones (e.g. the
+    // routing coordinator), consistent with the contacts/roster filter.
+    const visible = await this.prisma.agentConfig.findMany({
+      where: { enabled: true, capability: { not: "routing" } },
+      select: { slug: true },
+    });
+    const visibleSlugs = new Set(visible.map((a) => a.slug));
+    return rooms
+      .map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        title: r.title,
+        projectId: r.projectId,
+        lastMessageAt: r.lastMessageAt,
+        agents: r.participants
+          .filter((p) => p.kind === "agent" && visibleSlugs.has(p.refId))
+          .map((p) => p.refId),
+        lastMessage: r.messages[0]?.content?.slice(0, 80) ?? null,
+      }))
+      // Drop rooms left with no visible agent (e.g. the coordinator-only room).
+      .filter((r) => r.agents.length > 0);
   }
 
   private async assertMember(ownerUserId: string, roomId: string) {
@@ -177,5 +189,23 @@ export class RoomsService {
     const agentCount = await this.prisma.chatParticipant.count({ where: { roomId, kind: "agent" } });
     if (agentCount > 1) await this.prisma.chatRoom.update({ where: { id: roomId }, data: { kind: "group" } });
     return p;
+  }
+
+
+  async deleteRoom(ownerUserId: string, roomId: string): Promise<unknown> {
+    await this.assertMember(ownerUserId, roomId);
+
+    // Cascade in schema.prisma removes participants and messages.
+    await this.prisma.chatRoom.delete({ where: { id: roomId } });
+    return { ok: true, id: roomId };
+  }
+
+
+  async clearMessages(ownerUserId: string, roomId: string): Promise<unknown> {
+    await this.assertMember(ownerUserId, roomId);
+
+    const result = await this.prisma.roomMessage.deleteMany({ where: { roomId } });
+    await this.prisma.chatRoom.update({ where: { id: roomId }, data: { lastMessageAt: null } });
+    return { ok: true, deleted: result.count };
   }
 }
