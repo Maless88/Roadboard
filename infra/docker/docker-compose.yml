@@ -176,7 +176,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "127.0.0.1:3005:3005"
+      - "0.0.0.0:3005:3005"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3005/health >/dev/null 2>&1 || exit 1"]
       interval: 10s
