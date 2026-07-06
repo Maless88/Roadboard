@@ -4,7 +4,6 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { PrismaModule } from "./prisma.module";
 import { CommonModule } from "./common/common.module";
 import { HealthModule } from "./modules/health/health.module";
-import { VersionModule } from "./modules/version/version.module";
 import { ReleaseModule } from "./modules/release/release.module";
 import { ProjectsModule } from "./modules/projects/projects.module";
 import { PhasesModule } from "./modules/phases/phases.module";
@@ -28,7 +27,6 @@ import { NotificationsModule } from "./modules/notifications/notifications.modul
     PrismaModule,
     CommonModule,
     HealthModule,
-    VersionModule,
     ReleaseModule,
     ProjectsModule,
     PhasesModule,
