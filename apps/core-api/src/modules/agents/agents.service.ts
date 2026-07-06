@@ -60,7 +60,9 @@ export class AgentsService {
 
   list(): Promise<unknown> {
     return this.prisma.agentConfig.findMany({
-      where: { enabled: true },
+      // Router (Ermes/coordinator) is an internal routing brain, not a user-facing
+      // chat agent — exclude it here, consistent with rooms.service participant filter.
+      where: { enabled: true, capability: { not: "routing" } },
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
