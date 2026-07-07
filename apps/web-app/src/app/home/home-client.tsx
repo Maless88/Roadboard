@@ -72,15 +72,27 @@ function Avatar({ url, name, slug, size }: { url?: string | null; name: string; 
 }
 
 /* ---------------- Modal shell ---------------- */
-function Modal({ title, subtitle, onClose, children }: { title: React.ReactNode; subtitle?: string; onClose: () => void; children: React.ReactNode }) {
+function Modal({ title, subtitle, onClose, children, sideImage }: { title: React.ReactNode; subtitle?: string; onClose: () => void; children: React.ReactNode; sideImage?: string }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6" onClick={onClose}>
-      <div className="flex h-[100dvh] w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+    <div className={`fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6 ${sideImage ? "lg:pl-24" : ""}`} onClick={onClose}>
+      <div className="flex items-end justify-center">
+        {sideImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={sideImage}
+            alt=""
+            aria-hidden="true"
+            className="pointer-events-none relative z-0 hidden h-[80vh] w-auto shrink-0 object-contain lg:block lg:-mr-6"
+            style={{ filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.5))" }}
+            onError={(e) => { e.currentTarget.style.display = "none"; }}
+          />
+        ) : null}
+        <div className={`relative z-10 flex h-[100dvh] w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:h-auto sm:rounded-3xl ${sideImage ? "sm:max-h-[92vh] sm:max-w-3xl" : "sm:max-h-[88vh] sm:max-w-lg"}`} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-zinc-100">{title}</div>
@@ -89,6 +101,7 @@ function Modal({ title, subtitle, onClose, children }: { title: React.ReactNode;
           <button onClick={onClose} className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">✕</button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+        </div>
       </div>
     </div>
   );
@@ -122,7 +135,7 @@ function bullets(t: string | null | undefined): string[] {
 function SchedaModal({ agent, onClose }: { agent: Contact; onClose: () => void }) {
   const { p, loading } = useProfile(agent.slug);
   return (
-    <Modal title={`Scheda · ${agent.name}`} subtitle="Scheda tecnica" onClose={onClose}>
+    <Modal title={`Scheda · ${agent.name}`} subtitle="Scheda tecnica" onClose={onClose} sideImage={`/agents-fullbody/${agent.slug}.png`}>
       <div className="p-5">
         {loading ? <p className="text-sm text-zinc-500">Carico…</p> : !p ? <p className="text-sm text-zinc-500">Profilo non disponibile.</p> : (
           <>

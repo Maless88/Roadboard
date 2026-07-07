@@ -3,7 +3,7 @@ interface LogoProps {
   className?: string;
 }
 
-/** Roadboard mark: ascending bars (kanban/board metaphor) on the app's indigo gradient. */
+/** Roadboard mark: winding road with checkpoint nodes, on a deep navy-violet tile. */
 export function Logo({ size = 28, className }: LogoProps) {
 
   return (
@@ -11,19 +11,23 @@ export function Logo({ size = 28, className }: LogoProps) {
       width={size}
       height={size}
       viewBox="0 0 32 32"
-      fill="none"
       className={className}
       aria-hidden="true"
     >
-      <rect width="32" height="32" rx="7" fill="#6366f1" />
       <rect width="32" height="32" rx="7" fill="url(#roadboard-logo-gradient)" />
-      <rect x="8" y="14" width="4" height="10" rx="2" fill="white" />
-      <rect x="14" y="8" width="4" height="16" rx="2" fill="white" />
-      <rect x="20" y="11" width="4" height="13" rx="2" fill="white" />
+      <path
+        d="M 9 27 C 7 19 23 17 16 9 C 13.5 6.2 17.5 4.5 18.5 3"
+        fill="none"
+        stroke="#2dd4bf"
+        strokeWidth="4"
+        strokeLinecap="round"
+      />
+      <circle cx="18.5" cy="3" r="3" fill="#f59e0b" />
+      <circle cx="9" cy="27" r="2.6" fill="#a78bfa" />
       <defs>
-        <linearGradient id="roadboard-logo-gradient" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#6366f1" />
-          <stop offset="1" stopColor="#818cf8" />
+        <linearGradient id="roadboard-logo-gradient" x1="0" y1="0" x2="1" y2="1">
+          <stop stopColor="#171335" />
+          <stop offset="1" stopColor="#241a4a" />
         </linearGradient>
       </defs>
     </svg>
