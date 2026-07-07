@@ -171,18 +171,6 @@ export function SwipeableProjectCard({ project, snap }: Props) {
             <h2 className="text-sm font-semibold text-white truncate">{project.name}</h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {isCompleted && (
-              <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full font-medium flex items-center gap-1"
-                style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', border: '1px solid rgba(99,102,241,0.3)' }}
-                title={dict.projects.completed.title}
-              >
-                <svg width="8" height="8" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-                  <path d="M10.293 2.293a1 1 0 0 1 1.414 1.414l-6 6a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L5 7.586l5.293-5.293z" />
-                </svg>
-                {dict.projects.completed.badge}
-              </span>
-            )}
             <span className={`text-xs font-medium ${STATUS_LABEL[project.status] ?? 'text-gray-500'}`}>
               {project.status}
             </span>
