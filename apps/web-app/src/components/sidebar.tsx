@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useRef, useState, useEffect } from 'react';
 import { logoutAction } from '@/app/actions';
+import { Logo } from './logo';
 import { useDict } from '@/lib/i18n/locale-context';
 import { LanguageSwitcher } from './language-switcher';
 import { ThemeToggle } from './theme-toggle';
@@ -154,12 +155,7 @@ export function Sidebar({ username, displayName, activeProject, userProjects = [
           href="/dashboard"
           className={`flex flex-1 items-center gap-2.5 py-4 hover:bg-white/5 transition-colors ${collapsed ? 'justify-center px-2' : 'px-4'}`}
         >
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg,#6366f1,#818cf8)' }}
-          >
-            <span className="text-xs font-black text-white">R</span>
-          </div>
+          <Logo size={28} className="shrink-0" />
           {!collapsed && (
             <div className="flex flex-col leading-none">
               <span className="text-sm font-bold text-white tracking-tight">RoadBoard</span>
