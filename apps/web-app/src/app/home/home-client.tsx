@@ -79,28 +79,28 @@ function Modal({ title, subtitle, onClose, children, sideImage }: { title: React
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
   return (
-    <div className={`fixed inset-0 z-50 flex justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6 ${sideImage ? "lg:pl-24" : ""}`} onClick={onClose}>
-      <div className="flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm sm:p-6" onClick={onClose}>
+      <div className="relative flex h-[100dvh] w-full flex-col sm:h-auto sm:max-h-[88vh] sm:max-w-lg">
         {sideImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={sideImage}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none relative z-0 hidden h-[80vh] w-auto shrink-0 object-contain lg:block lg:-mr-6"
-            style={{ filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.5))" }}
+            className="pointer-events-none absolute right-full top-1/2 z-0 hidden h-[80vh] w-auto -translate-y-1/2 object-contain lg:block"
+            style={{ marginRight: "1.5rem", filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.5))" }}
             onError={(e) => { e.currentTarget.style.display = "none"; }}
           />
         ) : null}
-        <div className={`relative z-10 flex h-[100dvh] w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:h-auto sm:rounded-3xl ${sideImage ? "sm:max-h-[92vh] sm:max-w-3xl" : "sm:max-h-[88vh] sm:max-w-lg"}`} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-zinc-100">{title}</div>
-            {subtitle ? <div className="truncate text-xs text-zinc-500">{subtitle}</div> : null}
+        <div className="relative z-10 flex h-full w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-zinc-100">{title}</div>
+              {subtitle ? <div className="truncate text-xs text-zinc-500">{subtitle}</div> : null}
+            </div>
+            <button onClick={onClose} className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">✕</button>
           </div>
-          <button onClick={onClose} className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">✕</button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         </div>
       </div>
     </div>
