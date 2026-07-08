@@ -78,30 +78,45 @@ function Modal({ title, subtitle, onClose, children, sideImage }: { title: React
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm sm:p-6" onClick={onClose}>
-      <div className="relative flex h-[100dvh] w-full flex-col sm:h-auto sm:max-h-[88vh] sm:max-w-lg">
-        {sideImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
+
+  const header = (
+    <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold text-zinc-100">{title}</div>
+        {subtitle ? <div className="truncate text-xs text-zinc-500">{subtitle}</div> : null}
+      </div>
+      <button onClick={onClose} className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">✕</button>
+    </div>
+  );
+
+  if (sideImage) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm sm:p-6" onClick={onClose}>
+        <div
+          className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-zinc-950 shadow-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-3xl lg:block lg:aspect-video lg:h-auto lg:max-h-[86vh] lg:max-w-5xl lg:rounded-[30px] lg:border-2 lg:border-emerald-200/80 lg:bg-zinc-900 lg:shadow-[0_0_0_6px_rgba(52,211,153,0.16),0_30px_80px_rgba(0,0,0,0.7),0_0_60px_rgba(52,211,153,0.22)]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <img
             src={sideImage}
             alt=""
             aria-hidden="true"
-            className="pointer-events-none absolute right-full top-1/2 z-0 hidden h-[80vh] w-auto -translate-y-1/2 object-contain lg:block"
-            style={{ marginRight: "1.5rem", filter: "drop-shadow(0 20px 40px rgba(0,0,0,0.5))" }}
+            className="pointer-events-none absolute inset-0 z-0 hidden h-full w-full object-cover object-left lg:block"
             onError={(e) => { e.currentTarget.style.display = "none"; }}
           />
-        ) : null}
-        <div className="relative z-10 flex h-full w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-zinc-100">{title}</div>
-              {subtitle ? <div className="truncate text-xs text-zinc-500">{subtitle}</div> : null}
-            </div>
-            <button onClick={onClose} className="ml-3 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-zinc-100">✕</button>
+          <div className="relative z-10 flex h-full w-full min-h-0 flex-col overflow-hidden lg:absolute lg:left-[62%] lg:top-1/2 lg:h-auto lg:max-h-[82%] lg:w-[46%] lg:max-w-xl lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-[22px] lg:border lg:border-white/10 lg:bg-zinc-950/85 lg:shadow-2xl lg:backdrop-blur-md">
+            {header}
+            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm sm:p-6" onClick={onClose}>
+      <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden border border-white/10 bg-zinc-950 shadow-2xl sm:h-auto sm:max-h-[88vh] sm:max-w-lg sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+        {header}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
