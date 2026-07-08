@@ -187,7 +187,7 @@ const handler = (req, res) => {
     const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
-      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose'] : []), '--setting-sources', 'project', ...(p.model ? ['--model', String(p.model)] : []), ...(repoPath ? ['--add-dir', repoPath] : []), ...toolFlags, ...mcpFlags];
+      : ['-p', prompt, '--output-format', streamMode ? 'stream-json' : 'text', ...(streamMode ? ['--verbose', '--include-partial-messages'] : []), '--setting-sources', 'project', ...(p.model ? ['--model', String(p.model)] : []), ...(repoPath ? ['--add-dir', repoPath] : []), ...toolFlags, ...mcpFlags];
     if (reqCwd && typeof p.contextMd === 'string') {
       try {
         fs.mkdirSync(reqCwd, { recursive: true });
@@ -215,6 +215,7 @@ const handler = (req, res) => {
     const child = spawn(bin, args, { env: childEnv, stdio: ['ignore', 'pipe', 'pipe'], cwd: reqCwd || (process.env.AGENT_CLI_BRIDGE_CWD || process.cwd()) });
     if (streamMode) {
       let buf = '';
+      let streamedText = false;
       child.stdout.on('data', (d) => {
         buf += d.toString();
         let nl;
@@ -222,6 +223,11 @@ const handler = (req, res) => {
           const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
           if (!line.trim()) continue;
           let ev; try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.type === 'stream_event' && ev.event && ev.event.type === 'content_block_delta' && ev.event.delta && ev.event.delta.type === 'text_delta') {
+            const tx = ev.event.delta.text;
+            if (tx) { res.write(tx); streamedText = true; }
+            continue;
+          }
           if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
             for (const b of ev.message.content) {
               if (b && b.type === 'tool_use' && b.name) {
@@ -230,7 +236,7 @@ const handler = (req, res) => {
               }
             }
           } else if (ev.type === 'result') {
-            if (typeof ev.result === 'string') res.write('\n' + sanitizeResult(ev.result));
+            if (!streamedText && typeof ev.result === 'string') res.write('\n' + sanitizeResult(ev.result));
             if (ev.usage && typeof ev.usage === 'object') {
               const u = ev.usage;
               res.write('\n__rb_tok__:' + JSON.stringify({

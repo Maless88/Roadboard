@@ -63,6 +63,45 @@ async function sendMessage(chatId, text) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// strip internal control leaks (Claude Code harness) for live + final views
+function sanitizeLeaks(s) {
+  return s
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
+    .replace(/<\/?system-reminder>/gi, " ")
+    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, " ");
+}
+
+// mid-stream plain-text view of the accumulated partial (with a cursor)
+function liveView(raw) {
+  let s = sanitizeLeaks(splitSender(raw || ""))
+    .replace(/^\s*_→ (.+?)_\s*$/gm, "🔧 $1")
+    .replace(/^\s*↪.*$/gm, "")
+    .replace(/\[\[ASK:[a-z0-9_-]+\]\]/gi, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!s) return "";
+  if (s.length > 3500) s = "…" + s.slice(-3500);
+  return s + " ▍";
+}
+
+async function tgEdit(chatId, msgId, text, opts = {}) {
+  const t = (text && text.trim()) ? text : "…";
+  const body = { chat_id: chatId, message_id: msgId, disable_web_page_preview: true };
+  body.text = (opts.html ? mdToHtml(t) : t).slice(0, 4096);
+  if (opts.html) body.parse_mode = "HTML";
+  const r = await tg("editMessageText", body);
+  if (r && r.ok === false) {
+    const d = r.description || "";
+    console.error("[tg] edit fail", r.error_code, d.slice(0,80));
+    if (/not modified/i.test(d)) return { ok: true };
+    if (r.error_code === 429) { await sleep(((r.parameters && r.parameters.retry_after) || 2) * 1000); return tgEdit(chatId, msgId, text, opts); }
+    if (opts.html) return tg("editMessageText", { chat_id: chatId, message_id: msgId, text: t.slice(0, 4096), disable_web_page_preview: true });
+  }
+  return r;
+}
+
 function splitSender(raw) {
   if (raw.startsWith("\x1e")) { const nl = raw.indexOf("\n"); return nl === -1 ? "" : raw.slice(nl + 1); }
   return raw;
@@ -154,33 +193,41 @@ async function handleUpdate(u) {
   }
   state.lastChat = chatId; writeState(state);
   console.error(`[tg] in from ${fromId} chat ${chatId}: ${msg.text.slice(0, 80)}`);
-  // Method A: keep a live "typing…" indicator for the whole turn, post each agent
-  // step (`_→ tool_`) as its own message as it happens, then a final message with the
-  // clean answer. Pure presentation over the same stream — no extra model tokens.
+  // Stream the answer into a single message: create it on the FIRST streamed text and edit
+  // it in place (~1s); final edit is the clean HTML answer. Native typing is also sent (shows
+  // on clients that render bot typing in 1:1 chats).
   await tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
   let typing = setInterval(() => tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {}), 4000);
   const stopTyping = () => { if (typing) { clearInterval(typing); typing = null; } };
-  let queue = Promise.resolve();                   // serialize sends so steps keep their order
-  const enqueue = (fn) => { queue = queue.then(fn).catch(() => {}); };
-  let emitted = 0;
-  const onProgress = (partial) => {
-    const steps = [...(partial || "").matchAll(/^\s*_→ (.+?)_\s*$/gm)].map((m) => m[1].trim());
-    for (; emitted < steps.length; emitted++) {
-      const tool = steps[emitted];
-      enqueue(() => tg("sendMessage", { chat_id: chatId, text: `🔧 <i>${escHtml(tool)}</i>`, parse_mode: "HTML", disable_web_page_preview: true }));
-    }
-  };
+  let msgId = null, latest = "", lastSent = "", busy = false;
+  const timer = setInterval(async () => {
+    if (busy) return;
+    const view = liveView(latest);
+    if (!view || view === lastSent) return;
+    busy = true;
+    try {
+      if (!msgId) {
+        const m = await tg("sendMessage", { chat_id: chatId, text: view.slice(0, 4096), disable_web_page_preview: true });
+        if (m && m.ok) { msgId = m.result.message_id; lastSent = view; }
+      } else {
+        lastSent = view;
+        await tgEdit(chatId, msgId, view, { html: false });
+      }
+    } catch { /* best-effort */ }
+    busy = false;
+  }, 1000);
+  const onProgress = (partial) => { latest = partial || ""; };
   try {
     const reply = await runTurn(msg.text.trim(), onProgress);
-    await queue;                                    // flush queued step messages first
-    stopTyping();
-    const clean = reply && reply.trim() ? reply : (emitted ? "" : "(nessuna risposta)");
-    if (clean.trim()) await sendMessage(chatId, clean);
+    clearInterval(timer); stopTyping();
+    const clean = reply && reply.trim() ? reply : "(nessuna risposta)";
+    if (!msgId) { await sendMessage(chatId, clean); }
+    else if (clean.length <= 4096) { await tgEdit(chatId, msgId, clean, { html: true }); }
+    else { await tgEdit(chatId, msgId, clean.slice(0, 3500) + " …", { html: true }); await sendMessage(chatId, clean.slice(3500)); }
   } catch (e) {
-    stopTyping();
-    await sendMessage(chatId, `[errore] ${e instanceof Error ? e.message : String(e)}`);
-  } finally {
-    stopTyping();
+    clearInterval(timer); stopTyping();
+    const err = "[errore] " + (e instanceof Error ? e.message : String(e));
+    if (msgId) await tgEdit(chatId, msgId, err, { html: false }).catch(() => {}); else await sendMessage(chatId, err);
   }
 }
 
