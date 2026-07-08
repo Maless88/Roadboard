@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -22,9 +22,9 @@ const MD_COMPONENTS: any = {
   strong: (pr: any) => <strong className="font-semibold text-zinc-100">{pr.children}</strong>,
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
-function Markdown({ text }: { text: string }) {
+const Markdown = memo(function Markdown({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{text}</ReactMarkdown>;
-}
+});
 
 interface Contact { name: string; slug: string; capability: string; avatarUrl?: string | null; description?: string | null }
 interface Activity { eventType: string; createdAt: string; targetId?: string | null; metadata?: Record<string, unknown> | null }
@@ -295,7 +295,7 @@ function ChatModal({ agent, onClose }: { agent: Contact; onClose: () => void }) 
   const [loading, setLoading] = useState(true);
   const endRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "auto" }); }, [msgs]);
 
   useEffect(() => {
     let on = true;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,9 +21,9 @@ const MD_COMPONENTS: any = {
   h3: (pr: any) => <p className="my-1 text-sm font-semibold">{pr.children}</p>,
   strong: (pr: any) => <strong className="font-semibold text-zinc-100">{pr.children}</strong>,
 };
-function Markdown({ text }: { text: string }) {
+const Markdown = memo(function Markdown({ text }: { text: string }) {
   return <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{text}</ReactMarkdown>;
-}
+});
 
 interface RoomListItem {
   id: string;
@@ -128,7 +128,7 @@ export function ChatboardClient({ displayName }: { displayName: string }) {
     })();
   }, [loadRooms]);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [detail?.messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "auto" }); }, [detail?.messages]);
 
   // load persisted "seen" marks + ask notification permission once
   useEffect(() => {
