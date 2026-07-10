@@ -65,12 +65,24 @@ async function sendMessage(chatId, text) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// strip internal control leaks (Claude Code harness) for live + final views
+// Strip Claude Code harness control leaks for live + final views. Safety net that
+// mirrors sanitizeHarness() in agent-cli-bridge.mjs (source-side); anchored on the
+// harness's own strings + the paraphrase variants observed leaking (2026-07-02/04).
 function sanitizeLeaks(s) {
-  return s
+  return String(s)
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
     .replace(/<\/?system-reminder>/gi, " ")
-    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, " ");
+    .replace(/<(command-(?:name|message|args))>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/?command-(?:name|message|args)>/gi, " ")
+    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, " ")
+    .replace(/^.*\bWhen users ask you to perform tasks, check if any of the available skills match\b.*$/gim, "")
+    .replace(/^.*\bSkills provide specialized capabilities and domain knowledge\b.*$/gim, "")
+    .replace(/^.*\bAvailable skills are listed in system-reminder messages\b.*$/gim, "")
+    .replace(/^.*\bOnly invoke a skill that appears in that list\b.*$/gim, "")
+    .replace(/^.*\binvoke a skill via the Skill tool\b.*$/gim, "")
+    .replace(/^.*\buse a skill that isn'?t listed above\b.*$/gim, "")
+    .replace(/^.*\bThe user typed a slash command\b.*$/gim, "")
+    .replace(/^\s*Unknown command:\s*\/\S+.*$/gim, "");
 }
 
 // mid-stream plain-text view of the accumulated partial (with a cursor)
@@ -157,12 +169,9 @@ async function runTurn(message, onProgress) {
 // [[ASK:slug]] delegation tokens, and collapse the resulting blank lines.
 function cleanReply(s) {
   // strip leaked internal control text (Claude Code harness injections) so it can
-  // never reach the user as the reply: <system-reminder> blocks and the Skill-tool
-  // "Available skills (for Skill tool): ..." enumeration.
-  s = s
-    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
-    .replace(/<\/?system-reminder>/gi, " ")
-    .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, " ");
+  // never reach the user as the reply (system-reminder / command tags / Skill-tool
+  // guidance / "Unknown command"): shared with the live view via sanitizeLeaks().
+  s = sanitizeLeaks(s);
   let t = s
     .split("\n")
     .filter((l) => !/^\s*_→ .*_\s*$/.test(l))

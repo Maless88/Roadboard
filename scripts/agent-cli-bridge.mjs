@@ -132,18 +132,54 @@ function ensureProjectRepo(projectId, repoUrl) {
   } catch (e) { console.error('[repo-ensure]', e.message); return null; }
 }
 
-// Strip leaked Claude Code harness injections (<system-reminder> blocks and the
-// Skill-tool Available-skills enumeration) from the final result BEFORE it is
-// streamed to core-api and persisted, so neither the app nor the Telegram bridge
-// receive/store them and they can not re-enter the model context as history.
-// Mirrors the consumer-side cleanReply() in roadboard-telegram-bridge.mjs.
-function sanitizeResult(s) {
+// Strip leaked Claude Code harness injections from agent output BEFORE it is
+// streamed to core-api and persisted, so neither the app/boardchat nor the
+// Telegram bridge receive/store them and they can not re-enter the model context
+// as history. Anchored on the harness's OWN strings (verified in the claude 2.1.x
+// binary) plus the paraphrase variants observed leaking (2026-07-02/04), so it is
+// robust to the model rewording the Skill-tool guidance instead of quoting it.
+// Kept in sync with cleanReply()/sanitizeLeaks() in roadboard-telegram-bridge.mjs.
+function sanitizeHarness(s) {
   return String(s)
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, "")
     .replace(/<\/?system-reminder>/gi, "")
+    .replace(/<(command-(?:name|message|args))>[\s\S]*?<\/\1>/gi, "")
+    .replace(/<\/?command-(?:name|message|args)>/gi, "")
     .replace(/Available skills \(for Skill tool\):[\s\S]*?(?:\n\s*\n|$)/gi, "")
+    .replace(/^.*\bWhen users ask you to perform tasks, check if any of the available skills match\b.*$/gim, "")
+    .replace(/^.*\bSkills provide specialized capabilities and domain knowledge\b.*$/gim, "")
+    .replace(/^.*\bAvailable skills are listed in system-reminder messages\b.*$/gim, "")
+    .replace(/^.*\bOnly invoke a skill that appears in that list\b.*$/gim, "")
+    .replace(/^.*\binvoke a skill via the Skill tool\b.*$/gim, "")
+    .replace(/^.*\buse a skill that isn'?t listed above\b.*$/gim, "")
+    .replace(/^.*\bThe user typed a slash command\b.*$/gim, "")
+    .replace(/^\s*Unknown command:\s*\/\S+.*$/gim, "")
+    .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+// Earliest index of a possible INCOMPLETE harness marker in `s`, so the streamer
+// can hold back that tail until the marker completes (and gets stripped) rather
+// than emitting half of it. Returns -1 when the whole string is safe to flush.
+const HARNESS_ANCHORS = [
+  "Available skills", "Available skills are listed in system-reminder messages",
+  "When users ask you to perform tasks", "Skills provide specialized",
+  "Only invoke a skill that appears in that list", "invoke a skill via the Skill tool",
+  "use a skill that isn't listed above", "use a skill that isnt listed above",
+  "The user typed a slash command", "Unknown command:",
+];
+function harnessHoldback(s) {
+  let idx = -1;
+  const set = (p) => { if (p !== -1) idx = idx === -1 ? p : Math.min(idx, p); };
+  const open = s.lastIndexOf("<system-reminder>");
+  if (open !== -1 && s.indexOf("</system-reminder>", open) === -1) set(open);
+  const lastLt = s.lastIndexOf("<"), lastGt = s.lastIndexOf(">");
+  if (lastLt > lastGt) set(lastLt); // a '<' that may start a tag
+  for (const a of HARNESS_ANCHORS) {
+    const max = Math.min(a.length - 1, s.length);
+    for (let k = max; k > 0; k--) { if (s.slice(-k) === a.slice(0, k)) { set(s.length - k); break; } }
+  }
+  return idx;
 }
 
 const handler = (req, res) => {
@@ -164,7 +200,10 @@ const handler = (req, res) => {
     if (reqCwd && !(reqCwd === WS_BASE || reqCwd.startsWith(WS_BASE + '/'))) {
       res.writeHead(400); return res.end('cwd not allowed');
     }
-    const prompt = String(p.prompt || '');
+    // A prompt starting with '/' is treated by claude-code as a slash command
+    // (=> "Unknown command: /x" leaks instead of an answer). Neutralize by prefixing
+    // a space so the user's text always reaches the model as a normal message.
+    const prompt = String(p.prompt || '').replace(/^(\s*)\//, '$1 /');
     // NOTE: codex tiering not yet implemented; privileged agents must use claude-code.
     const policy = (p.toolPolicy === 'sysadmin' || p.toolPolicy === 'dev' || p.toolPolicy === 'auditor') ? p.toolPolicy : 'restricted';
     const slug = reqCwd ? path.basename(reqCwd) : '';
@@ -216,6 +255,20 @@ const handler = (req, res) => {
     if (streamMode) {
       let buf = '';
       let streamedText = false;
+      let rawAcc = '';   // accumulated model text (pre-sanitize)
+      let sentLen = 0;   // length of sanitized text already written to res
+      // Emit only the sanitized text that is safe to commit: when not final, hold
+      // back a tail that may be the start of a harness marker so we never stream
+      // half of a <system-reminder>/skill-guidance block. Sanitizing at the SOURCE
+      // means core-api persists the clean text (no leak re-enters context / boardchat).
+      const flushText = (final) => {
+        let cut = rawAcc.length;
+        if (!final) { const h = harnessHoldback(rawAcc); if (h !== -1) cut = h; }
+        const clean = sanitizeHarness(rawAcc.slice(0, cut));
+        if (clean.length > sentLen && clean.startsWith(clean.slice(0, sentLen))) {
+          res.write(clean.slice(sentLen)); sentLen = clean.length;
+        }
+      };
       child.stdout.on('data', (d) => {
         buf += d.toString();
         let nl;
@@ -225,18 +278,20 @@ const handler = (req, res) => {
           let ev; try { ev = JSON.parse(line); } catch { continue; }
           if (ev.type === 'stream_event' && ev.event && ev.event.type === 'content_block_delta' && ev.event.delta && ev.event.delta.type === 'text_delta') {
             const tx = ev.event.delta.text;
-            if (tx) { res.write(tx); streamedText = true; }
+            if (tx) { rawAcc += tx; streamedText = true; flushText(false); }
             continue;
           }
           if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
             for (const b of ev.message.content) {
               if (b && b.type === 'tool_use' && b.name) {
+                flushText(true); // commit safe text before the tool marker (no marker spans a tool_use)
                 const nm = String(b.name).replace(/^mcp__roadboard__/, 'roadboard:').replace(/^mcp__/, '');
                 res.write('\n_\u2192 ' + nm + '_\n');
               }
             }
           } else if (ev.type === 'result') {
-            if (!streamedText && typeof ev.result === 'string') res.write('\n' + sanitizeResult(ev.result));
+            if (!streamedText && typeof ev.result === 'string') res.write('\n' + sanitizeHarness(ev.result));
+            else flushText(true); // final flush of any held-back tail
             if (ev.usage && typeof ev.usage === 'object') {
               const u = ev.usage;
               res.write('\n__rb_tok__:' + JSON.stringify({
