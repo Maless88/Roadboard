@@ -41,10 +41,10 @@ Responsibilities:
 - memory entries
 - decisions
 - session handoffs
-- teams
-- grants
 - dashboards query endpoints
 - audit events
+
+(Note: teams, memberships, grants and tokens are owned by the Auth and Access service, not Core API.)
 
 Recommended technology:
 - NestJS with Fastify adapter

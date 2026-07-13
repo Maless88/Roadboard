@@ -64,7 +64,7 @@ and symbols are cited inline.
   - `graph.service.ts` — orchestrates Postgres writes and emits outbox events.
   - `graph-sync.service.ts` + tests — replicates Postgres mutations to Memgraph asynchronously.
   - `drift.service.ts` — Postgres ↔ Memgraph reconciliation (recent commit `7a396ad: feat(codeflow): CF-GDB-03c mini-PR B+C — drift endpoint + hourly systemd timer`).
-- **MCP server:** [apps/mcp-service/](../../apps/mcp-service/) — stdio + StreamableHTTP transport (port 3005). 31 tools, including `ingest_architecture`, `get_architecture_map`, `get_node_context`, `link_task_to_node`. Calls back into core-api via [core-api.client.ts](../../apps/mcp-service/src/clients/core-api.client.ts).
+- **MCP server:** [apps/mcp-service/](../../apps/mcp-service/) — stdio + StreamableHTTP transport (port 3005). 50 tools, including `ingest_architecture`, `get_architecture_map`, `get_node_context`, `link_task_to_node`. Calls back into core-api via [core-api.client.ts](../../apps/mcp-service/src/clients/core-api.client.ts).
 - **Other apps:** `auth-access` (3002), `worker-jobs` (3003, BullMQ), `local-sync-bridge` (3004, SQLite).
 
 ### 2.3 Routing & API

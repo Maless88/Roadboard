@@ -5,7 +5,7 @@
 
 This guide shows how to point Claude Code, Zed, VS Code, or Codex CLI at a Roadboard instance so an agent can read project state and onboard a repository via `ingest_architecture`.
 
-The MCP server exposes **32 tools** via Streamable HTTP on port 3005.
+The MCP server exposes **50 tools** via Streamable HTTP on port 3005.
 
 ## 1. Generate an MCP token
 
@@ -164,7 +164,7 @@ env = { KEY = "value" }
 
 ## 3. Verify the connection
 
-Restart the MCP client. It should discover 32 tools; `list_projects` is the quickest smoke test:
+Restart the MCP client. It should discover 50 tools; `list_projects` is the quickest smoke test:
 
 ```
 agent> list_projects

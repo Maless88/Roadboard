@@ -1,8 +1,15 @@
 # CodeFlow — Design Document
 
-> **Status**: Proposed — not yet implemented.
-> **Target**: Wave 5
-> **Author**: Design session 2026-04-15
+> **Status**: ⚠️ SUPERSEDED / HISTORICAL DESIGN. Kept for context; the implementation diverged.
+> **Original target**: Wave 5 · **Author**: Design session 2026-04-15
+>
+> **How reality differs (as of 2026-07):**
+> - The graph is stored in **Memgraph 2.18.1** (`packages/graph-db`, Bolt :7687), **not** PostgreSQL. Postgres holds only scan metadata (`CodeRepository`, `ArchitectureSnapshot`) plus `DomainGroup` and the `GraphSyncEvent` outbox.
+> - The Prisma models `ArchitectureNode/Edge/Annotation/Link` and `ImpactAnalysis` do **not** exist (nodes/edges/links/annotations live in Memgraph).
+> - There is **no** `get_change_impact` MCP tool — impact is served via REST (`GET .../graph/nodes/:id/impact`). Real MCP tools: `get_architecture_map`, `get_architecture_snapshot`, `get_node_context`, `create_architecture_*`, `ingest_architecture`, `link_task_to_node`.
+> - The scan queue is **`deep-code-scan`** (`QUEUE_DEEP_CODE_SCAN`), not `QUEUE_ARCHITECTURE_SCAN`.
+> - Real code paths: backend `apps/core-api/src/modules/codeflow/`; frontend `apps/web-app/src/app/projects/[id]/codeflow/`.
+> - Authoritative state: `docs/adr/0001-deep-code-map-memgraph-schema.md` and `packages/graph-db/src/schema.ts`.
 
 ---
 
@@ -745,4 +752,4 @@ Deferred to Phase 2+: graph overlay colors, module/file zoom levels, domain grou
 - All new endpoints under `/codeflow` — no contamination of existing modules.
 - `isCurrent` boolean on nodes and edges — simple queries, no mandatory join for the normal view.
 - Polymorphic `entityType` + `entityId` reference for links — lighter schema, application-level validation.
-- No graph database (Neo4j, etc.) — PostgreSQL handles up to ~100k nodes and ~500k edges comfortably, well beyond RoadBoard's use case for years.
+- ~~No graph database (Neo4j, etc.) — PostgreSQL handles up to ~100k nodes...~~ **Superseded:** the graph now runs on **Memgraph 2.18.1** (see banner at top); Postgres keeps only scan metadata.

@@ -148,7 +148,7 @@ Environment: copy `.env.example` to `.env` at repo root. Key vars:
 apps/
   core-api          NestJS + Fastify, port 3001 — project/phase/task/memory/decision/codeflow/release CRUD
   auth-access       NestJS + Fastify, port 3002 — users, teams, sessions, MCP tokens, RBAC
-  mcp-service       MCP server (stdio + HTTP, port 3005) — 34 tools for AI agents
+  mcp-service       MCP server (stdio + HTTP, port 3005) — 50 tools for AI agents
   web-app           Next.js 15, port 3000 — frontend dashboard, Atlas, settings
   worker-jobs       NestJS + BullMQ + Redis, port 3003 — async background jobs
   local-sync-bridge NestJS + SQLite, port 3004 — offline-first journal with sync engine

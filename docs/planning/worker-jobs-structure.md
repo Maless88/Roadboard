@@ -92,13 +92,13 @@ Responsibilities:
 - register processors
 - centralize queue bootstrap
 
-Suggested queue families:
-- `dashboard.refresh`
-- `summary.generate`
-- `handoff.generate`
-- `sync.reconcile`
-- `token.cleanup`
-- `activity.aggregate`
+Queue families (real — see `apps/worker-jobs/src/jobs/queue-names.ts`):
+- `dashboard-refresh`
+- `summary-generation`
+- `cleanup`
+- `thumbnail-refresh`
+- `deep-code-scan`
+- `agent-run`
 
 ### 2. `jobs/dashboards`
 Responsible for dashboard-oriented async work.

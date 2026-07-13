@@ -43,9 +43,9 @@ The scope `project.admin` is a wildcard that satisfies any scope requirement (ch
 
 | Scope | Tools |
 |---|---|
-| `project.read` | `list_projects`, `list_teams`, `get_project`, `get_user`, `list_active_tasks`, `list_phases`, `get_project_memory`, `prepare_task_context`, `prepare_project_summary`, `get_project_changelog`, `search_memory`, `list_recent_decisions` |
+| `project.read` | `list_projects`, `list_teams`, `get_project`, `get_user`, `list_active_tasks`, `list_phases`, `get_project_memory`, `prepare_task_context`, `prepare_project_summary`, `get_project_changelog`, `search_memory`, `list_recent_decisions`, `list_skills`, `read_inbox`, `list_events`, `list_scheduled_activities` |
 | `task.write` | `create_task`, `update_task`, `update_task_status`, `delete_task` |
-| `project.write` | `create_phase`, `update_phase` |
+| `project.write` | `create_phase`, `update_phase`, `attach_skill`, `detach_skill`, `sync_skills_catalog`, `mark_read`, `create_draft`, `create_event`, `delete_event`, `notify`, `create_scheduled_activity`, `create_reminder`, `pause_scheduled_activity`, `delete_scheduled_activity` |
 | `memory.write` | `create_memory_entry`, `create_handoff` |
 | `decision.write` | `create_decision`, `update_decision` |
 | `project.admin` | `create_project` |

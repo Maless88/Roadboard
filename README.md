@@ -24,7 +24,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Multi-project planning** — projects, phases, milestones, tasks, priorities, and dependencies
 - **Operational memory** — persistent memory entries, decision records, and session handoffs
 - **Team collaboration** — users, teams, project grants, role-based access control
-- **MCP agent access** — 34 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
+- **MCP agent access** — 50 tools for agents to read and write project state via Model Context Protocol, with fine-grained per-token scope enforcement
 - **Atlas (CodeFlow)** — interactive architecture map with domain groups, agent context view, drift validation, and Deep Code Map schema (File/Symbol/ExternalPackage)
 - **Audit trail** — full activity log per project with filters by event type, actor type, and date range
 - **Project thumbnails** — auto-refresh screenshots from project home URL + manual upload
@@ -41,7 +41,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 apps/
   core-api          NestJS — projects, phases, tasks, memory, decisions, codeflow, release (port 3001)
   auth-access       NestJS — users, teams, sessions, MCP tokens (port 3002)
-  mcp-service       MCP server (stdio + HTTP) — 34 tools for agent integration (port 3005)
+  mcp-service       MCP server (stdio + HTTP) — 50 tools for agent integration (port 3005)
   web-app           Next.js 15 — dashboard, project detail, task management, Atlas (port 3000)
   worker-jobs       NestJS + BullMQ — async jobs: refresh, summary, cleanup (port 3003)
   local-sync-bridge NestJS + SQLite — offline-first journal with sync engine (port 3004)
@@ -201,6 +201,7 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 | `list_projects` | `project.read` | List accessible projects |
 | `list_teams` | `project.read` | List teams the caller belongs to (slug + role) |
 | `get_project` | `project.read` | Get project details with phases |
+| `get_user` | `project.read` | Get the current authenticated user |
 | `list_active_tasks` | `project.read` | List tasks, optionally filtered by status |
 | `list_phases` | `project.read` | List phases for a project |
 | `get_project_memory` | `project.read` | List memory entries |
@@ -209,11 +210,28 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 | `get_project_changelog` | `project.read` | Structured changelog: tasks, phases, decisions, memory, audit |
 | `search_memory` | `project.read` | Full-text search over memory entries |
 | `list_recent_decisions` | `project.read` | List decisions, optionally filtered by status |
+| `list_skills` | `project.read` | List available agent skills in the catalog |
+| `read_inbox` | `project.read` | Read the agent inbox (notifications / email) |
+| `list_events` | `project.read` | List calendar events |
+| `list_scheduled_activities` | `project.read` | List scheduled (recurring) activities |
 | `create_task` | `task.write` | Create a task in a phase (auto-selects first phase if omitted); accepts description, assigneeId, dueDate |
 | `update_task` | `task.write` | Update title, description, phaseId, priority, assigneeId, or dueDate of an existing task |
 | `update_task_status` | `task.write` | Update task status; accepts completionReport when marking done |
+| `delete_task` | `task.write` | Delete a task |
 | `create_phase` | `project.write` | Create a roadmap phase; can be linked to a decision via decisionId |
 | `update_phase` | `project.write` | Update phase fields: title, status, dates, linked decision |
+| `attach_skill` | `project.write` | Attach a skill to an agent / project |
+| `detach_skill` | `project.write` | Detach a skill from an agent / project |
+| `sync_skills_catalog` | `project.write` | Sync the agent skills catalog |
+| `mark_read` | `project.write` | Mark inbox items as read |
+| `create_draft` | `project.write` | Create an email / message draft |
+| `create_event` | `project.write` | Create a calendar event |
+| `delete_event` | `project.write` | Delete a calendar event |
+| `notify` | `project.write` | Send a notification |
+| `create_scheduled_activity` | `project.write` | Create a scheduled / recurring activity |
+| `create_reminder` | `project.write` | Create a one-off reminder |
+| `pause_scheduled_activity` | `project.write` | Pause a scheduled activity |
+| `delete_scheduled_activity` | `project.write` | Delete a scheduled activity |
 | `create_memory_entry` | `memory.write` | Create a memory entry |
 | `create_handoff` | `memory.write` | Structured handoff entry for session continuity |
 | `create_decision` | `decision.write` | Record an architectural decision; auto-logs to vault |
@@ -221,9 +239,10 @@ Each tool enforces a minimum `GrantType` scope. `project.admin` bypasses all che
 | `create_project` | `project.admin` | Create a new project; auto-logs to vault |
 | `get_architecture_map` | `codeflow.read` | Get the architecture graph (nodes + edges) |
 | `get_node_context` | `codeflow.read` | Full context for an architecture node |
+| `get_architecture_snapshot` | `codeflow.read` | Get a snapshot of the architecture graph |
 | `create_architecture_repository` | `codeflow.write` | Register a CodeRepository for the project (one per onboarding) |
-| `create_architecture_node` | `codeflow.write` | Add a workspace/module/service ArchitectureNode |
-| `create_architecture_edge` | `codeflow.write` | Add a depends_on / imports edge between two nodes |
+| `create_architecture_node` | `codeflow.write` | Add a workspace / module / service ArchitectureNode |
+| `create_architecture_edge` | `codeflow.write` | Add a dependency edge (e.g. DEPENDS_ON / IMPORTS) between two nodes |
 | `create_architecture_link` | `codeflow.write` | Tie a Task / Decision / Memory entry to an ArchitectureNode |
 | `link_task_to_node` | `codeflow.write` | Semantic wrapper of create_architecture_link for tasks (call right after create_task) |
 | `create_architecture_annotation` | `codeflow.write` | Attach a free-text note to an ArchitectureNode |

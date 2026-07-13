@@ -86,9 +86,9 @@ Alert fires at most once every 10 seconds (10 poll ticks). To adjust the thresho
 
 ---
 
-## 3. Retry a failed/stuck event
+## 3. Retry a dead/stuck event
 
-Reset a single `dead` or failed event back to `pending`:
+Reset a single `dead` or stuck (`in_progress`) event back to `pending`:
 
 ```sql
 UPDATE graph_sync_events
@@ -134,7 +134,7 @@ If a whole project's graph is stale, reset all its events:
 UPDATE graph_sync_events
 SET status = 'pending', attempts = 0, next_attempt_at = NULL, last_error = NULL
 WHERE project_id = '<project-id>'
-  AND status IN ('dead', 'failed');
+  AND status IN ('dead', 'in_progress');
 ```
 
 Or insert a `project:reset` event (worker will DETACH DELETE all nodes for the project in Memgraph then let subsequent upsert events rebuild):

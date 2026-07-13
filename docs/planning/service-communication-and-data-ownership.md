@@ -48,15 +48,17 @@ Do not introduce distributed eventing between local developer machines and the c
 ### `core-api` owns
 - Project
 - Phase
-- Milestone
 - Task
-- TaskDependency
 - MemoryEntry
 - Decision
-- SessionHandoff
-- FileReference
 - ActivityEvent (domain-side creation)
+- ScheduledActivity / ScheduledActivityRun
+- AgentConfig, AgentUserCredential, ChatRoom / ChatMessage / RoomMessage (agent rooms), ChatbotConfig
+- CodeRepository, ArchitectureSnapshot, DomainGroup, GraphSyncEvent (CodeFlow)
+- ProjectUserArchive
 - dashboard source queries
+
+(Note: `Milestone`, `TaskDependency`, `SessionHandoff` and `FileReference` are NOT separate Prisma models — milestones and task dependencies are not implemented, and handoffs are stored as `MemoryEntry` (type=handoff). See `packages/database/prisma/schema.prisma`.)
 
 This service is the owner of the main product domain.
 
@@ -215,12 +217,12 @@ Expose:
 Use Redis + BullMQ.
 
 Recommended event/job families:
-- `activity.recorded`
-- `dashboard.refresh`
-- `summary.generate`
-- `handoff.generate`
-- `sync.reconcile`
-- `token.cleanup`
+- `dashboard-refresh`
+- `summary-generation`
+- `cleanup`
+- `thumbnail-refresh`
+- `deep-code-scan`
+- `agent-run`
 
 Important rule:
 Treat these as internal jobs/events, not as a public event contract between many independent teams.

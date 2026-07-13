@@ -101,7 +101,7 @@ Only manual nodes/edges (`isManual=true`) are deletable via the API — auto-gen
 
 ### Via MCP (agents)
 
-The MCP tools `get_architecture_map(projectId)` and `get_node_context(projectId, nodeId)` are read-only. Creating nodes/edges via MCP is not yet exposed — use the REST API above or the seed script.
+The read tools `get_architecture_map(projectId)`, `get_node_context(projectId, nodeId)` and `get_architecture_snapshot` are read-only. Creating nodes/edges via MCP **is** exposed (scope `codeflow.write`): `create_architecture_repository`, `create_architecture_node`, `create_architecture_edge`, `create_architecture_link`, `create_architecture_annotation`, `link_task_to_node`, and the one-shot `ingest_architecture`. The REST API and seed script remain available too.
 
 ---
 
@@ -159,7 +159,7 @@ From the drawer's **Link** tab you can link the selected node to an existing tas
 In the form, enter the `entityId` (CUID of the target task/decision/memory/milestone), pick `entityType` and `linkType`, optionally add a note, click **Collega**.
 
 To find entity IDs quickly:
-- Tasks / decisions / memory entries: hover items in their respective tabs — the URL contains their IDs (or use `list_tasks` / `list_recent_decisions` via MCP).
+- Tasks / decisions / memory entries: hover items in their respective tabs — the URL contains their IDs (or use `list_active_tasks` / `list_recent_decisions` via MCP).
 - A future iteration will add a combobox with a searchable picker.
 
 ### Removing a link
@@ -227,7 +227,7 @@ These features appear in the sub-nav but their content is a placeholder until th
 
 - **No automatic scan yet**: no git-aware worker parses the repo. Wave 5.2 (CF-12..17) will add a BullMQ-scheduled `ArchitectureScanProcessor`.
 - **No import-level edges**: edges are only `depends_on` from `package.json`. TypeScript `imports` edges come with ts-morph in Wave 5.3 (CF-18).
-- **Storage will migrate to a graph DB**: decision `cmoa0zt18` accepted on 2026-04-22 — Memgraph Community Edition selected as target (ADR memory entry). Wave 5.2 tasks CF-GDB-02/03/04 will refactor the storage, transparent to the UI and MCP contracts.
+- **Storage migrated to a graph DB** (done, Wave 5.2 CF-GDB-*): decision `cmoa0zt18` (2026-04-22) selected Memgraph Community Edition. Memgraph 2.18.1 is now the source of truth for the graph; the migration was transparent to the UI and MCP contracts.
 - **Drawer entityId picker is free-text**: until a proper searchable picker lands, paste CUIDs by hand.
 
 ---
