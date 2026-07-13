@@ -10,112 +10,132 @@ Owns product intent, priorities, credentials, deployment, and final acceptance.
 
 ### Analyst
 
-Turns goals, repository state, and external research into planning material:
+The review gate. Does not write separate planning documents — reads the Worker prompt the Architect drafted in `tasks/todo/` and verifies it against the repo, RoadBoard, `PLAN.md`, docs, and source code. Writes its verdict **into the prompt file itself**: frontmatter `status: approved | changes-requested`, plus an append-only `## Review log` section (one `### Round N` per pass). Never overwrites a prior round.
 
-- current-state analysis
-- milestone and spec mapping
-- task slicing
-- risk review
-- acceptance criteria
-- verification stance
-- draft Architect handoff
-
-Analyst output is saved under `tasks/briefs/`. These files are planning inputs, not executable Worker prompts.
-
-Analyst also reviews files under `tasks/for-analyst/`, where Architect can place questions, findings, or proposals that need independent review.
+Analyst does not write code, does not move files between `tasks/` folders, and does not spawn subagents.
 
 ### Architect
 
-Validates Analyst output against the repository, RoadBoard, `PLAN.md`, docs, and source code. Architect owns final Worker prompt creation under `tasks/todo/`, Worker coordination, implementation review, and RoadBoard alignment.
+Drafts the Worker prompt, owns it through the review loop (revises on `changes-requested`, resubmits), and — once `status: approved` — moves the prompt `todo/`→`run/` and spawns a Worker. After the Worker finishes, Architect reviews the diff, then runs `review-output` and `promote` to close the loop.
 
 ### Worker
 
-Executes exactly one Architect-verified prompt. Worker does not design, expand scope, or chain tasks.
+Executes exactly one Architect-verified prompt. Does not design, does not expand scope, does not chain to another prompt, and does not close its own task — it sets `output_status: pending` and stops.
 
 ## Flow
 
-The pipeline has two distinct loops: an **async Analyst↔Architect planning loop** that runs to convergence before any Worker is spawned, and a **Worker execution loop** that runs exactly once per verified prompt.
+There are two loops: a **prompt review loop** (Analyst↔Architect, before any code is written) and an **output review loop** (Analyst↔Architect, after the Worker finishes). Both live entirely inside the prompt file's YAML frontmatter and its `## Review log` / `## Output review log` sections — there are no separate inbox folders.
 
-### Analyst↔Architect planning loop (async, multi-iteration)
+### 1. Prompt review loop (`todo/`, before spawn)
 
-1. Developer states a goal (may write a goal statement to `tasks/intake/`).
-2. Analyst prepares a planning brief under `tasks/briefs/`. This is a planning input, not a Worker prompt.
-3. Architect verifies the brief against repo state, RoadBoard, `PLAN.md`, docs, and source files.
-4. If Architect has questions, findings, or draft proposals that need Analyst review, it writes them to `tasks/for-analyst/`.
-5. For formal design proposals that need Analyst sign-off before Worker prompt creation, Architect writes to `tasks/proposals/`.
-6. Analyst reads from `tasks/for-analyst/` and `tasks/proposals/`, writes a review response back to `tasks/briefs/`.
-7. **Steps 3–6 repeat as many times as needed.** There is no limit on iteration count. The loop continues until Analyst and Architect converge.
-8. Only after planning convergence does Architect create final Worker prompts under `tasks/todo/`. Prompts in `tasks/todo/` are still reviewed once more by Analyst before the loop is considered complete.
-9. Analyst performs a final review pass against the intake and latest brief:
-   - if the prompts are correct, Analyst writes `tasks/.convergence-<slug>` with `role: "analyst"`;
-   - if there are gaps, Analyst writes `tasks/for-analyst/<slug>-q<N>.md` and the loop returns to Architect.
-10. After Analyst sign-off, prompts in `tasks/todo/` represent Analyst/Architect consensus — they are not drafts.
+1. Architect drafts a Worker prompt in `tasks/todo/<type>-<slug>.md` with frontmatter `status: draft`, `review_round: 0`.
+2. Architect sets `status: in-review` and hands it to the Analyst (subagent or external reviewer).
+3. Analyst edits the same file: sets `status` to `approved` or `changes-requested`, appends a `### Round N — <verdict>` block to `## Review log`.
+4. If `changes-requested`: Architect revises the prompt **in place**, increments `review_round`, sets `status: in-review`, resubmits. Repeat from step 3.
+5. **Cap: 3 rounds.** If still not `approved` after 3 rounds, Architect sets `status: blocked-review` and escalates to the Developer — no more automatic ping-pong.
+6. Only when `status: approved` may the Architect spawn a Worker.
 
-For exploratory design work, the loop can be run in planning-only mode:
+The CLI encodes the same gate: `pnpm agent:workflow run --slug <slug> --adapter <name>` **refuses** to invoke a Worker adapter unless the prompt's frontmatter `status` is exactly `approved`.
 
-```bash
-pnpm agent:workflow run --slug <slug> --planning-only
-```
+### 2. GO to Worker (manual)
 
-In planning-only mode, convergence means the analysis or proposal is ready for Developer review. It does not mean Worker prompts are ready, and the runner fails if a new file appears in `tasks/todo/`.
+7. Architect moves the prompt `tasks/todo/` → `tasks/run/` and spawns the Worker (via the Agent tool, or via `pnpm agent:workflow run --slug <slug> --adapter <name>` for the optional CLI adapter path).
+8. This move and spawn are always manual. Nothing in the CLI moves a file from `todo/` to `run/` on its own — `run` only checks the gate and invokes the adapter on a file already understood to be in play.
 
-### GO to Worker (manual)
+### 3. Output review loop (`run/`, after the Worker finishes)
 
-11. Developer reviews `tasks/todo/` (use `pnpm agent:workflow ready` to list lint-passing prompts).
-12. **GO to Worker is always a manual action.** The CLI never spawns Workers and never moves files from `todo/` to `run`.
-13. Architect moves a prompt from `tasks/todo/` to `tasks/run/` and spawns a Worker subagent.
+9. Worker implements the prompt, self-verifies, sets frontmatter `output_status: pending` on the prompt still sitting in `tasks/run/`, and stops. **It does not move the file.**
+10. `pnpm agent:workflow review-output --slug <slug>` — computes `git diff HEAD`, feeds it plus the prompt's `## Scope` and `## Acceptance Criteria` to the Analyst reviewer, and writes the verdict back: `output_status` → `approved` / `changes-requested`, `output_round` incremented, one `### Round N — <verdict>` appended to `## Output review log` (append-only, never overwritten).
+11. Defaults to `changes-requested` when uncertain. Caps at 3 rounds — beyond that, `output_status: blocked-review` and the Developer must triage.
+12. `pnpm agent:workflow promote --slug <slug>` — the **only** `run/`→`done/` path. Refuses to move the file unless, in order:
+    - `output_status: approved`;
+    - a re-executed build **and** tests both exit 0 (commands configurable in `.agent/workflow-adapters.json` under `verify: { build, tests }`, defaulting to `pnpm build` / `pnpm test`) — recorded into the prompt's `verification:` block;
+    - evidence is satisfied — if the prompt sets `requires_evidence: true` or carries a UI label (`label: ui` / `labels: [… ui …]`), `verification.evidence` must be a non-empty path to a file that exists.
+13. Only when all three gates pass does `promote` move the file to `tasks/done/`. `PLAN.md` checkbox flips and RoadBoard status updates stay manual — `promote` never touches either.
 
-### Worker execution loop (with output gate)
-
-14. Worker implements and self-verifies exactly that prompt.
-15. **Worker does NOT close its own task.** On completion it sets frontmatter `output_status: pending` on the prompt in `tasks/run/` and stops. It does not move the file.
-16. **`review-output`** — an Analyst reviews the RESULT: the CLI computes `git diff HEAD` and passes it, plus the prompt's `## Scope` and `## Acceptance criteria`, to the reviewer. The verdict is written back into the prompt: `output_status` → `approved` / `changes-requested`, `output_round` incremented, and one `### Round N — <verdict>` appended to `## Output review log` (append-only). Defaults to `changes-requested` when uncertain; caps at 3 rounds → `output_status: blocked-review`.
-17. **`promote`** — the single `run/`→`done/` path. It refuses unless, in order: (a) `output_status: approved`; (b) a re-executed build AND tests both exit 0 (configurable, defaults `pnpm build` / `pnpm test`), recorded in the `verification` block; (c) evidence is satisfied (see below). Only then does it move `run/`→`done/`. `PLAN.md` flips and RoadBoard updates stay manual.
-18. Architect reviews the result and updates RoadBoard / `PLAN.md` per `CLAUDE.md`.
-
-**Done requires**: `output_status: approved` **and** build + tests green **and** evidence when required. `tasks/done/` is unreachable by a Worker self-move.
-
-**Evidence rule**: if a non-empty `verification.evidence` path is set, that file must exist. If the prompt declares it needs evidence — `requires_evidence: true`, or a UI convention (`label: ui` / `labels: [… ui …]`) — then `verification.evidence` must be non-empty **and** point to an existing file. UI tasks therefore cannot be promoted without a screenshot/log artifact.
-
-Configure the verification commands in `.agent/workflow-adapters.json`:
-
-```json
-{ "verify": { "build": "pnpm build", "tests": "pnpm test" } }
-```
-
-### Conversation history in reports
-
-`tasks/reports/` captures the full conversation history for a planning cycle:
-
-- Original request (from `tasks/intake/`)
-- Architect proposals (from `tasks/proposals/`)
-- Analyst reviews and corrections (from `tasks/briefs/` and `tasks/for-analyst/`)
-- Final prompts that reached `tasks/todo/` (normal mode only)
-- Blocked or deferred items with reasons
-
-Use `pnpm agent:workflow report --slug <slug>` to generate a report for a completed cycle.
+**`tasks/done/` is unreachable by a Worker self-move.** The only door in is `promote`, and `promote` only opens after an approved output review, a green build+test run, and (for UI work) evidence.
 
 ## Folder Contract
 
 ```text
 tasks/
-  intake/       # Developer goal statements (input to Analyst) — local-only, not git-tracked
-  briefs/       # Analyst planning briefs, not executable
-  for-analyst/  # Architect questions/findings/proposals for Analyst review
-  proposals/    # Architect formal proposals awaiting Analyst sign-off — local-only, not git-tracked
-  todo/         # Architect-verified Worker prompts (final, after Analyst↔Architect convergence)
-  run/          # Worker prompts in progress
-  done/         # Completed Worker prompts
-  reports/      # Final packaged reports per cycle — local-only, not git-tracked
+  todo/   # prompts being drafted/reviewed AND prompts approved-but-not-yet-spawned
+  run/    # a Worker is executing, or has finished and is awaiting review-output/promote
+  done/   # promoted — output_status: approved + build/tests green + evidence satisfied
 ```
 
-`tasks/` is gitignored. All folders are local operational state only — not repository artifacts. The CLI creates missing folders on first use (mkdir if not exists). No `.gitkeep` files are needed or used.
+Exactly three folders. `tasks/` is gitignored — prompt files are working artifacts, not source.
 
-`tasks/briefs/` and `tasks/for-analyst/` are inboxes, not archives. Delete consumed files after they are converted into the next workflow artifact, unless they are intentionally kept with a short pending note.
+There is no `briefs/`, `for-analyst/`, `proposals/`, `intake/`, or `reports/` folder. That older inbox-based model (Analyst writing separate planning briefs, Architect writing separate proposal/question files) was retired — the review lives inside the prompt file's frontmatter and log sections instead. If you see references to those folders in older material, they describe the retired model, not the current one.
 
-`tasks/intake/`, `tasks/proposals/`, and `tasks/reports/` are local-only and not git-tracked. They are ephemeral artifacts of the planning cycle.
+Single-writer discipline: only the Architect creates new files in `todo/`. The `run/`→`done/` move happens only via `promote`.
 
-Repository state beats memory. RoadBoard and `PLAN.md` state must be verified before planning.
+## Prompt Frontmatter (mandatory)
+
+```yaml
+---
+status: draft        # draft | in-review | changes-requested | approved | blocked-review
+review_round: 0       # incremented by the Architect on each resubmission
+# --- output-gate fields (optional; populated once the Worker has run) ---
+output_status: none   # none | pending | approved | changes-requested | blocked-review
+output_round: 0        # incremented by review-output on each verdict
+verification:          # filled by `promote` (build/tests) and by the Worker (evidence)
+  build: unknown       # unknown | pass | fail
+  tests: unknown       # unknown | pass | fail
+  evidence: ""         # relative path to a screenshot/log; required for UI tasks
+---
+```
+
+## End-to-end example
+
+Minimal cycle for a bug fix: draft → review → approve → spawn → output review → promote.
+
+### 1. Architect drafts the prompt
+
+```
+tasks/todo/fix-mcp-auth-token-refresh.md
+```
+
+Frontmatter starts at `status: draft`, `review_round: 0`. Architect fills in `## Context`, `## Scope`, `## Acceptance criteria`, `## Notes`, sets `status: in-review`.
+
+### 2. Prompt review loop
+
+```bash
+pnpm agent:workflow review --slug mcp-auth-token-refresh --analyst codex
+```
+
+Analyst appends `### Round 1 — changes-requested` to `## Review log` with a precise request. Architect revises the prompt in place, increments `review_round`, resubmits. Round 2 comes back `approved`.
+
+### 3. GO — spawn the Worker
+
+```bash
+pnpm agent:workflow ready
+# feat-mcp-auth-token-refresh.md — approved (spawnable)
+
+mv tasks/todo/fix-mcp-auth-token-refresh.md tasks/run/
+# → Architect spawns a Worker subagent pointed at the file
+```
+
+### 4. Worker implements
+
+Worker edits the source, self-verifies, sets `output_status: pending` on the prompt (still in `tasks/run/`), and stops.
+
+### 5. Output review loop
+
+```bash
+pnpm agent:workflow review-output --slug mcp-auth-token-refresh
+# [review-output] approved — output_status: approved (round 1)
+#   Promotable: pnpm agent:workflow promote --slug mcp-auth-token-refresh
+```
+
+### 6. Promote
+
+```bash
+pnpm agent:workflow promote --slug mcp-auth-token-refresh
+# Promoted fix-mcp-auth-token-refresh.md → tasks/done/ (build=pass, tests=pass)
+```
+
+Architect then flips the corresponding `PLAN.md` checkbox (if any — `fix-` prompts usually don't have one) and updates RoadBoard task status to `done`.
 
 ## CLI Reference
 
@@ -127,16 +147,16 @@ pnpm agent:workflow <command> [options]
 
 | Command | Options | Description |
 |---------|---------|-------------|
-| `status` | — | Print per-folder `.md` file counts and TASK_LIST.md staleness |
-| `intake` | `--slug <slug>` | Create `tasks/intake/<slug>-intake.md` from the developer intake template |
-| `lint` | `[--dir <dir>]` | Validate `.md` files in `tasks/<dir>/` (default: `todo`) for required sections and checklist items |
-| `report` | `--slug <slug>` | Generate `tasks/reports/<slug>-final-report.md` with the full cycle artifact list |
-| `ready` | — | List `.md` files in `tasks/todo/` that pass lint with 0 errors |
+| `status` | — | Print per-folder `.md` file counts and `TASK_LIST.md` staleness |
+| `lint` | `[--dir <dir>]` | Validate `.md` files in `tasks/<dir>/` (default: `todo`) for required sections, frontmatter, and (in `todo/`) whether each prompt is spawnable (`status: approved`) |
+| `ready` | — | Partition `tasks/todo/` prompts into approved (spawnable) vs. pending |
 | `sync` | — | Regenerate `TASK_LIST.md` from `tasks/todo/`, `tasks/run/`, and `tasks/done/` |
-| `run` | `--slug <slug> [--dry-run] [--planning-only]` | Run the Analyst↔Architect loop; `--planning-only` forbids Worker prompt creation |
-| `review-output` | `--slug <slug> [--max-rounds <n>]` | Review a Worker result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round |
-| `promote` | `--slug <slug> [--dry-run]` | The single `run/`→`done/` path: requires `output_status: approved`, re-runs build + tests (exit 0), and enforces evidence before moving the file |
+| `review` | `--slug <slug> [--analyst <codex\|claude>] [--max-rounds <n>]` | Drive the Architect↔Analyst **prompt** review loop to convergence (`approved` or `blocked-review`) |
+| `run` | `--slug <slug> --adapter <name> [--dry-run]` | Spawn a Worker adapter on an **approved** prompt — refuses any other status |
+| `review-output` | `--slug <slug> [--max-rounds <n>]` | Review a finished Worker's result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round |
+| `promote` | `--slug <slug> [--dry-run]` | The single `run/`→`done/` path: requires `output_status: approved`, re-runs build + tests, enforces evidence |
 | `adapters <sub>` | see below | Optional model CLI adapter layer (opt-in, safe by default) |
+| `config` | `--init \| --show` | Create or print `.agent/workflow-adapters.json` |
 
 ### Command details
 
@@ -146,32 +166,16 @@ pnpm agent:workflow <command> [options]
 pnpm agent:workflow status
 ```
 
-Prints counts for all tracked folders (`intake`, `proposals`, `briefs`, `for-analyst`, `todo`, `run`, `done`, `reports`) plus whether `TASK_LIST.md` is missing, stale, or up to date.
-
-**`intake --slug <slug>`** — open a new planning cycle:
-
-```bash
-pnpm agent:workflow intake --slug deep-code-scan
-```
-
-Creates `tasks/intake/deep-code-scan-intake.md` from `docs/templates/developer-intake-template.md`. Fill in the goal statement and hand it to the Analyst.
+Prints `.md` counts for `todo/`, `run/`, `done/` plus whether `TASK_LIST.md` is missing, stale, or up to date.
 
 **`lint [--dir <dir>]`** — validate prompt files:
 
 ```bash
-pnpm agent:workflow lint              # lint tasks/todo/
-pnpm agent:workflow lint --dir run    # lint tasks/run/
+pnpm agent:workflow lint            # lint tasks/todo/
+pnpm agent:workflow lint --dir run  # lint tasks/run/
 ```
 
-Checks for required sections (`## Context`, `## Scope`, `## Acceptance Criteria`, `## Notes`, `## PLAN.md Updates`), at least one checklist item in `## Acceptance Criteria`, and warns when no RoadBoard task reference is found in `## Context`. Exits 1 if any errors are found.
-
-**`report --slug <slug>`** — package a cycle report:
-
-```bash
-pnpm agent:workflow report --slug deep-code-scan
-```
-
-Creates `tasks/reports/deep-code-scan-final-report.md`. Includes a queue snapshot, links to all planning artifacts matching the slug (intake, proposals, briefs, for-analyst), lint-passing prompts in `tasks/todo/`, and in-progress prompts in `tasks/run/`.
+Checks required sections and frontmatter validity. In `todo/`, also flags any file whose `status` is not `approved` as `NOT-SPAWNABLE`. Exits non-zero if any file has lint errors.
 
 **`ready`** — check what is ready for GO:
 
@@ -179,184 +183,64 @@ Creates `tasks/reports/deep-code-scan-final-report.md`. Includes a queue snapsho
 pnpm agent:workflow ready
 ```
 
-Lists filenames in `tasks/todo/` that pass lint. Use this before manually triggering a Worker spawn.
+Lists `tasks/todo/` prompts split into approved (spawnable) and pending.
 
-**`sync`** — regenerate TASK_LIST.md:
+**`sync`** — regenerate `TASK_LIST.md`:
 
 ```bash
 pnpm agent:workflow sync
 ```
 
-Regenerates `TASK_LIST.md` from the current state of `tasks/todo/`, `tasks/run/`, and `tasks/done/`. Run after moving prompts between folders to keep the list current.
-
-**`run --slug <slug> [--dry-run] [--planning-only]`** — run the Analyst↔Architect loop:
+**`review --slug <slug>`** — run the prompt review loop:
 
 ```bash
-pnpm agent:workflow run --slug roadboard-local-runtime --planning-only
+pnpm agent:workflow review --slug feat-task-bulk-delete --analyst codex --max-rounds 3
 ```
 
-Without flags, `run` invokes the configured Analyst and Architect role binaries from `.agent/workflow-adapters.json` and can converge by creating Worker prompts in `tasks/todo/`.
+Drives Architect↔Analyst rounds on the prompt in `tasks/todo/` until `status: approved` or `blocked-review`. `--analyst` selects which configured role acts as Analyst (`codex` or `claude`, from `.agent/workflow-adapters.json`); defaults to `codex`.
 
-`--dry-run` prints the commands and prompt sizes without invoking any model CLI.
-
-`--planning-only` keeps the loop in analysis mode. Analyst writes briefs, Architect writes questions or proposals, and the runner fails if a new Worker prompt appears in `tasks/todo/`.
-
-Use `--planning-only` when the Developer wants design exploration, architectural review, or Analyst↔Architect debate before deciding whether to create executable work.
-
-## End-to-end example
-
-Minimal cycle: intake → brief → Architect proposal → for-analyst review → corrections → lint → GO → report.
-
-### 1. Open the cycle
+**`run --slug <slug> --adapter <name>`** — spawn a Worker on an approved prompt:
 
 ```bash
-pnpm agent:workflow intake --slug auth-token-refresh
-# → creates tasks/intake/auth-token-refresh-intake.md
+pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude
+pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude --dry-run
 ```
 
-Fill in the goal statement (what, why, constraints).
+Refuses immediately if the prompt's `status` is not `approved`. `--dry-run` prints the command that would run without invoking anything. On success, adapter output is saved under `tasks/run/<slug>-<adapter>-output.md` (or the adapter's configured `outputDir`).
 
-### 2. Analyst prepares a brief
-
-Analyst reads `tasks/intake/auth-token-refresh-intake.md`, produces a planning brief:
-
-```
-tasks/briefs/auth-token-refresh-brief.md
-```
-
-### 3. Architect reviews and writes a proposal
-
-Architect verifies the brief against repo state and RoadBoard, finds a design question, writes a formal proposal:
-
-```
-tasks/proposals/auth-token-refresh-v1.md
-```
-
-Architect also writes a question for Analyst:
-
-```
-tasks/for-analyst/auth-token-refresh-q1.md
-```
-
-### 4. Analyst reviews and responds
-
-Analyst reads from `tasks/for-analyst/` and `tasks/proposals/`, writes a correction brief:
-
-```
-tasks/briefs/auth-token-refresh-corrections.md
-```
-
-### 5. Convergence — Architect creates the final prompt
-
-After Analyst/Architect planning convergence, Architect creates the verified Worker prompt:
-
-```
-tasks/todo/feat-auth-token-refresh.md
-```
-
-### 6. Analyst final review
-
-The loop returns the `tasks/todo/` prompt listing to Analyst. Analyst either writes final sign-off:
-
-```json
-{ "slug": "auth-token-refresh", "iteration": 2, "role": "analyst" }
-```
-
-or writes another `tasks/for-analyst/auth-token-refresh-q<N>.md` if the prompt misses risks, scope, or acceptance criteria.
-
-### 7. Lint and ready check
+**`review-output --slug <slug>`** — review the Worker's result:
 
 ```bash
-pnpm agent:workflow lint
-# lint: ok (0 issues, 1 file checked)
-
-pnpm agent:workflow ready
-# Prompts ready in tasks/todo/:
-#   feat-auth-token-refresh.md
+pnpm agent:workflow review-output --slug feat-task-bulk-delete
 ```
 
-### 8. GO (manual)
+Computes `git diff HEAD`, hands it plus the prompt's Scope/Acceptance Criteria to the reviewer, writes `output_status` and appends to `## Output review log`.
 
-Developer reviews `tasks/todo/feat-auth-token-refresh.md` and approves. Architect moves the file to `tasks/run/` and spawns a Worker subagent.
+**`promote --slug <slug>`** — the only `run/`→`done/` path:
 
 ```bash
-mv tasks/todo/feat-auth-token-refresh.md tasks/run/
-# → Architect spawns Worker via Agent tool
+pnpm agent:workflow promote --slug feat-task-bulk-delete
+pnpm agent:workflow promote --slug feat-task-bulk-delete --dry-run
 ```
 
-### 9. Worker executes
-
-Worker implements the prompt, verifies acceptance criteria, and moves the file to `tasks/done/`:
-
-```bash
-mv tasks/run/feat-auth-token-refresh.md tasks/done/
-```
-
-### 10. Report
-
-```bash
-pnpm agent:workflow report --slug auth-token-refresh
-# → creates tasks/reports/auth-token-refresh-final-report.md
-```
-
-The report includes the full conversation history: intake, proposals, briefs, for-analyst files, final prompts, and any blocked items.
-
-## Planning-Only Example
-
-Use this when the Developer wants structured analysis but explicitly does not want Worker prompts yet.
-
-### 1. Open the cycle
-
-```bash
-pnpm agent:workflow intake --slug roadboard-local-runtime
-```
-
-Fill `tasks/intake/roadboard-local-runtime-intake.md` with the goal, constraints, and desired outcome.
-
-### 2. Run the loop safely
-
-```bash
-pnpm agent:workflow run --slug roadboard-local-runtime --planning-only
-```
-
-Expected outputs:
-
-- `tasks/briefs/roadboard-local-runtime-brief-v<N>.md`
-- `tasks/for-analyst/roadboard-local-runtime-q<N>.md` if Architect needs Analyst follow-up
-- `tasks/proposals/roadboard-local-runtime-proposal-v<N>.md` if Architect has a proposal ready for Developer review
-
-Forbidden output:
-
-- Any new file in `tasks/todo/`
-
-If a new `tasks/todo/` file appears, the runner stops with a planning-only violation. Inspect and remove or convert that file before continuing.
-
-### 3. Report
-
-```bash
-pnpm agent:workflow report --slug roadboard-local-runtime
-```
-
-The report should list planning artifacts and show no new Worker prompts created for the cycle.
+Refuses unless `output_status: approved`, then re-runs build + tests (from `.agent/workflow-adapters.json`'s `verify` block, default `pnpm build` / `pnpm test`) and checks evidence for UI-labeled prompts. `--dry-run` reports what it would do without running commands or moving the file.
 
 ## Adapters (optional)
 
-The `adapters` subcommand provides an optional, opt-in layer for invoking external model CLIs (Codex CLI, Claude Code CLI, etc.) in a controlled, traceable way.
+The `adapters` subcommand is an optional, opt-in layer for invoking external model CLIs (Codex CLI, Claude Code CLI, etc.) in a controlled, traceable way. It backs both the `review`/`run` role invocations above and can also be driven directly.
 
 ### Safety model
 
-Adapters are disabled by default and require explicit opt-in at two levels:
+Disabled by default, requires explicit opt-in at two levels:
 
 1. A local config file `.agent/workflow-adapters.json` (gitignored) with `enabled: true` for the adapter.
-2. The `--execute` flag on the `adapters run` command.
+2. The `--execute` flag on `adapters run` (or, for the Worker path, an approved prompt for `agent:workflow run`).
 
 Without both, the CLI only renders prompts or shows what would be invoked — it never calls any binary.
 
-No API keys, tokens, or credentials are stored in the repository. The config file lives in `.agent/` (gitignored) and is created manually by the developer.
+No API keys, tokens, or credentials are stored in the repository. `.agent/workflow-adapters.json` lives in `.agent/` (gitignored) and is created manually via `pnpm agent:workflow config --init`.
 
 ### Config format
-
-Create `.agent/workflow-adapters.json` (do not commit):
 
 ```json
 {
@@ -371,70 +255,61 @@ Create `.agent/workflow-adapters.json` (do not commit):
       "binary": "/absolute/path/to/claude",
       "outputDir": "/absolute/path/to/output"
     }
+  },
+  "verify": {
+    "build": "pnpm build",
+    "tests": "pnpm test"
   }
 }
 ```
 
-`binary` must be an absolute path — the CLI never resolves binaries from PATH.
+`binary` must be an absolute path — the CLI never resolves binaries from `PATH`. `verify` configures the commands `promote` re-runs before allowing `run/`→`done/`.
 
 ### Subcommands
 
 | Subcommand | Options | Description |
 |------------|---------|-------------|
 | `adapters list` | — | Show configured adapters and their enabled status |
-| `adapters render` | `--slug <slug>` | Print the ready prompt for `<slug>` to stdout (no invocation) |
+| `adapters render` | `--slug <slug>` | Print the prompt for `<slug>` to stdout (no invocation) |
 | `adapters dry-run` | `--slug <slug> --adapter <name>` | Show the command that would be invoked, without running it |
 | `adapters run` | `--slug <slug> --adapter <name> --execute` | Invoke the configured binary with the prompt (requires `enabled: true` and `--execute`) |
 
-### Examples
-
 ```bash
-# Show configured adapters
 pnpm agent:workflow adapters list
-
-# Preview the prompt that would be sent
-pnpm agent:workflow adapters render --slug deep-code-scan
-
-# Preview the command without running it
-pnpm agent:workflow adapters dry-run --slug deep-code-scan --adapter codex
-
-# Actually invoke (requires enabled: true in .agent/workflow-adapters.json)
-pnpm agent:workflow adapters run --slug deep-code-scan --adapter codex --execute
+pnpm agent:workflow adapters render --slug feat-task-bulk-delete
+pnpm agent:workflow adapters dry-run --slug feat-task-bulk-delete --adapter codex
+pnpm agent:workflow adapters run --slug feat-task-bulk-delete --adapter codex --execute
 ```
 
-Output from `adapters run` is saved to `tasks/reports/<slug>-<adapter>-output.md`.
-
-GO decisions remain with the human. Adapters prepare and show prompts — they do not spawn Workers or update RoadBoard.
+GO decisions remain with the human. Adapters prepare and show prompts — they do not spawn Workers unilaterally, move lifecycle files, or update RoadBoard.
 
 ## Safety Gates
 
-Most `agent:workflow` commands are passive file-system tools:
+Passive, read-only commands — never invoke a model CLI, never touch git, never move files:
 
 - `status`
 - `lint`
 - `ready`
 - `sync`
-- `report`
 - `adapters list`
 - `adapters render`
 - `adapters dry-run`
 - `run --dry-run`
+- `promote --dry-run`
 
-These commands read, count, validate, render, or generate local reports without invoking model CLIs.
+`review`, `run`, `review-output`, and `promote` are the commands that actually change state:
 
-`agent:workflow run` is different: it invokes the configured Analyst and Architect role binaries from `.agent/workflow-adapters.json`. It still does not spawn Worker subagents, move lifecycle files, update RoadBoard status, or touch git state.
+- `review` invokes the configured Analyst/Architect role binaries and edits the prompt's frontmatter + `## Review log`. It never moves files or spawns a Worker.
+- `run` invokes a Worker adapter, but **only** on a prompt already `status: approved`. It never moves files between `tasks/` folders and never updates RoadBoard.
+- `review-output` invokes the configured reviewer and edits `output_status` + `## Output review log`. It never moves files.
+- `promote` is the only command that moves a file from `run/` to `done/`, and only after all three gates (output approval, green build+tests, evidence) pass. `--dry-run` reports the same checks without running commands or moving anything.
 
 The CLI is designed to never:
 
-- Spawn Worker subagents
-- Move files between `tasks/` folders autonomously
-- Modify `tasks/run/` or `tasks/done/`
+- Spawn a Worker on a prompt that is not `status: approved`
+- Move a file from `run/` to `done/` outside of `promote`
 - Push commits, modify git state, or touch the git index
 - Update RoadBoard task statuses
 - Modify `PLAN.md` or `CLAUDE.md`
 
-Passive commands and `run --dry-run` do not require network access or external services. A real `run` may require whatever local model CLI dependencies are configured by the Developer.
-
-In normal `run` mode, the Architect model may create files in `tasks/todo/` when prompts are ready. In `run --planning-only`, creating a new `tasks/todo/` file is a hard error.
-
-All transitions between `todo/` → `run/` → `done/` are manual actions performed by the Architect or Developer. The CLI only surfaces state (`status`, `ready`) so that humans can make informed decisions.
+All `todo/`→`run/` moves and RoadBoard/`PLAN.md` updates are manual actions performed by the Architect or Developer, per `CLAUDE.md`.
