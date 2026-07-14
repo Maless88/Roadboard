@@ -444,7 +444,11 @@ export function lintPromptContent(content: string): PromptLintResult {
   }
 
   // --- Review log ------------------------------------------------------------
-  const reviewLogMatch = content.match(/## Review log\s*([\s\S]*?)(?=\n## |\s*$)/i);
+  // Anchored to line start: inline mentions like `## Review log` in prose
+  // must not be mistaken for the section heading.
+  // The end-anchor is (?![\s\S]) (absolute end of string) — with the m flag,
+  // \s*$ would match at the first line end and always capture an empty block.
+  const reviewLogMatch = content.match(/^## Review log\s*([\s\S]*?)(?=\n## |(?![\s\S]))/im);
 
   if (reviewLogMatch) {
     const logBlock = reviewLogMatch[1];
@@ -501,7 +505,7 @@ export function lintPromptContent(content: string): PromptLintResult {
   }
 
   // ## Output review log — when present, must have at least one round heading.
-  const outputLogMatch = content.match(/## Output review log\s*([\s\S]*?)(?=\n## |\s*$)/i);
+  const outputLogMatch = content.match(/^## Output review log\s*([\s\S]*?)(?=\n## |(?![\s\S]))/im);
 
   if (outputLogMatch) {
     if (!/###\s+Round\s+\d+\s*[—-]/i.test(outputLogMatch[1])) {
