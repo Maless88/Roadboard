@@ -1,6 +1,11 @@
 # CodeFlow — Impact read swap (CF-GDB-03b-B)
 
-Status: shipped. Default OFF in dev/prod.
+> **RETIRED (CF-GDB-03b-E)** — the `GRAPH_READ_USE_MEMGRAPH_IMPACT` flag described below
+> no longer exists: `getImpact` now routes unconditionally to Memgraph, the Postgres
+> graph tables and `GraphSyncService` were removed, and `impact-parity.spec.ts` was
+> deleted with them. Historical record of the flag-gated transition step only.
+
+Status: shipped, then superseded — the flag was removed once the cutover completed (see banner).
 
 ## What changed
 

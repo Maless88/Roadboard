@@ -213,20 +213,19 @@ With only macro nodes (apps/packages), `topImpactNodes` is dominated by the base
 
 ## 7. Known limitations
 
-These features appear in the sub-nav but their content is a placeholder until the corresponding Wave lands:
+Current status of the Atlas sub-views:
 
 | Sub-view | Status | Unlocks with |
 |---|---|---|
 | Mappa architettura | Active (CF-09, CF-10) | — |
 | Node drawer | Active (CF-11) | — |
-| Impatto cambiamenti | Placeholder "In arrivo" | CF-14, CF-17 (Wave 5.2) |
-| Grafo decisioni | Placeholder "In arrivo" | CF-20 (Wave 5.3) |
+| Impatto cambiamenti | Active — impact backend is Memgraph-native (`getImpact`, reverse BFS) | — |
+| Grafo decisioni | Active (CF-20) | — |
 | Agent context | Active (CF-19, CF-21) — see section 6 | — |
 
 ### Other limitations
 
-- **No automatic scan yet**: no git-aware worker parses the repo. Wave 5.2 (CF-12..17) will add a BullMQ-scheduled `ArchitectureScanProcessor`.
-- **No import-level edges**: edges are only `depends_on` from `package.json`. TypeScript `imports` edges come with ts-morph in Wave 5.3 (CF-18).
+- **Automatic scan**: file/symbol-level scanning ships via the `deep-code-scan` BullMQ queue in worker-jobs (Wave 6, ts-morph walker). Multi-language adapters (tree-sitter) are still future work.
 - **Storage migrated to a graph DB** (done, Wave 5.2 CF-GDB-*): decision `cmoa0zt18` (2026-04-22) selected Memgraph Community Edition. Memgraph 2.18.1 is now the source of truth for the graph; the migration was transparent to the UI and MCP contracts.
 - **Drawer entityId picker is free-text**: until a proper searchable picker lands, paste CUIDs by hand.
 

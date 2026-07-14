@@ -1,5 +1,7 @@
 # Roadboard 2.0 Wave 1 Executable TODO
 
+> **SUPERSEDED** by [wave-1-sprint-1-day-by-day-resequenced.md](wave-1-sprint-1-day-by-day-resequenced.md) — the resequenced version is the one that was executed. Historical record only.
+
 > **Status: COMPLETED** — Sprint 1 fully executed. All success criteria met.
 > Checklist updated retroactively. This document is now a historical reference.
 

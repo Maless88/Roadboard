@@ -1,5 +1,7 @@
 # Roadboard 2.0 Wave 1 Executable TODO
 
+> **SUPERSEDED** by [wave-1-executable-todo-resequenced.md](wave-1-executable-todo-resequenced.md) — the resequenced version is the one that was executed. Historical record only.
+
 > **Status: COMPLETED** — Wave 1 fully implemented as of Wave 3 completion (2026-04-15).
 > Checklist updated retroactively. This document is now a historical reference.
 

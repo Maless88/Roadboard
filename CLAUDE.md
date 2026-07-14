@@ -49,24 +49,24 @@ Only for non-semantic searches: string literals, config keys, env-var names, com
 
 ### Serena bootstrap — every session, both roles
 
-1. Call `mcp__mcp-serena__check_onboarding_performed` to verify Serena is active and onboarded.
-2. If onboarding has not been performed, call `mcp__mcp-serena__onboarding` and wait for completion before any other action.
+1. Call `mcp__serena__check_onboarding_performed` to verify Serena is active and onboarded.
+2. If onboarding has not been performed, call `mcp__serena__onboarding` and wait for completion before any other action.
 3. If Serena is unavailable, fall back to grep/Read but announce the fallback explicitly so the developer knows semantic navigation is degraded.
 
 ### Required — Serena tools
 
 | Need                                     | Tool                                                            |
 |------------------------------------------|-----------------------------------------------------------------|
-| Find where a symbol is defined           | `mcp__mcp-serena__find_symbol` (`include_body=false`)           |
-| Read the body of a specific symbol       | `mcp__mcp-serena__find_symbol` (`include_body=true`)            |
-| Understand the structure of a file       | `mcp__mcp-serena__get_symbols_overview`                         |
-| Find all usages / call sites             | `mcp__mcp-serena__find_referencing_symbols`                     |
-| Search when symbol name is uncertain     | `mcp__mcp-serena__search_for_pattern`                           |
-| List directory contents                  | `mcp__mcp-serena__list_dir`                                     |
-| Find a file by name pattern              | `mcp__mcp-serena__find_file`                                    |
-| Replace an entire symbol body            | `mcp__mcp-serena__replace_symbol_body`                          |
-| Insert code before/after a symbol        | `mcp__mcp-serena__insert_before_symbol` / `insert_after_symbol` |
-| Regex/string replacement within a symbol | `mcp__mcp-serena__replace_content`                              |
+| Find where a symbol is defined           | `mcp__serena__find_symbol` (`include_body=false`)           |
+| Read the body of a specific symbol       | `mcp__serena__find_symbol` (`include_body=true`)            |
+| Understand the structure of a file       | `mcp__serena__get_symbols_overview`                         |
+| Find all usages / call sites             | `mcp__serena__find_referencing_symbols`                     |
+| Search when symbol name is uncertain     | `mcp__serena__search_for_pattern`                           |
+| List directory contents                  | `mcp__serena__list_dir`                                     |
+| Find a file by name pattern              | `mcp__serena__find_file`                                    |
+| Replace an entire symbol body            | `mcp__serena__replace_symbol_body`                          |
+| Insert code before/after a symbol        | `mcp__serena__insert_before_symbol` / `insert_after_symbol` |
+| Regex/string replacement within a symbol | `mcp__serena__replace_content`                              |
 
 ## 4. ROADBOARD 2.0 — WORKFLOW RULES
 - **Session start**: Always call `prepare_project_summary` or `get_project_changelog` to load the current project context before starting any work.
@@ -267,7 +267,7 @@ The Architect–Analyst review loop (before any Worker spawn):
 
 Spawning a Worker (only when `status: approved`):
 
-1. Call `mcp__mcp-serena__activate_project` on the target project — the subagent inherits the active project.
+1. Call `mcp__serena__activate_project` on the target project — the subagent inherits the active project.
 2. Move the prompt file from `tasks/todo/` to `tasks/run/`.
 3. Call `update_task_status` on the matching RoadBoard task with `in_progress`.
 4. Write a briefing for the subagent that includes:
@@ -316,7 +316,7 @@ Worker does NOT:
 1. **Serena bootstrap** — `check_onboarding_performed`, then `onboarding` if needed.
 2. **RoadBoard bootstrap** — call `mcp__roadboard__initial_instructions` once, then `prepare_project_summary` / `get_project_changelog` for the active Roadboard project.
 3. Confirm role is Architect (default). Emit the model-match warning if not on Opus.
-4. Before spawning the first Worker subagent, call `mcp__mcp-serena__activate_project`.
+4. Before spawning the first Worker subagent, call `mcp__serena__activate_project`.
 
 No skipping. If Serena or RoadBoard are unavailable, announce the fallback explicitly in the first response.
 

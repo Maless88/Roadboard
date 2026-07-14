@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Agent rooms: delete and clear-history actions on agent chat rooms
+- Photorealistic agent avatars (Cloudflare FLUX) replacing the illustrated set, with matching full-body images in the agent Scheda modal (in-scene layout with floating card)
+- Roadboard logomark, browser tab favicon (`icon.svg`) and login banner
+- Scheduled activities module: self-scheduling MCP tool, calendar view with run history
+- Agent skills catalog: `list_skills`, `attach_skill`, `detach_skill` MCP tools and skill visibility in the agent Scheda
+- Durable agent memory (pgvector + Ollama embeddings) with automatic fact extraction
+- Telegram bridge: inbound/outbound messages, notification hub, per-agent identity
+- Email integration for Cleo: IMAP inbox reading, mark-read, drafts, multi-account Gmail
+- Output gate in the AI workflow CLI: `review-output` (diff vs Scope/Acceptance verdict) and `promote` (build + tests + evidence gated run→done transition)
+
+### Changed
+- CodeFlow storage fully cut over to Memgraph (CF-GDB-03b-D/E): write path Memgraph-direct, Postgres architecture_* tables and GraphSyncService retired, `GRAPH_WRITE_USE_MEMGRAPH`/`GRAPH_READ_USE_MEMGRAPH_IMPACT` flags removed (only `GRAPH_SYNC_USE_OUTBOX` remains)
+- Navigation rework: Ops/System merged into Agent Office, Guida moved to bottom, collapsible sidebar
+- Agent card redesign (image/name/task + Scheda/Chat/Log actions) and avatars shown in Home and Chat sidebar
+- Chat streaming performance: memoized markdown rendering and instant auto-scroll (removes stutter while agent replies stream)
+- AI workflow docs rewritten for the in-prompt review-gate model; retired templates for the old briefs/proposals folder model removed
+
+### Fixed
+- Postgres/Redis/Memgraph ports bound to 127.0.0.1 instead of 0.0.0.0
+- Prisma migration checksum drift and stale thumbnail index (schema↔DB alignment)
+- White edge halo and color fringe on agent full-body cutout images
+
+### Security
+- Rotated exposed production MCP token and hardened the allow-list
+- Sandboxed the agent CLI bridge (claude-code executor)
+- Agent guardrails: anti-hallucination system prompts, meta-leak response cleaning, delegation loop hardening (per-room lock, sanitize markers, cap 12)
+
 ## [0.15.0] - 2026-05-21
 
 ### Added

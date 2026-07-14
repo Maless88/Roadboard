@@ -1,5 +1,7 @@
 # Roadboard 2.0 Wave 1 Plan
 
+> **SUPERSEDED** by [wave-1-plan-resequenced.md](wave-1-plan-resequenced.md) — the resequenced version is the one that was executed. Historical record only.
+
 ## Goal
 Define the first real implementation wave for Roadboard 2.0.
 

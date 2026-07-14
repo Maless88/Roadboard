@@ -18,6 +18,7 @@ agent `system_prompt` (which holds only identity) and out of per-repo
 | `cowork-review` | Worker-prompt lifecycle + the Architect/Analyst review gate (single-agent model). |
 | `git-conventions` | Commit format, branch model, git safety rules. |
 | `wave-close` | Checklist to close a wave/milestone (mandatory security review, update RoadBoard phase via MCP). |
+| `archive-artifact` | Persist a substantive agent deliverable into RoadBoard as a memory entry with a standard envelope. |
 
 ## Deploy
 

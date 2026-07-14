@@ -163,7 +163,7 @@ Set the env var in `.env` (then rebuild containers):
 
 ```bash
 GRAPH_SYNC_USE_OUTBOX=true   # enable outbox + projection worker
-GRAPH_SYNC_USE_OUTBOX=false  # disable (fire-and-forget dual-write, default)
+GRAPH_SYNC_USE_OUTBOX=false  # disable (default): writes go directly to Memgraph, no outbox mirroring
 ```
 
 Rebuild after env change:

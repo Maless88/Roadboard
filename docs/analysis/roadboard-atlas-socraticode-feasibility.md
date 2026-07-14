@@ -1,5 +1,10 @@
 # Roadboard Repository Analysis Report
 
+> **SUPERSEDED (2026-05-12)** — the Atlas Insight wave this study underpinned was cancelled
+> (P1→P6) by the AI-P0-00 review ([../atlas-insight-review.md](../atlas-insight-review.md)).
+> Infrastructure described as current here (dual Postgres+Memgraph store, `drift.service.ts`)
+> has since been retired by CF-GDB-03b-E. Historical record only.
+
 > Analysis-only document. No code, schema, or migrations are produced or modified by this report.
 > Target: assessing feasibility of integrating a SocratiCode-like local codebase intelligence engine
 > with Roadboard's existing **Atlas** feature graph.

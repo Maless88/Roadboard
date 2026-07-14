@@ -1,8 +1,12 @@
 # Spec architetto — `atlas-insight`
 
+> **SUPERSEDED (2026-05-12)** — la review AI-P0-00 ([atlas-insight-review.md](atlas-insight-review.md))
+> ha chiuso il gate decisionale cancellando le phase P1→P6. Questo brief resta come
+> record storico del piano originale; non è un piano di esecuzione attivo.
+
 **Data brief**: 2026-05-12
 **Wave**: Atlas Insight (phase P0→P6, 7 phase planned, ~40 task)
-**Stato**: nessuna phase in_progress. Gate decisionale aperto su P0-00.
+**Stato**: cancellata (P1→P6) dall'esito della review AI-P0-00.
 
 ## Competenza
 

@@ -15,8 +15,8 @@ while methodology stays available on demand and project facts stay local.
   `packages/agent-skills/`, deployed to `~/.claude/skills` by
   `scripts/deploy-agent-skills.mjs`.
 - **Holds**: `onboarding`, `serena-nav`, `cowork-review`, `git-conventions`,
-  `wave-close`. Only `name` + `description` sit in context; the body loads when
-  the skill is relevant.
+  `wave-close`, `archive-artifact`. Only `name` + `description` sit in context;
+  the body loads when the skill is relevant.
 - **Rule**: situational/heavy procedure lives here, not inlined in the prompt.
   In claude-code skills auto-activate by relevance; the RoadBoard catalog +
   `agent_skills` attachment is the curation/visibility layer (agent cards).

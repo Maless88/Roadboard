@@ -1,5 +1,9 @@
 # Atlas Insight Implementation Plan
 
+> **SUPERSEDED (2026-05-12)** — the AI-P0-00 wave review ([../atlas-insight-review.md](../atlas-insight-review.md))
+> cancelled phases P1→P6; none of the modules below (`CodeContextModule`, `FeatureLinkerService`,
+> `InsightService`, `feature_code_links`) were built. Kept as a historical record only.
+
 > Execution plan derived from [roadboard-atlas-socraticode-feasibility.md](./roadboard-atlas-socraticode-feasibility.md).
 > User-facing name: **Atlas Insight**. Backend modules: `CodeContextModule`, `FeatureLinkerService`, `InsightService`. DB table: `feature_code_links`.
 

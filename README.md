@@ -275,7 +275,7 @@ pnpm -r build        # build all packages and apps
 
 ## Current status
 
-Waves 1–5 are complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, local sync bridge, dual-write graph DB (Postgres + Memgraph), and self-hosted deploy are all implemented.
+Waves 1–6 are complete. The platform is functional end-to-end: REST APIs, MCP server, web dashboard, async jobs, local sync bridge, Memgraph-backed architecture graph, agent workspace (life-OS agents, rooms, scheduling, Telegram bridge), and self-hosted deploy are all implemented.
 
 - **Wave 3** — semantic memory search, agent-readable project changelog, richer decision model, memory summarization background jobs ✓
 - **Wave 4** — fine-grained MCP token scopes, project ownership model, per-project member management, MCP auto-vault, Phase–Decision linking, interactive Roadmap and Decisions accordions, 4 new MCP write tools ✓
@@ -283,8 +283,11 @@ Waves 1–5 are complete. The platform is functional end-to-end: REST APIs, MCP 
 - **Wave 5.2** — graph DB foundation: Memgraph 2.18 added to compose, `@roadboard/graph-db` Neo4j-compat client, dual-write `GraphSyncService` for nodes/edges, schema constraints + indexes ✓
 - **Wave 5.3** — agent-driven onboarding: `ingest_architecture` one-shot orchestrator, `link_task_to_node` semantic wrapper, enriched `prepare_task_context` with architecture nodes & decisions ✓
 - **Deploy UX** — light/dark theme, single-pill release banner, self-hosted per-host deploy via systemd.path + systemd.service (no GitHub Actions workflow_dispatch needed) ✓
+- **CF-GDB-03b** — Atlas storage cut over from Postgres to Memgraph: reads, writes and impact analysis are Memgraph-native; the architecture_* Prisma tables and GraphSyncService are retired ✓
+- **Wave 6 — Deep Code Map** — file + symbol graph via ts-morph (`deep-code-scan` BullMQ queue), blast-radius queries on Memgraph ✓
+- **Agent workspace** — life-OS agents with photorealistic avatars, agent rooms + Boardchat mobile, scheduling, skills catalog, durable memory (pgvector), Telegram bridge ✓
 
-Active planning: **Wave 6 — Deep Code Map** (file + symbol graph via ts-morph + tree-sitter, blast-radius queries on Memgraph) and **CF-GDB-03b** (cut over Atlas reads from Postgres to Memgraph and retire the architecture_* Prisma tables).
+Active planning: **LLM Runtime** (provider registry, native OpenAI/Anthropic/Gemini adapters, Ollama baseline, per-role routing and budgets) and agent-platform hardening (human-in-the-loop permissions, context compaction, per-user runtimes). See [ROADMAP.md](ROADMAP.md).
 
 > The project is pre-beta. No stable release has been published yet. Breaking changes may occur on `main`.
 
