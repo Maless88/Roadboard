@@ -60,3 +60,7 @@ playwright-report/
 
 # Deploy file-drop trigger (created at runtime by core-api, consumed by host systemd.path)
 .deploy-requested
+
+# Ephemeral manual backups + logs (CLAUDE.md hygiene)
+*.bak-*
+logs/
