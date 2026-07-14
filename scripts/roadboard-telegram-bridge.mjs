@@ -29,6 +29,12 @@ const STATE = path.join(os.homedir(), ".config/roadboard/telegram-state.json");
 if (!TOKEN) { console.error("[tg] TELEGRAM_BOT_TOKEN missing in " + ENV_PATH); process.exit(1); }
 const API = `https://api.telegram.org/bot${TOKEN}`;
 
+// Bot identity for the group recipient-gate: numeric id is embedded in the token
+// (`<id>:<secret>`); the @username is resolved once via getMe at startup (falls back
+// to the optional VERA_USERNAME env, default "vera").
+const BOT_ID = TOKEN.split(":")[0];
+let BOT_USERNAME = (env.VERA_USERNAME || "vera").trim().replace(/^@/, "").toLowerCase();
+
 function readState() { try { return JSON.parse(fs.readFileSync(STATE, "utf8")); } catch { return { offset: 0, lastChat: null }; } }
 function writeState(s) { try { fs.writeFileSync(STATE, JSON.stringify(s), { mode: 0o600 }); } catch { /* ignore */ } }
 let state = readState();
@@ -191,6 +197,41 @@ function cleanReply(s) {
   return out;
 }
 
+// True when a group message addresses Vera: name prefix ("vera"/"@vera"), a `mention`
+// entity matching @<botUsername>, a `text_mention` entity on the bot's id, or a reply
+// to one of the bot's own messages.
+function addressesVera(msg) {
+  const text = msg.text || "";
+  const lower = text.trim().toLowerCase();
+
+  if (lower.startsWith("vera") || lower.startsWith("@vera")) return true;
+
+  if (String(msg.reply_to_message?.from?.id ?? "") === BOT_ID) return true;
+  for (const e of msg.entities || []) {
+
+    if (e.type === "text_mention" && String(e.user?.id ?? "") === BOT_ID) return true;
+
+    if (e.type === "mention") {
+      const at = text.slice(e.offset, e.offset + e.length).trim().toLowerCase();
+
+      if (at === `@${BOT_USERNAME}`) return true;
+    }
+  }
+  return false;
+}
+
+
+// Resolve the bot's @username once at startup (best-effort; keeps the env fallback).
+async function resolveBotUsername() {
+  try {
+    const r = await tg("getMe", {});
+
+    if (r && r.ok && r.result?.username) BOT_USERNAME = String(r.result.username).toLowerCase();
+  } catch { /* keep fallback */ }
+  console.error(`[tg] bot id=${BOT_ID} username=@${BOT_USERNAME}`);
+}
+
+
 async function handleUpdate(u) {
   const msg = u.message || u.edited_message;
   if (!msg || !msg.text) return;
@@ -201,6 +242,21 @@ async function handleUpdate(u) {
     return;
   }
   state.lastChat = chatId; writeState(state);
+  // Group recipient-gate: in a group/supergroup, only act when Vera is addressed
+  // (name prefix, @username mention, text_mention on the bot, or reply to the bot).
+  // DMs are unchanged (always answered). Prepend a context header for group turns.
+  const isGroup = msg.chat.type === "group" || msg.chat.type === "supergroup" || chatId < 0;
+  let turnText = msg.text.trim();
+
+  if (isGroup) {
+
+    if (!addressesVera(msg)) {
+      console.error(`[tg] group ${chatId}: not addressed, ignoring`);
+      return;
+    }
+    const who = msg.from?.first_name || msg.from?.username || fromId;
+    turnText = `[gruppo · da ${who} · rivolto a Vera]\n${turnText}`;
+  }
   console.error(`[tg] in from ${fromId} chat ${chatId}: ${msg.text.slice(0, 80)}`);
   // Stream the answer into a single message: create it on the FIRST streamed text and edit
   // it in place (~1s); final edit is the clean HTML answer. Native typing is also sent (shows
@@ -227,7 +283,7 @@ async function handleUpdate(u) {
   }, 1000);
   const onProgress = (partial) => { latest = partial || ""; };
   try {
-    const reply = await runTurn(msg.text.trim(), onProgress);
+    const reply = await runTurn(turnText, onProgress);
     clearInterval(timer); stopTyping();
     const clean = reply && reply.trim() ? reply : "(nessuna risposta)";
     if (!msgId) { await sendMessage(chatId, clean); }
@@ -276,4 +332,5 @@ http.createServer((req, res) => {
 }).listen(OUT_PORT, "0.0.0.0", () => console.error(`[tg] outbound /send on :${OUT_PORT}`));
 
 console.error(`[tg] RoadBoard Telegram bridge up (api=${RB_API}, allow=${ALLOWED.length ? ALLOWED.join(",") : "all"})`);
+await resolveBotUsername();
 poll();

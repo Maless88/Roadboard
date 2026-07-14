@@ -22,7 +22,7 @@ const BIN = { 'claude-code': CLAUDE_BIN, codex: 'codex' };
 // per-request tool policy by trust tier (fail-closed: unknown => restricted).
 // destructive shell prefixes are HARD-BLOCKED for sysadmin (interim for "confirm on dangerous").
 const DANGEROUS_BASH = ['rm','sudo','dd','mkfs','shutdown','reboot','kill','pkill','killall','chmod','chown','mv','docker','systemctl','git push','truncate'];
-function claudeDisallowed(policy, repoRw) {
+function claudeDisallowed(policy, repoRw, scopedReads = []) {
   if (policy === 'sysadmin') return ['WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`)];
   if (policy === 'auditor') {
     // read-only code auditor (e.g. Argo): may read/navigate code but never edit,
@@ -36,7 +36,8 @@ function claudeDisallowed(policy, repoRw) {
     if (repoRw) return ['WebFetch', 'WebSearch', 'Task', ...DANGEROUS_BASH.map((c) => `Bash(${c}:*)`), 'Bash(ssh:*)', 'Bash(curl:*)', 'Bash(wget:*)', 'Bash(npm:*)', 'Bash(pnpm:*)', 'Bash(npx:*)'];
     return ['Bash', 'WebFetch', 'WebSearch', 'Task'];
   }
-  return ['Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+  const restricted = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'Task', 'TodoWrite'];
+  return scopedReads.length ? restricted.filter((t) => t !== 'Read') : restricted;
 }
 // RoadBoard MCP per-agent access (slug derived from cwd). Read tool list enumerated
 // 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
@@ -52,6 +53,7 @@ const RB_ARCHIVE_WRITE = ['create_memory_entry', 'create_handoff', 'notify', 're
 const RB_WRITE = ['create_task','update_task','update_task_status','delete_task','create_phase','update_phase','create_memory_entry','create_handoff','create_decision','update_decision','create_project','ingest_architecture','create_architecture_repository','create_architecture_node','create_architecture_edge','create_architecture_link','create_architecture_annotation','link_task_to_node','create_scheduled_activity','create_reminder','pause_scheduled_activity','delete_scheduled_activity','notify','read_inbox','mark_read','create_draft','create_event','delete_event'];
 function roadboardToolFlags(slug, disallowed, hasLocalMcp, extraAllowed) {
   const allowed = [...(extraAllowed || [])];
+  for (const f of (SCOPED_READS[slug] || [])) allowed.push(`Read(${f})`);
   const level = RB_ACCESS[slug] || 'none';
   // only grant roadboard tools when we have the LOCAL mcp-config wired; otherwise
   // block it so the agent can never fall back to a user-scope (company) server.
@@ -82,6 +84,12 @@ const AGENT_SKILLS_DIR = process.env.AGENT_SKILLS_DIR || ((process.env.HOME || '
 // Ada (dev) = rw and may commit on explicit user request; readers (e.g. security) = ro on the same path.
 const REPOS_BASE = process.env.AGENT_REPOS_BASE || ((process.env.HOME || '/home/alessio') + '/agent-repos');
 const REPO_ACCESS = { dev: 'rw', argo: 'ro', tullio: 'ro' }; // argo (audit) + tullio (docs) read the clone, no write
+// Narrow read grants for agents that must inspect host-side bridge files from their
+// restricted workspaces. Keep this list file-scoped; do not grant the whole repo.
+const SCOPED_READS = {
+  assistant: ['/home/alessio/work/rb/scripts/roadboard-telegram-bridge.mjs'], // Vera
+  sysadmin: ['/home/alessio/work/rb/scripts/roadboard-telegram-bridge.mjs'], // Pia
+};
 // Map bare names (local://roadboard) -> abs path. Format: "name=path;name2=path2".
 function parseLocalRepoMap(s) {
   const m = {};
@@ -222,7 +230,8 @@ const handler = (req, res) => {
       } catch (e) { /* fall back to no roadboard access */ }
     }
     const repoRw = repoAccess === 'rw' && !!repoPath;
-    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy, repoRw), mcpFlags.length > 0, repoRw ? ['Bash(git:*)'] : []);
+    const scopedReads = SCOPED_READS[slug] || [];
+    const toolFlags = roadboardToolFlags(slug, claudeDisallowed(policy, repoRw, scopedReads), mcpFlags.length > 0, repoRw ? ['Bash(git:*)'] : []);
     const streamMode = !!p.stream && p.provider !== 'codex';
     const args = (p.provider === 'codex')
       ? ['exec', prompt]
