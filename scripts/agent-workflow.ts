@@ -902,13 +902,11 @@ const STARTER_CONFIG: AdaptersConfig = {
       binary: "codex",
       model: "chatgpt-4.5",
       flags: [],
-      systemPromptPath: "docs/templates/analyst-system-prompt.md",
     },
     architect: {
       binary: "claude",
       model: "opus",
       flags: ["--dangerously-skip-permissions"],
-      systemPromptPath: "docs/templates/architect-system-prompt.md",
     },
   },
   verify: {
