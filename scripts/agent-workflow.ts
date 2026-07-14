@@ -34,6 +34,12 @@ const TASK_LIST_PATH = path.join(ROOT, "TASK_LIST.md");
 /** The three lifecycle folders — the single source of truth for task state. */
 const LIFECYCLE_FOLDERS = ["todo", "run", "done"] as const;
 
+
+/** Prompt files are lifecycle .md files; Worker output artifacts (`-output.md`) are not prompts. */
+function isPromptFileName(fileName: string): boolean {
+  return fileName.endsWith(".md") && !fileName.endsWith("-output.md");
+}
+
 /** Valid frontmatter status values. A prompt is spawnable only when `approved`. */
 export const PROMPT_STATUSES = [
   "draft",
@@ -222,7 +228,7 @@ export function countFilesInFolder(folderPath: string): number {
 
   return fs
     .readdirSync(folderPath)
-    .filter((f) => f.endsWith(".md")).length;
+    .filter(isPromptFileName).length;
 }
 
 /**
@@ -252,7 +258,7 @@ export function countRunOutputStatuses(tasksDir?: string): OutputStatusCounts {
     return counts;
   }
 
-  for (const file of fs.readdirSync(runDir).filter((f) => f.endsWith(".md"))) {
+  for (const file of fs.readdirSync(runDir).filter(isPromptFileName)) {
     const parsed = parsePrompt(fs.readFileSync(path.join(runDir, file), "utf-8"));
     const os = parsed.frontmatter.outputStatus;
 
@@ -534,7 +540,7 @@ export function runLint(dir?: string): LintResult {
     };
   }
 
-  const fileNames = fs.readdirSync(folderPath).filter((f) => f.endsWith(".md")).sort();
+  const fileNames = fs.readdirSync(folderPath).filter(isPromptFileName).sort();
   let totalErrors = 0;
   const lines: string[] = [];
   const files: FileLintResult[] = [];
@@ -585,7 +591,7 @@ function matchingFiles(folder: string, slug: string): string[] {
 
   return fs
     .readdirSync(folder)
-    .filter((f) => f.endsWith(".md") && f.toLowerCase().includes(lower))
+    .filter((f) => isPromptFileName(f) && f.toLowerCase().includes(lower))
     .sort();
 }
 
@@ -604,7 +610,7 @@ export function runReady(): ReadyResult {
   const approved: ReadyEntry[] = [];
   const pending: ReadyEntry[] = [];
 
-  const files = fs.readdirSync(todoDir).filter((f) => f.endsWith(".md")).sort();
+  const files = fs.readdirSync(todoDir).filter(isPromptFileName).sort();
 
   for (const file of files) {
     const content = fs.readFileSync(path.join(todoDir, file), "utf-8");
@@ -639,7 +645,7 @@ function newestMtimeInFolders(tasksDir: string, folders: string[]): Date | null 
       continue;
     }
 
-    const files = fs.readdirSync(folderPath).filter((f) => f.endsWith(".md"));
+    const files = fs.readdirSync(folderPath).filter(isPromptFileName);
 
     for (const file of files) {
       const mtime = fs.statSync(path.join(folderPath, file)).mtime;
@@ -1043,9 +1049,11 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
     );
   }
 
+  // Worker output artifacts are NOT lifecycle prompts — default them into
+  // .agent/ so they never pollute tasks/run/ counts and sync.
   const outputDir = adapterCfg.outputDir && adapterCfg.outputDir.trim() !== ""
     ? adapterCfg.outputDir
-    : path.join(tasksDir, "run");
+    : path.join(AGENT_DIR, "worker-output");
   fs.mkdirSync(outputDir, { recursive: true });
 
   const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
@@ -1377,15 +1385,30 @@ function extractScopeAndCriteria(content: string): string {
   return [grab("## Scope"), grab("## Acceptance criteria")].filter(Boolean).join("\n\n");
 }
 
-/** Compute the relevant git diff (working tree + staged) via `git diff HEAD`. */
+/**
+ * Compute the relevant git diff: working tree + staged via `git diff HEAD`,
+ * PLUS untracked files (invisible to `git diff HEAD`) diffed against
+ * /dev/null — a Worker whose change is only new files must still produce a
+ * reviewable diff. `git diff --no-index` is side-effect-free (no index writes).
+ */
 function computeGitDiff(repoRoot: string): string {
-  const r = child_process.spawnSync("git", ["diff", "HEAD"], {
-    cwd: repoRoot,
-    encoding: "utf-8",
-    maxBuffer: 20 * 1024 * 1024,
-  });
+  const gitOpts = { cwd: repoRoot, encoding: "utf-8" as const, maxBuffer: 20 * 1024 * 1024 };
+  const tracked = child_process.spawnSync("git", ["diff", "HEAD"], gitOpts);
+  const untrackedList = child_process.spawnSync(
+    "git",
+    ["ls-files", "--others", "--exclude-standard"],
+    gitOpts,
+  );
+  const untrackedFiles = (untrackedList.stdout ?? "").split("\n").filter((f) => f.trim() !== "");
+  let untrackedDiff = "";
 
-  return r.stdout ?? "";
+  for (const file of untrackedFiles) {
+    // Exits 1 when files differ — expected; we only consume stdout.
+    const d = child_process.spawnSync("git", ["diff", "--no-index", "--", "/dev/null", file], gitOpts);
+    untrackedDiff += d.stdout ?? "";
+  }
+
+  return (tracked.stdout ?? "") + untrackedDiff;
 }
 
 export interface ReviewOutputOptions {
