@@ -985,14 +985,65 @@ export interface RunOptions {
   dryRun?: boolean;
   execFn?: (binary: string, args: string[], opts: object) => string;
   logFn?: (msg: string) => void;
+  /** Bypass the single-task-in-run guard. */
+  force?: boolean;
+}
+
+/**
+ * Refuses when tasks/run/ already holds a prompt other than `excludeBasename`
+ * (single-task-in-run constraint) — concurrent prompts in run/ contaminate
+ * review-output's whole-repo diff. Worker output artifacts (`-output.md`) are
+ * exempt via `isPromptFileName`. Bypassed entirely when `force` is set.
+ */
+function assertSingleTaskInRun(
+  tasksDir: string,
+  excludeBasename: string | null,
+  force: boolean | undefined,
+  action: "run" | "review-output",
+): void {
+  if (force) {
+    return;
+  }
+
+  const runDir = path.join(tasksDir, "run");
+
+  if (!fs.existsSync(runDir)) {
+    return;
+  }
+
+  const others = fs
+    .readdirSync(runDir)
+    .filter(isPromptFileName)
+    .filter((f) => f !== excludeBasename);
+
+  if (others.length === 0) {
+    return;
+  }
+
+  const list = others.join(", ");
+
+  if (action === "run") {
+    throw new Error(
+      `Refusing to run: tasks/run/ already contains ${others.length} prompt(s) in progress (${list}). ` +
+      "Only one task may be in run/ at a time (single-task-in-run constraint) — pass --force to bypass.",
+    );
+  }
+
+  throw new Error(
+    `Refusing review-output: tasks/run/ contains ${others.length} other prompt(s) besides the one being reviewed (${list}). ` +
+    "review-output evaluates the whole-repo diff, so concurrent prompts in run/ would contaminate the review " +
+    "(single-task-in-run constraint) — pass --force to bypass.",
+  );
 }
 
 /**
  * Spawns a Worker adapter on a prompt identified by slug.
  *
  * REFUSES any prompt whose frontmatter status is not `approved` — the review
- * gate. With dryRun the command is previewed and nothing is executed. The
- * adapter must exist in config and be enabled to actually run.
+ * gate. REFUSES when another prompt already sits in tasks/run/ (single-task-
+ * in-run constraint, bypassable with `force`). With dryRun the command is
+ * previewed and nothing is executed. The adapter must exist in config and be
+ * enabled to actually run.
  */
 export function runWorker(slug: string, adapterName: string, options: RunOptions = {}): RunResult {
   if (!slug || slug.trim() === "") {
@@ -1042,6 +1093,9 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
       "Complete the Analyst review (## Review log) and set status: approved first.",
     );
   }
+
+  // --- Single-task-in-run guard ----------------------------------------------
+  assertSingleTaskInRun(tasksDir, inTodo ? null : path.basename(promptFile), options.force, "run");
 
   const config = loadAdaptersConfig(configPath);
 
@@ -1484,6 +1538,8 @@ export interface ReviewOutputOptions {
    */
   spawnFn?: (command: string, args: string[]) => number;
   logFn?: (msg: string) => void;
+  /** Bypass the single-task-in-run guard. */
+  force?: boolean;
 }
 
 
@@ -1608,6 +1664,10 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
   const diffFn = options.diffFn ?? computeGitDiff;
 
   const promptFile = findPromptFileInFolder(slug, "run", tasksDir);
+
+  // --- Single-task-in-run guard ----------------------------------------------
+  assertSingleTaskInRun(tasksDir, path.basename(promptFile), options.force, "review-output");
+
   const content = fs.readFileSync(promptFile, "utf-8");
   const parsed = parsePrompt(content);
 
@@ -1959,6 +2019,7 @@ function parseArgs(argv: string[]): {
   dryRun?: boolean;
   analyst?: "codex" | "claude";
   maxRounds?: number;
+  force?: boolean;
 } {
   const [, , command = "", subcommandOrFlag = "", ...rest] = argv;
 
@@ -1984,6 +2045,7 @@ function parseArgs(argv: string[]): {
   let dryRun = false;
   let analyst: "codex" | "claude" | undefined;
   let maxRounds: number | undefined;
+  let force = false;
 
   for (let i = 0; i < remaining.length; i++) {
     if (remaining[i] === "--slug" && remaining[i + 1]) {
@@ -2027,9 +2089,13 @@ function parseArgs(argv: string[]): {
       maxRounds = Number.isFinite(n) && n > 0 ? n : undefined;
       i++;
     }
+
+    else if (remaining[i] === "--force") {
+      force = true;
+    }
   }
 
-  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds };
+  return { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds, force };
 }
 
 function main(): void {
@@ -2038,7 +2104,7 @@ function main(): void {
     return;
   }
 
-  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds } = parseArgs(process.argv);
+  const { command, subcommand, slug, dir, adapter, execute, init, show, dryRun, analyst, maxRounds, force } = parseArgs(process.argv);
 
   try {
     if (command === "status") {
@@ -2158,7 +2224,7 @@ function main(): void {
     }
 
     else if (command === "run") {
-      const result = runWorker(slug ?? "", adapter ?? "", { dryRun });
+      const result = runWorker(slug ?? "", adapter ?? "", { dryRun, force });
 
       if (result.dryRun) {
         console.log(`[dry-run] approved prompt ${path.basename(result.promptFile)} — would run: ${result.command} ${result.args.join(" ")}`);
@@ -2170,7 +2236,7 @@ function main(): void {
     }
 
     else if (command === "review-output") {
-      const result = runReviewOutput(slug ?? "", { maxRounds, analyst });
+      const result = runReviewOutput(slug ?? "", { maxRounds, analyst, force });
       console.log(
         `[review-output] ${result.verdict} — output_status: ${result.outputStatus} ` +
         `(round ${result.outputRound})`,
@@ -2224,7 +2290,7 @@ function main(): void {
     else {
       console.error(
         `Unknown command: "${command}"\n` +
-        `Usage: pnpm agent:workflow <status|lint|ready|sync|review|review-output|promote|adapters|config|run> [--slug <slug>] [--adapter <name>] [--dir <dir>] [--dry-run] [--analyst <codex|claude>] [--max-rounds <n>]`,
+        `Usage: pnpm agent:workflow <status|lint|ready|sync|review|review-output|promote|adapters|config|run> [--slug <slug>] [--adapter <name>] [--dir <dir>] [--dry-run] [--analyst <codex|claude>] [--max-rounds <n>] [--force]`,
       );
       process.exit(1);
     }

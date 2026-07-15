@@ -44,6 +44,17 @@ The CLI encodes the same gate: `pnpm agent:workflow run --slug <slug> --adapter 
    - **CLI adapter** (`pnpm agent:workflow run --slug <slug> --adapter <name>`): the command itself moves the approved prompt `todo/` → `run/` as part of spawning, then invokes the adapter on the `run/` path. A prompt already in `run/` (a retry) is used in place. `--dry-run` reports the move without performing it.
 8. Either way the move happens only for an `approved` prompt (the `run` command refuses any other status). `run` moves `todo/` → `run/` but never `run/` → `done/` — that transition belongs to `promote` alone.
 
+### Single-task-in-run constraint
+
+`review-output` evaluates the **whole-repo diff** (`git diff HEAD` + untracked files), not a per-task diff. If two prompts sit in `tasks/run/` concurrently, the Analyst reviewing task A's output also sees task B's work-in-progress and will (correctly) flag it as out-of-scope — a structural false negative. To avoid this, both `run` and `review-output` refuse to proceed when `tasks/run/` holds more than one prompt at a time:
+
+- `pnpm agent:workflow run --slug <slug> --adapter <name>` refuses if `tasks/run/` already contains another prompt file.
+- `pnpm agent:workflow review-output --slug <slug>` refuses if `tasks/run/` contains more than one prompt file (naming the extras).
+- Worker output artifacts (`*-output.md`) are exempt from the count — only lifecycle prompt files are.
+- Pass `--force` to either command to bypass the guard for a deliberate exception. The Analyst still reviews the whole-repo diff, so a forced concurrent run risks the same false-negative contamination described above.
+
+The structural fix (per-task git worktrees, isolating each Worker's diff) is future work, not implemented here.
+
 ### 3. Output review loop (`run/`, after the Worker finishes)
 
 9. Worker implements the prompt, self-verifies, sets frontmatter `output_status: pending` on the prompt still sitting in `tasks/run/`, and stops. **It does not move the file.**
@@ -158,8 +169,8 @@ pnpm agent:workflow <command> [options]
 | `ready` | — | Partition `tasks/todo/` prompts into approved (spawnable) vs. pending |
 | `sync` | — | Regenerate `TASK_LIST.md` from `tasks/todo/`, `tasks/run/`, and `tasks/done/` |
 | `review` | `--slug <slug> [--analyst <codex\|claude>] [--max-rounds <n>]` | Drive the Architect↔Analyst **prompt** review loop to convergence (`approved` or `blocked-review`) |
-| `run` | `--slug <slug> --adapter <name> [--dry-run]` | Move an **approved** prompt `todo/`→`run/` and spawn a Worker adapter on it — refuses any other status |
-| `review-output` | `--slug <slug> [--max-rounds <n>]` | Review a finished Worker's result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round |
+| `run` | `--slug <slug> --adapter <name> [--dry-run] [--force]` | Move an **approved** prompt `todo/`→`run/` and spawn a Worker adapter on it — refuses any other status, and refuses if another prompt already sits in `run/` (single-task-in-run, bypassable with `--force`) |
+| `review-output` | `--slug <slug> [--max-rounds <n>] [--force]` | Review a finished Worker's result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round — refuses if `run/` holds more than one prompt (single-task-in-run, bypassable with `--force`) |
 | `promote` | `--slug <slug> [--dry-run]` | The single `run/`→`done/` path: requires `output_status: approved`, re-runs build + tests, enforces evidence |
 | `adapters <sub>` | see below | Optional model CLI adapter layer (opt-in, safe by default) |
 | `config` | `--init \| --show` | Create or print `.agent/workflow-adapters.json` |
@@ -212,15 +223,16 @@ pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude
 pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude --dry-run
 ```
 
-Refuses immediately if the prompt's `status` is not `approved`. Otherwise it moves the prompt `todo/`→`run/` (a prompt already in `run/` — a retry — is used in place), then invokes the adapter on the `run/` path. `--dry-run` reports the move and prints the command that would run, without moving or invoking anything. On success, adapter output is saved under the adapter's configured `outputDir` (default `.agent/worker-output/<slug>-<adapter>-output.md` — kept out of `tasks/run/` so it never pollutes lifecycle counts).
+Refuses immediately if the prompt's `status` is not `approved`, or if another prompt already sits in `tasks/run/` (single-task-in-run guard — pass `--force` to bypass). Otherwise it moves the prompt `todo/`→`run/` (a prompt already in `run/` — a retry — is used in place), then invokes the adapter on the `run/` path. `--dry-run` reports the move and prints the command that would run, without moving or invoking anything. On success, adapter output is saved under the adapter's configured `outputDir` (default `.agent/worker-output/<slug>-<adapter>-output.md` — kept out of `tasks/run/` so it never pollutes lifecycle counts).
 
 **`review-output --slug <slug>`** — review the Worker's result:
 
 ```bash
 pnpm agent:workflow review-output --slug feat-task-bulk-delete
+pnpm agent:workflow review-output --slug feat-task-bulk-delete --force  # bypass single-task-in-run guard
 ```
 
-Computes `git diff HEAD`, hands it plus the prompt's Scope/Acceptance Criteria to the reviewer, writes `output_status` and appends to `## Output review log`.
+Refuses if `tasks/run/` contains more than one prompt file (single-task-in-run guard, naming the extras; pass `--force` to bypass). Otherwise computes `git diff HEAD`, hands it plus the prompt's Scope/Acceptance Criteria to the reviewer, writes `output_status` and appends to `## Output review log`.
 
 **`promote --slug <slug>`** — the only `run/`→`done/` path:
 
@@ -306,8 +318,8 @@ Passive, read-only commands — never invoke a model CLI, never touch git, never
 `review`, `run`, `review-output`, and `promote` are the commands that actually change state:
 
 - `review` invokes the configured Analyst/Architect role binaries and edits the prompt's frontmatter + `## Review log`. It never moves files or spawns a Worker.
-- `run` invokes a Worker adapter, but **only** on a prompt already `status: approved`. It moves the approved prompt `todo/` → `run/` as part of spawning (a prompt already in `run/` is used in place; `--dry-run` reports the move without doing it), but never moves `run/` → `done/` and never updates RoadBoard.
-- `review-output` invokes the configured reviewer and edits `output_status` + `## Output review log`. It never moves files.
+- `run` invokes a Worker adapter, but **only** on a prompt already `status: approved`, and only when no other prompt already sits in `tasks/run/` (single-task-in-run guard, bypassable with `--force`). It moves the approved prompt `todo/` → `run/` as part of spawning (a prompt already in `run/` is used in place; `--dry-run` reports the move without doing it), but never moves `run/` → `done/` and never updates RoadBoard.
+- `review-output` invokes the configured reviewer and edits `output_status` + `## Output review log`. It never moves files. It refuses when `tasks/run/` holds more than one prompt (single-task-in-run guard, bypassable with `--force`).
 - `promote` is the only command that moves a file from `run/` to `done/`, and only after all three gates (output approval, green build+tests, evidence) pass. `--dry-run` reports the same checks without running commands or moving anything.
 
 The CLI is designed to never:

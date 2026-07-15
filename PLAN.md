@@ -93,5 +93,5 @@
 
 - [x] enh-output-gate-file-verdict — Verdetto output-gate scritto nel prompt file dall'Analyst (niente parsing stdout)
 - [ ] enh-analyst-integrity-guard — Integrity guard sui passi Analyst (working tree + round nel log)
-- [ ] enh-single-task-in-run-guard — Vincolo single-task-in-run per il diff di review-output
+- [x] enh-single-task-in-run-guard — Vincolo single-task-in-run per il diff di review-output
 - [ ] enh-workflow-spawn-hardening — Timeout e transcript sugli spawn degli agenti

@@ -988,6 +988,74 @@ describe("runWorker", () => {
       /Adapter "ghost" not found/,
     );
   });
+
+  it("REFUSES to run when tasks/run/ already contains another prompt (single-task-in-run)", () => {
+    writeFile(
+      todoDir,
+      "feat-second.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# second\n",
+    );
+    const runDir = path.join(tasksDir, "run");
+    writeFile(runDir, "feat-first.md", "---\nstatus: approved\nreview_round: 1\n---\n# first\n");
+
+    expect(() => runWorker("second", "worker", { tasksDir, configPath })).toThrow(
+      /Refusing to run.*feat-first\.md.*single-task-in-run/s,
+    );
+  });
+
+  it("--force bypasses the single-task-in-run guard on run", () => {
+    writeFile(
+      todoDir,
+      "feat-second.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# second\n",
+    );
+    const runDir = path.join(tasksDir, "run");
+    writeFile(runDir, "feat-first.md", "---\nstatus: approved\nreview_round: 1\n---\n# first\n");
+
+    const result = runWorker("second", "worker", {
+      tasksDir,
+      configPath,
+      force: true,
+      execFn: () => "ok",
+      logFn: () => undefined,
+    });
+
+    expect(result.dryRun).toBe(false);
+    expect(fs.existsSync(path.join(runDir, "feat-second.md"))).toBe(true);
+  });
+
+  it("does not count worker output artifacts (*-output.md) toward the single-task-in-run guard", () => {
+    writeFile(
+      todoDir,
+      "feat-only.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# only\n",
+    );
+    const runDir = path.join(tasksDir, "run");
+    writeFile(runDir, "feat-stale-output.md", "some worker output artifact");
+
+    const result = runWorker("only", "worker", {
+      tasksDir,
+      configPath,
+      execFn: () => "ok",
+      logFn: () => undefined,
+    });
+
+    expect(result.dryRun).toBe(false);
+  });
+
+  it("does not self-count the retried prompt already in run/ toward the single-task-in-run guard", () => {
+    const runDir = path.join(tasksDir, "run");
+    writeFile(runDir, "feat-retry2.md", "---\nstatus: approved\nreview_round: 1\n---\n# retry\n");
+
+    const result = runWorker("retry2", "worker", {
+      tasksDir,
+      configPath,
+      execFn: () => "ok",
+      logFn: () => undefined,
+    });
+
+    expect(result.dryRun).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1546,6 +1614,45 @@ output_round: 0
     expect(() => runReviewOutput("ghost", { tasksDir })).toThrow(
       'No prompt file found in tasks/run/ matching slug: "ghost"',
     );
+  });
+
+  it("REFUSES review-output when run/ contains more than one prompt (single-task-in-run)", () => {
+    writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    writeFile(runDir, "feat-other.md", "---\nstatus: approved\nreview_round: 1\n---\n# other\n");
+
+    expect(() =>
+      runReviewOutput("y", { tasksDir, diffFn: () => "d", reviewFn: () => "approved", logFn: () => undefined }),
+    ).toThrow(/Refusing review-output.*feat-other\.md.*single-task-in-run/s);
+  });
+
+  it("--force bypasses the single-task-in-run guard on review-output", () => {
+    const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    writeFile(runDir, "feat-other.md", "---\nstatus: approved\nreview_round: 1\n---\n# other\n");
+
+    const result = runReviewOutput("y", {
+      tasksDir,
+      force: true,
+      diffFn: () => "d",
+      reviewFn: () => "approved",
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("approved");
+    expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputStatus).toBe("approved");
+  });
+
+  it("does not count worker output artifacts (*-output.md) toward the single-task-in-run guard", () => {
+    writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    writeFile(runDir, "feat-stale-output.md", "some worker output artifact");
+
+    const result = runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "d",
+      reviewFn: () => "approved",
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("approved");
   });
 
   it("writes approved verdict, increments round, appends Output review log", () => {
