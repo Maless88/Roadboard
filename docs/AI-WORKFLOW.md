@@ -60,6 +60,8 @@ The structural fix (per-task git worktrees, isolating each Worker's diff) is fut
 9. Worker implements the prompt, self-verifies, sets frontmatter `output_status: pending` on the prompt still sitting in `tasks/run/`, and stops. **It does not move the file.**
 10. `pnpm agent:workflow review-output --slug <slug>` — computes `git diff HEAD`, feeds it plus the prompt's `## Scope` and `## Acceptance Criteria` to the Analyst reviewer, and writes the verdict back: `output_status` → `approved` / `changes-requested`, `output_round` incremented, one `### Round N — <verdict>` appended to `## Output review log` (append-only, never overwritten).
 11. Defaults to `changes-requested` when uncertain. Caps at 3 rounds — beyond that, `output_status: blocked-review` and the Developer must triage.
+    - Every Architect/Analyst step (prompt-gate `review` and output-gate `review-output`) persists its stdout+stderr to `.agent/review-transcripts/<slug>-<gate>-round<N>-<role>.log` for later audit.
+    - If an Analyst's notes exceed 10 entries in a single round, only the first 10 are persisted and a log line states how many were dropped.
 12. `pnpm agent:workflow promote --slug <slug>` — the **only** `run/`→`done/` path. Refuses to move the file unless, in order:
     - `output_status: approved`;
     - a re-executed build **and** tests both exit 0 (commands configurable in `.agent/workflow-adapters.json` under `verify: { build, tests }`, defaulting to `pnpm build` / `pnpm test`) — recorded into the prompt's `verification:` block;
@@ -277,11 +279,16 @@ No API keys, tokens, or credentials are stored in the repository. `.agent/workfl
   "verify": {
     "build": "pnpm build",
     "tests": "pnpm test"
+  },
+  "timeouts": {
+    "agentMs": 900000
   }
 }
 ```
 
 `binary` must be an absolute path — the CLI never resolves binaries from `PATH`. `verify` configures the commands `promote` re-runs before allowing `run/`→`done/`.
+
+`timeouts.agentMs` (optional) bounds every agent/adapter invocation — the prompt-gate Architect and Analyst (`review`), the output-gate Analyst (`review-output`), the Worker (`run`), and the configured-CLI adapter (`adapters run`). It defaults to 900000ms (15 minutes) when the block or field is absent. A timed-out step throws a clear error naming the role and the configured timeout. This timeout does **not** apply to `git diff` calls or to the build/test verification commands `promote` re-executes — those have their own semantics.
 
 ### Subcommands
 

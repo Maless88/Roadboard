@@ -173,10 +173,16 @@ export interface VerifyConfig {
   tests?: string;
 }
 
+/** Optional timeout overrides for agent/adapter invocations (see DEFAULT_AGENT_TIMEOUT_MS). */
+export interface TimeoutsConfig {
+  agentMs?: number;
+}
+
 export interface AdaptersConfig {
   adapters: Record<string, AdapterConfig>;
   roles?: Record<string, RoleConfig>;
   verify?: VerifyConfig;
+  timeouts?: TimeoutsConfig;
 }
 
 export interface ConfigInitResult {
@@ -715,6 +721,20 @@ export function runSync(options: {
 
 const AGENT_DIR = path.join(ROOT, ".agent");
 const ADAPTERS_CONFIG_PATH = path.join(AGENT_DIR, "workflow-adapters.json");
+const REVIEW_TRANSCRIPTS_DIR = path.join(AGENT_DIR, "review-transcripts");
+
+/** Fallback agent/adapter spawn timeout — 15 minutes — used when `timeouts.agentMs` is absent. */
+const DEFAULT_AGENT_TIMEOUT_MS = 15 * 60 * 1000;
+
+/** Resolves the configured agent/adapter timeout, falling back to DEFAULT_AGENT_TIMEOUT_MS. */
+function resolveAgentTimeoutMs(config: AdaptersConfig | null): number {
+  return config?.timeouts?.agentMs ?? DEFAULT_AGENT_TIMEOUT_MS;
+}
+
+/** True when `err` is a Node child_process timeout error (spawnSync/execFileSync `ETIMEDOUT`). */
+function isTimeoutError(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as NodeJS.ErrnoException).code === "ETIMEDOUT";
+}
 
 /**
  * Loads the local adapters config from .agent/workflow-adapters.json.
@@ -843,7 +863,11 @@ export function adaptersRun(
   slug: string,
   adapterName: string,
   execute: boolean,
-  options: { configPath?: string; tasksDir?: string } = {},
+  options: {
+    configPath?: string;
+    tasksDir?: string;
+    execFn?: (binary: string, args: string[], opts: object) => string;
+  } = {},
 ): AdaptersRunResult {
   if (!slug || slug.trim() === "") {
     throw new Error("--slug is required for adapters run");
@@ -892,12 +916,28 @@ export function adaptersRun(
   fs.mkdirSync(outputDir, { recursive: true });
 
   const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
+  const timeoutMs = resolveAgentTimeoutMs(config);
+  const execFn = options.execFn ?? ((binary, args, opts) =>
+    child_process.execFileSync(binary, args, opts) as string);
 
   // Use execFileSync to avoid shell injection — binary path must be absolute
-  const output = child_process.execFileSync(adapterCfg.binary, [filePath], {
-    encoding: "utf-8",
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  let output: string;
+
+  try {
+    output = execFn(adapterCfg.binary, [filePath], {
+      encoding: "utf-8",
+      maxBuffer: 10 * 1024 * 1024,
+      timeout: timeoutMs,
+    });
+  }
+
+  catch (err) {
+    if (isTimeoutError(err)) {
+      throw new Error(`Adapter "${adapterName}" step timed out after ${timeoutMs}ms.`);
+    }
+
+    throw err;
+  }
 
   fs.writeFileSync(outputPath, output, "utf-8");
 
@@ -922,6 +962,9 @@ const STARTER_CONFIG: AdaptersConfig = {
   verify: {
     build: "pnpm build",
     tests: "pnpm test",
+  },
+  timeouts: {
+    agentMs: DEFAULT_AGENT_TIMEOUT_MS,
   },
 };
 
@@ -1159,7 +1202,22 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
   const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
 
   log(`[run] invoking worker adapter "${adapterName}" on approved prompt ${path.basename(promptFile)}`);
-  const output = execFn(command, args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024 });
+
+  const timeoutMs = resolveAgentTimeoutMs(config);
+  let output: string;
+
+  try {
+    output = execFn(command, args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, timeout: timeoutMs });
+  }
+
+  catch (err) {
+    if (isTimeoutError(err)) {
+      throw new Error(`Worker step timed out after ${timeoutMs}ms.`);
+    }
+
+    throw err;
+  }
+
   fs.writeFileSync(outputPath, output, "utf-8");
 
   return { slug, promptFile, adapter: adapterName, status, dryRun: false, command, args, outputPath };
@@ -1182,6 +1240,8 @@ export interface ReviewOptions {
    * out-of-scope Analyst edit).
    */
   snapshotFn?: (repoRoot: string) => string;
+  /** Directory for Architect/Analyst transcript logs. Defaults to .agent/review-transcripts. */
+  transcriptsDir?: string;
 }
 
 export interface ReviewResult {
@@ -1484,6 +1544,69 @@ function assertLogRoundPresent(
 }
 
 /**
+ * Invokes one Architect/Analyst step. With `spawnFn` (tests), delegates
+ * directly and translates a thrown `ETIMEDOUT` error into a clear message
+ * naming the role and configured timeout. Without `spawnFn` (production),
+ * runs the real `spawnSync` with `timeout: timeoutMs`, captures stdout+stderr
+ * (teed to `logFn` and, when `transcriptPath` is given, persisted to disk),
+ * and throws the same clear timeout message on `ETIMEDOUT`.
+ */
+export function invokeAgentStep(params: {
+  role: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  timeoutMs: number;
+  spawnFn?: (command: string, args: string[]) => number;
+  logFn: (msg: string) => void;
+  transcriptPath?: string;
+}): number {
+  const { role, command, args, cwd, timeoutMs, spawnFn, logFn, transcriptPath } = params;
+
+  if (spawnFn) {
+    try {
+      return spawnFn(command, args);
+    }
+
+    catch (err) {
+      if (isTimeoutError(err)) {
+        throw new Error(`${role} step timed out after ${timeoutMs}ms.`);
+      }
+
+      throw err;
+    }
+  }
+
+  logFn(`[${role.toLowerCase()}] step starting…`);
+
+  const result = child_process.spawnSync(command, args, {
+    cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: timeoutMs,
+    encoding: "utf-8",
+    maxBuffer: 20 * 1024 * 1024,
+  });
+
+  if (result.error && isTimeoutError(result.error)) {
+    throw new Error(`${role} step timed out after ${timeoutMs}ms.`);
+  }
+
+  const transcript = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+
+  if (result.stdout) process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+
+  if (transcriptPath) {
+    fs.mkdirSync(path.dirname(transcriptPath), { recursive: true });
+    fs.writeFileSync(transcriptPath, transcript, "utf-8");
+  }
+
+  logFn(`[${role.toLowerCase()}] step finished (exit ${result.status ?? "null"}).`);
+
+  return result.status ?? 1;
+}
+
+/**
  * Drive the Architect <-> Analyst review loop until the prompt reaches
  * `status: approved`, or `blocked-review` after maxRounds without convergence.
  * Architect = claude; Analyst = codex by default, or claude when analyst="claude".
@@ -1498,13 +1621,6 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
   const analystKind = options.analyst ?? "codex";
   const maxRounds = options.maxRounds ?? 3;
   const log = options.logFn ?? ((msg: string) => console.log(msg));
-  const spawn =
-    options.spawnFn ??
-    ((command: string, args: string[]) => {
-      const r = child_process.spawnSync(command, args, { cwd: ROOT, stdio: "inherit" });
-
-      return r.status ?? 1;
-    });
 
   const config = loadAdaptersConfig(configPath);
 
@@ -1513,6 +1629,9 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
       `No role config found at ${configPath}. Run \`pnpm agent:workflow config --init\` first.`,
     );
   }
+
+  const timeoutMs = resolveAgentTimeoutMs(config);
+  const transcriptsDir = options.transcriptsDir ?? REVIEW_TRANSCRIPTS_DIR;
 
   const architectRole = config.roles.architect;
 
@@ -1553,7 +1672,16 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
       const verb = status === "changes-requested" ? "revising" : "submitting";
       log(`[review] round ${i + 1}: Architect (${architectRole.binary}) ${verb}…`);
       const { command, args } = buildRoleInvocation(architectRole, buildArchitectPrompt(relPath, status), ROOT);
-      const code = spawn(command, args);
+      const code = invokeAgentStep({
+        role: "Architect",
+        command,
+        args,
+        cwd: ROOT,
+        timeoutMs,
+        spawnFn: options.spawnFn,
+        logFn: log,
+        transcriptPath: path.join(transcriptsDir, `${slug}-review-round${i + 1}-architect.log`),
+      });
 
       if (code !== 0) {
         throw new Error(`Architect step failed (exit ${code}).`);
@@ -1574,7 +1702,16 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
     const { command, args } = buildRoleInvocation(analystRole, buildAnalystPrompt(relPath), ROOT);
     const snapshotFn = options.snapshotFn ?? snapshotWorkingTree;
     const treeBefore = snapshotFn(ROOT);
-    const code = spawn(command, args);
+    const code = invokeAgentStep({
+      role: "Analyst",
+      command,
+      args,
+      cwd: ROOT,
+      timeoutMs,
+      spawnFn: options.spawnFn,
+      logFn: log,
+      transcriptPath: path.join(transcriptsDir, `${slug}-review-round${i + 1}-analyst.log`),
+    });
     const treeAfter = snapshotFn(ROOT);
 
     if (code !== 0) {
@@ -1680,6 +1817,8 @@ export interface ReviewOutputOptions {
    * `snapshotWorkingTree`. Only applies to the default (non-`reviewFn`) path.
    */
   snapshotFn?: (repoRoot: string) => string;
+  /** Directory for the Analyst transcript log. Defaults to .agent/review-transcripts. */
+  transcriptsDir?: string;
 }
 
 
@@ -1692,6 +1831,7 @@ interface AnalystReviewFnOptions {
   nextRound: number;
   logFn: (msg: string) => void;
   spawnFn?: (command: string, args: string[]) => number;
+  transcriptsDir?: string;
 }
 
 
@@ -1744,13 +1884,7 @@ function makeAnalystReviewFn(
     throw new Error(`No "analyst" role in ${opts.configPath}. Add one or pass --analyst claude.`);
   }
 
-  const spawn =
-    opts.spawnFn ??
-    ((command: string, args: string[]) => {
-      const r = child_process.spawnSync(command, args, { cwd: opts.repoRoot, stdio: "inherit" });
-
-      return r.status ?? 1;
-    });
+  const timeoutMs = resolveAgentTimeoutMs(config);
 
   return (input) => {
     const diffDir = path.join(opts.repoRoot, ".agent");
@@ -1766,7 +1900,19 @@ function makeAnalystReviewFn(
     );
     const { command, args } = buildRoleInvocation(analystRole, promptText, opts.repoRoot);
     opts.logFn(`[review-output] Analyst (${analystRole.binary}) reviewing diff…`);
-    const code = spawn(command, args);
+    const code = invokeAgentStep({
+      role: "Analyst",
+      command,
+      args,
+      cwd: opts.repoRoot,
+      timeoutMs,
+      spawnFn: opts.spawnFn,
+      logFn: opts.logFn,
+      transcriptPath: path.join(
+        opts.transcriptsDir ?? REVIEW_TRANSCRIPTS_DIR,
+        `${slugBase}-review-output-round${opts.nextRound}-analyst.log`,
+      ),
+    });
 
     if (code !== 0) {
       throw new Error(`Analyst step failed (exit ${code}).`);
@@ -1833,7 +1979,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
     setOutputStatus(promptFile, "blocked-review");
     appendOutputReviewRound(promptFile, nextRound, "blocked-review", [
       `Reached max ${maxRounds} output-review rounds without approval — escalate to developer.`,
-    ]);
+    ], log);
     setOutputRound(promptFile, nextRound);
     log(`[review-output] round ${nextRound}: blocked-review (cap reached).`);
 
@@ -1859,6 +2005,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
       nextRound,
       logFn: log,
       spawnFn: options.spawnFn,
+      transcriptsDir: options.transcriptsDir,
     });
 
     let verdict: "approved" | "changes-requested";
@@ -1882,7 +2029,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
         verdict = "changes-requested";
         appendOutputReviewRound(promptFile, nextRound, verdict, [
           "Analyst did not write a parsable output_status — conservative changes-requested.",
-        ]);
+        ], log);
       }
     }
 
@@ -1891,7 +2038,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
       verdict = "changes-requested";
       appendOutputReviewRound(promptFile, nextRound, verdict, [
         `Analyst step failed: ${err instanceof Error ? err.message : String(err)} — conservative changes-requested.`,
-      ]);
+      ], log);
     }
 
     setOutputStatus(promptFile, verdict);
@@ -1929,7 +2076,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
         ? ["Diff satisfies Scope and Acceptance criteria."]
         : ["Diff does not yet satisfy Scope / Acceptance criteria — see requested changes."];
 
-  appendOutputReviewRound(promptFile, nextRound, verdict, notes);
+  appendOutputReviewRound(promptFile, nextRound, verdict, notes, log);
   setOutputStatus(promptFile, verdict);
   setOutputRound(promptFile, nextRound);
   log(`[review-output] round ${nextRound} verdict: ${verdict}`);
@@ -1937,16 +2084,34 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
   return { slug, promptFile, outputStatus: verdict, outputRound: nextRound, verdict };
 }
 
-/** Append a `### Round N — <verdict>` block under `## Output review log` (append-only). */
+/** Max number of notes persisted per Output review log round — extras are dropped with a warning. */
+const MAX_OUTPUT_NOTES = 10;
+
+/**
+ * Append a `### Round N — <verdict>` block under `## Output review log`
+ * (append-only). Truncates `notes` to MAX_OUTPUT_NOTES, logging how many
+ * were dropped rather than silently discarding them.
+ */
 function appendOutputReviewRound(
   filePath: string,
   round: number,
   verdict: string,
   notes: string[],
+  logFn: (msg: string) => void = (msg) => console.log(msg),
 ): void {
+  let effectiveNotes = notes;
+
+  if (notes.length > MAX_OUTPUT_NOTES) {
+    const dropped = notes.length - MAX_OUTPUT_NOTES;
+    effectiveNotes = notes.slice(0, MAX_OUTPUT_NOTES);
+    logFn(
+      `[review-output] round ${round}: truncated ${dropped} note(s) beyond the ${MAX_OUTPUT_NOTES}-note cap.`,
+    );
+  }
+
   const content = fs.readFileSync(filePath, "utf-8");
   const entry =
-    `### Round ${round} — ${verdict}\n` + notes.map((n) => `- ${n}`).join("\n") + "\n";
+    `### Round ${round} — ${verdict}\n` + effectiveNotes.map((n) => `- ${n}`).join("\n") + "\n";
 
   if (/## Output review log/i.test(content)) {
     // Append the round to the end of the file (log section is last by convention).

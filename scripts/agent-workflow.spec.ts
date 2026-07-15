@@ -22,6 +22,7 @@ import {
   runSync,
   runWorker,
   buildRoleInvocation,
+  invokeAgentStep,
   setPromptStatus,
   setOutputStatus,
   setOutputRound,
@@ -779,6 +780,31 @@ describe("adaptersRun", () => {
     const output = fs.readFileSync(result.outputPath, "utf-8");
     expect(output).toContain(promptFile);
   });
+
+  it("throws a clear timeout error naming the role and elapsed time when the adapter times out", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    writeFile(todoDir, "feat-slow.md", "# slow prompt\n");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: { codex: { enabled: true, binary: "/usr/local/bin/codex", outputDir: tmpDir } },
+        timeouts: { agentMs: 4321 },
+      }),
+      "utf-8",
+    );
+
+    expect(() =>
+      adaptersRun("slow", "codex", true, {
+        configPath,
+        tasksDir,
+        execFn: () => {
+          const err = new Error("timed out") as NodeJS.ErrnoException;
+          err.code = "ETIMEDOUT";
+          throw err;
+        },
+      }),
+    ).toThrow(/Adapter "codex" step timed out after 4321ms/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1057,6 +1083,35 @@ describe("runWorker", () => {
 
     expect(result.dryRun).toBe(false);
   });
+
+  it("throws a clear timeout error naming the role and elapsed time when the adapter times out", () => {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: { worker: { enabled: true, binary: "/bin/echo", outputDir: tmpDir } },
+        timeouts: { agentMs: 1234 },
+      }),
+      "utf-8",
+    );
+    writeFile(
+      todoDir,
+      "feat-slow.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# slow prompt\n",
+    );
+
+    expect(() =>
+      runWorker("slow", "worker", {
+        tasksDir,
+        configPath,
+        execFn: () => {
+          const err = new Error("timed out") as NodeJS.ErrnoException;
+          err.code = "ETIMEDOUT";
+          throw err;
+        },
+        logFn: () => undefined,
+      }),
+    ).toThrow(/Worker step timed out after 1234ms/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1112,6 +1167,18 @@ describe("configInit", () => {
     expect(parsed.roles.analyst.binary).toBe("codex");
     expect(parsed.roles.architect.binary).toBe("claude");
     expect(parsed.roles.architect.flags).toContain("--dangerously-skip-permissions");
+  });
+
+  it("starter config includes a timeouts.agentMs default of 15 minutes", () => {
+    const agentDir = path.join(tmpDir, ".agent");
+    const configPath = path.join(agentDir, "workflow-adapters.json");
+
+    configInit({ configPath, agentDir });
+
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.timeouts.agentMs).toBe(15 * 60 * 1000);
   });
 
   it("throws an error when the file already exists (does not overwrite)", () => {
@@ -1400,6 +1467,35 @@ describe("runReview", () => {
     expect(seen.every((c) => c === "claude")).toBe(true);
   });
 
+  it("throws a clear timeout error naming the role and elapsed time when the Architect step times out", () => {
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: {},
+        roles: {
+          architect: { binary: "claude", model: "opus", flags: ["--dangerously-skip-permissions"] },
+          analyst: { binary: "codex", flags: [] },
+        },
+        timeouts: { agentMs: 777 },
+      }),
+      "utf-8",
+    );
+    writeFile(todoDir, "feat-slow.md", "---\nstatus: draft\nreview_round: 0\n---\n# slow\n");
+
+    expect(() =>
+      runReview("slow", {
+        tasksDir,
+        configPath,
+        spawnFn: () => {
+          const err = new Error("timed out") as NodeJS.ErrnoException;
+          err.code = "ETIMEDOUT";
+          throw err;
+        },
+        logFn: () => undefined,
+      }),
+    ).toThrow(/Architect step timed out after 777ms/);
+  });
+
   describe("integrity guards", () => {
     it("happy path: no-op snapshotFn never trips the working-tree guard", () => {
       const file = writeFile(todoDir, "feat-g.md", "---\nstatus: draft\nreview_round: 0\n---\n# g\n");
@@ -1453,6 +1549,74 @@ describe("runReview", () => {
         }),
       ).toThrow(/verdict written without a matching "### Round 0" entry/);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// invokeAgentStep — spawn timeout + transcript persistence
+// ---------------------------------------------------------------------------
+
+describe("invokeAgentStep", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true });
+  });
+
+  it("writes a transcript file capturing stdout+stderr when no spawnFn is given", () => {
+    const transcriptPath = path.join(tmpDir, "transcripts", "slug-review-round1-architect.log");
+    const script = "process.stdout.write('out-line\\n'); process.stderr.write('err-line\\n');";
+
+    const code = invokeAgentStep({
+      role: "Architect",
+      command: process.execPath,
+      args: ["-e", script],
+      cwd: tmpDir,
+      timeoutMs: 15000,
+      logFn: () => undefined,
+      transcriptPath,
+    });
+
+    expect(code).toBe(0);
+    expect(fs.existsSync(transcriptPath)).toBe(true);
+    const transcript = fs.readFileSync(transcriptPath, "utf-8");
+    expect(transcript).toContain("out-line");
+    expect(transcript).toContain("err-line");
+  });
+
+  it("throws a clear timeout error naming the role and elapsed time on a real spawnSync timeout", () => {
+    expect(() =>
+      invokeAgentStep({
+        role: "Analyst",
+        command: "sleep",
+        args: ["2"],
+        cwd: tmpDir,
+        timeoutMs: 50,
+        logFn: () => undefined,
+      }),
+    ).toThrow(/Analyst step timed out after 50ms/);
+  });
+
+  it("via spawnFn: translates a thrown ETIMEDOUT error into a clear role-named message", () => {
+    expect(() =>
+      invokeAgentStep({
+        role: "Worker",
+        command: "irrelevant",
+        args: [],
+        cwd: tmpDir,
+        timeoutMs: 999,
+        logFn: () => undefined,
+        spawnFn: () => {
+          const err = new Error("timed out") as NodeJS.ErrnoException;
+          err.code = "ETIMEDOUT";
+          throw err;
+        },
+      }),
+    ).toThrow(/Worker step timed out after 999ms/);
   });
 });
 
@@ -1791,6 +1955,27 @@ output_round: 0
     });
 
     expect(result.verdict).toBe("changes-requested");
+  });
+
+  it("truncates notes beyond the 10-note cap and logs how many were dropped", () => {
+    const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+    const manyNotes = Array.from({ length: 13 }, (_, i) => `note ${i + 1}`);
+    const logged: string[] = [];
+
+    const result = runReviewOutput("y", {
+      tasksDir,
+      diffFn: () => "d",
+      reviewFn: () => ({ verdict: "changes-requested", notes: manyNotes }),
+      logFn: (msg) => logged.push(msg),
+    });
+
+    expect(result.verdict).toBe("changes-requested");
+
+    const content = fs.readFileSync(file, "utf-8");
+    for (let i = 1; i <= 10; i++) expect(content).toContain(`note ${i}`);
+    for (let i = 11; i <= 13; i++) expect(content).not.toContain(`note ${i}`);
+
+    expect(logged.some((m) => /truncated 3 note\(s\) beyond the 10-note cap/.test(m))).toBe(true);
   });
 
   it("caps at maxRounds → blocked-review", () => {
