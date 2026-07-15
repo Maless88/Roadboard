@@ -1565,9 +1565,10 @@ function buildOutputAnalystPrompt(
     "You are running in Analyst role — the OUTPUT review gate.",
     `A Worker has implemented the prompt at: ${promptRelPath}. The resulting git diff (vs HEAD) is saved at: ${diffRelPath}.`,
     "Read both files. Judge whether the diff satisfies the prompt's `## Scope` and `## Acceptance criteria`: completeness, scope cleanliness (no out-of-scope edits), correctness, safety.",
+    "Judge STATICALLY, from the diff and prompt only. Do NOT run build, tests, linters, or any command — `promote` re-executes build and tests as the real gate before this prompt can reach done/, so a criterion like \"tests green\" is verified there, not here. If the diff adds or updates the required tests and the code is correct, treat that criterion as satisfied; do NOT mark it unverifiable merely because you did not execute it.",
     `Write your verdict by editing ONLY the prompt file (${promptRelPath}): set frontmatter \`output_status\` to \`approved\` or \`changes-requested\`, and APPEND a new section under \`## Output review log\` (create the heading if absent) with the EXACT heading \`### Round ${nextRound} — <verdict>\` (never overwrite prior rounds), followed by bullet findings.`,
     "Use exactly the round number given above — do not compute or increment it yourself.",
-    "Default to changes-requested if anything is incomplete, out of scope, or unverifiable. Approval is earned.",
+    "Default to changes-requested if the diff is incomplete, out of scope, or logically inconsistent with the prompt — but NOT merely because a build or test command could not be executed in this environment. Approval is earned.",
     "Do NOT modify any other file, do NOT move files, do NOT commit.",
   ].join("\n\n");
 }
