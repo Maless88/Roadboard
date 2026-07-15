@@ -123,6 +123,7 @@ jobs:
         run: |
           DATABASE_URL=postgresql://roadboard:roadboard@localhost:5433/roadboard \
           AUTH_ACCESS_PORT=3002 \
+          AUTH_THROTTLE_LIMIT=1000 \
           node apps/auth-access/dist/main.js &
           npx wait-on http://localhost:3002/health --timeout 30000
 

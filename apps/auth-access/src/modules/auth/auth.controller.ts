@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './login.dto';
 import { RegisterDto } from './register.dto';
 import { AuthThrottlerGuard } from '../../common/throttler.guard';
+import { AUTH_THROTTLE_LIMIT, AUTH_THROTTLE_TTL_MS } from '../../common/throttle.config';
 
 
 @UseGuards(AuthThrottlerGuard)
@@ -21,7 +22,7 @@ export class AuthController {
   constructor(@Inject(AuthService) private readonly authService: AuthService) {}
 
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_THROTTLE_LIMIT, ttl: AUTH_THROTTLE_TTL_MS } })
   @Post('login')
   login(@Body() dto: LoginDto) {
 
@@ -29,7 +30,7 @@ export class AuthController {
   }
 
 
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_THROTTLE_LIMIT, ttl: AUTH_THROTTLE_TTL_MS } })
   @Post('register')
   register(@Body() dto: RegisterDto) {
 

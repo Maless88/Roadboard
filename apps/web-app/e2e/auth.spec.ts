@@ -13,7 +13,7 @@ test.describe('Authentication', () => {
   test('login page renders correctly', async ({ page }) => {
 
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'RoadBoard' })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'RoadBoard' })).toBeVisible();
     await expect(page.getByLabel('Username')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
