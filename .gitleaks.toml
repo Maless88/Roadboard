@@ -1,0 +1,21 @@
+# Gitleaks config — extends the default ruleset with repo-specific patterns
+# that GitHub secret scanning does not cover (private-infra identifiers).
+
+[extend]
+useDefault = true
+
+# Tailscale CGNAT addresses (100.64.0.0/10): private mesh IPs must never be committed.
+[[rules]]
+id = "tailnet-ipv4"
+description = "Tailscale CGNAT address (100.64.0.0/10)"
+regex = '''\b100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}\b'''
+
+# Identifiers already scrubbed from the repo tip once — block any reintroduction.
+[[rules]]
+id = "burned-personal-identifiers"
+description = "Personal/internal identifiers previously removed from the tip (Telegram chat id, internal hosts)"
+regex = '''218660141|cloud\.xstream-labs\.com|10\.4\.0\.23'''
+
+[allowlist]
+description = "The config itself necessarily contains the blocked literals"
+paths = ['''\.gitleaks\.toml''']
