@@ -1568,6 +1568,124 @@ output_round: 0
     expect(result.outputStatus).toBe("blocked-review");
     expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputStatus).toBe("blocked-review");
   });
+
+  it("REFUSES when output_status is not pending", () => {
+    writeFile(runDir, "feat-y.md", RUN_PROMPT.replace("output_status: pending", "output_status: approved"));
+
+    expect(() =>
+      runReviewOutput("y", { tasksDir, diffFn: () => "d", reviewFn: () => "approved", logFn: () => undefined }),
+    ).toThrow(/output_status="approved"/);
+  });
+
+  describe("default (file-based) Analyst path", () => {
+    let configPath: string;
+
+    function writeConfig(): void {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          adapters: {},
+          roles: {
+            architect: { binary: "claude", model: "opus", flags: ["--dangerously-skip-permissions"] },
+            analyst: { binary: "codex", flags: [] },
+          },
+        }),
+        "utf-8",
+      );
+    }
+
+    beforeEach(() => {
+      configPath = path.join(tmpDir, "adapters.json");
+      writeConfig();
+    });
+
+    it("reads the verdict back from the file the Analyst edited (approved)", () => {
+      const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+      const result = runReviewOutput("y", {
+        tasksDir,
+        configPath,
+        diffFn: () => "diff --git a/x b/x",
+        spawnFn: () => {
+          setOutputStatus(file, "approved");
+          fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- looks good\n");
+
+          return 0;
+        },
+        logFn: () => undefined,
+      });
+
+      expect(result.verdict).toBe("approved");
+      expect(result.outputStatus).toBe("approved");
+      expect(result.outputRound).toBe(1);
+      const parsed = parsePrompt(fs.readFileSync(file, "utf-8"));
+      expect(parsed.frontmatter.outputStatus).toBe("approved");
+      expect(parsed.frontmatter.outputRound).toBe(1);
+    });
+
+    it("reads the verdict back from the file the Analyst edited (changes-requested)", () => {
+      const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+      const result = runReviewOutput("y", {
+        tasksDir,
+        configPath,
+        diffFn: () => "d",
+        spawnFn: () => {
+          setOutputStatus(file, "changes-requested");
+          fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — changes-requested\n- missing tests\n");
+
+          return 0;
+        },
+        logFn: () => undefined,
+      });
+
+      expect(result.verdict).toBe("changes-requested");
+      expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputStatus).toBe("changes-requested");
+    });
+
+    it("falls back to changes-requested when the Analyst writes nothing parsable", () => {
+      const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+      const result = runReviewOutput("y", {
+        tasksDir,
+        configPath,
+        diffFn: () => "d",
+        spawnFn: () => 0, // Analyst "runs" but never touches output_status
+        logFn: () => undefined,
+      });
+
+      expect(result.verdict).toBe("changes-requested");
+      const out = fs.readFileSync(file, "utf-8");
+      expect(parsePrompt(out).frontmatter.outputStatus).toBe("changes-requested");
+      expect(out).toMatch(/### Round 1 — changes-requested/);
+      expect(out).toContain("did not write a parsable output_status");
+    });
+
+    it("round-number invariant: first review yields Round 1, second yields Round 2", () => {
+      const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+      let seenRound = 0;
+
+      const spawnFn = (_cmd: string, args: string[]) => {
+        const promptText = args.join(" ");
+        const match = promptText.match(/Round (\d+)/);
+        seenRound = match ? Number.parseInt(match[1], 10) : 0;
+        setOutputStatus(file, "changes-requested");
+        fs.appendFileSync(file, `\n## Output review log\n\n### Round ${seenRound} — changes-requested\n- more work needed\n`);
+
+        return 0;
+      };
+
+      const first = runReviewOutput("y", { tasksDir, configPath, diffFn: () => "d", spawnFn, logFn: () => undefined });
+      expect(seenRound).toBe(1);
+      expect(first.outputRound).toBe(1);
+      expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputRound).toBe(1);
+
+      // Worker addresses feedback and resets to pending for a second pass.
+      setOutputStatus(file, "pending");
+
+      const second = runReviewOutput("y", { tasksDir, configPath, diffFn: () => "d", spawnFn, logFn: () => undefined });
+      expect(seenRound).toBe(2);
+      expect(second.outputRound).toBe(2);
+      expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputRound).toBe(2);
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

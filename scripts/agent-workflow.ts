@@ -1434,6 +1434,13 @@ export interface ReviewOutputOptions {
     | "changes-requested"
     | { verdict: "approved" | "changes-requested"; notes?: string[] };
   diffFn?: (repoRoot: string) => string;
+  /**
+   * Injectable spawn for the DEFAULT (non-`reviewFn`) path — the process that
+   * would normally invoke the real Analyst adapter. Receives (command, args)
+   * and returns an exit code; tests use it to simulate the Analyst editing
+   * the prompt file in place instead of shelling out.
+   */
+  spawnFn?: (command: string, args: string[]) => number;
   logFn?: (msg: string) => void;
 }
 
@@ -1443,35 +1450,43 @@ interface AnalystReviewFnOptions {
   configPath: string;
   analyst: "codex" | "claude";
   repoRoot: string;
+  /** Round number the Analyst must transcribe into `### Round <n> — <verdict>`. */
+  nextRound: number;
   logFn: (msg: string) => void;
-  spawnFn?: (command: string, args: string[]) => { status: number | null; stdout: string };
+  spawnFn?: (command: string, args: string[]) => number;
 }
 
 
 /** Headless instruction handed to the Analyst for the OUTPUT review gate. */
-function buildOutputAnalystPrompt(promptRelPath: string, diffRelPath: string): string {
+function buildOutputAnalystPrompt(
+  promptRelPath: string,
+  diffRelPath: string,
+  nextRound: number,
+): string {
   return [
     "You are running in Analyst role — the OUTPUT review gate.",
     `A Worker has implemented the prompt at: ${promptRelPath}. The resulting git diff (vs HEAD) is saved at: ${diffRelPath}.`,
     "Read both files. Judge whether the diff satisfies the prompt's `## Scope` and `## Acceptance criteria`: completeness, scope cleanliness (no out-of-scope edits), correctness, safety.",
-    "Do NOT modify any file, do NOT move files, do NOT commit. Respond on stdout only.",
-    'Reply with bullet findings (lines starting with "- "), then ONE final line of exactly `VERDICT: approved` or `VERDICT: changes-requested`.',
-    "Default to changes-requested if anything is incomplete, out of scope, or unverifiable.",
+    `Write your verdict by editing ONLY the prompt file (${promptRelPath}): set frontmatter \`output_status\` to \`approved\` or \`changes-requested\`, and APPEND a new section under \`## Output review log\` (create the heading if absent) with the EXACT heading \`### Round ${nextRound} — <verdict>\` (never overwrite prior rounds), followed by bullet findings.`,
+    "Use exactly the round number given above — do not compute or increment it yourself.",
+    "Default to changes-requested if anything is incomplete, out of scope, or unverifiable. Approval is earned.",
+    "Do NOT modify any other file, do NOT move files, do NOT commit.",
   ].join("\n\n");
 }
 
 
 /**
  * Builds the default review function: invokes the configured Analyst adapter
- * (codex, or claude with the architect's model/flags), hands it the prompt
+ * (codex, or claude with the architect's model/flags), handing it the prompt
  * file plus the diff (written to .agent/ to dodge argv size limits), and
- * parses the `VERDICT:` line from stdout. Unparsable output is conservative:
- * changes-requested.
+ * instructing it to write its verdict directly into the prompt file — mirroring
+ * `buildAnalystPrompt`'s file-edit pattern for the prompt-side gate. The caller
+ * (`runReviewOutput`) reads the verdict back from disk; this function only
+ * drives the spawn and throws on a non-zero exit.
  */
 function makeAnalystReviewFn(
   opts: AnalystReviewFnOptions,
-): (input: { diff: string; context: string; promptFile: string }) =>
-  { verdict: "approved" | "changes-requested"; notes: string[] } {
+): (input: { diff: string; context: string; promptFile: string }) => void {
   const config = loadAdaptersConfig(opts.configPath);
 
   if (config === null || !config.roles) {
@@ -1493,13 +1508,9 @@ function makeAnalystReviewFn(
   const spawn =
     opts.spawnFn ??
     ((command: string, args: string[]) => {
-      const r = child_process.spawnSync(command, args, {
-        cwd: opts.repoRoot,
-        encoding: "utf-8",
-        maxBuffer: 20 * 1024 * 1024,
-      });
+      const r = child_process.spawnSync(command, args, { cwd: opts.repoRoot, stdio: "inherit" });
 
-      return { status: r.status, stdout: `${r.stdout ?? ""}\n${r.stderr ?? ""}` };
+      return r.status ?? 1;
     });
 
   return (input) => {
@@ -1512,55 +1523,15 @@ function makeAnalystReviewFn(
     const promptText = buildOutputAnalystPrompt(
       path.relative(opts.repoRoot, input.promptFile),
       path.relative(opts.repoRoot, diffPath),
+      opts.nextRound,
     );
     const { command, args } = buildRoleInvocation(analystRole, promptText, opts.repoRoot);
     opts.logFn(`[review-output] Analyst (${analystRole.binary}) reviewing diff…`);
-    const r = spawn(command, args);
+    const code = spawn(command, args);
 
-    if (r.status !== 0) {
-      throw new Error(`Analyst step failed (exit ${r.status ?? "unknown"}).`);
+    if (code !== 0) {
+      throw new Error(`Analyst step failed (exit ${code}).`);
     }
-
-    const verdictMatches = [...r.stdout.matchAll(/VERDICT:\s*(approved|changes-requested)/gi)];
-    const last = verdictMatches.length > 0 ? verdictMatches[verdictMatches.length - 1] : null;
-    const parsed = last ? last[1].toLowerCase() : null;
-
-    // Findings are the contiguous bullet block immediately preceding the final
-    // VERDICT line — codex's session log echoes prompt-file bullets earlier in
-    // stdout, so a global bullet grep would pick up quoted noise.
-    const before = last ? r.stdout.slice(0, last.index) : r.stdout;
-    const lines = before.split(/\r?\n/).map((l) => l.trim());
-    const notes: string[] = [];
-
-    for (let i = lines.length - 1; i >= 0; i--) {
-      if (lines[i] === "") {
-        continue;
-      }
-
-      if (/^[-*] /.test(lines[i])) {
-        notes.unshift(lines[i].replace(/^[-*] /, ""));
-
-        if (notes.length >= 10) {
-          break;
-        }
-
-        continue;
-      }
-
-      break;
-    }
-
-    if (parsed === null) {
-      return {
-        verdict: "changes-requested",
-        notes: [
-          "Analyst output did not contain a parsable VERDICT line — conservative changes-requested.",
-          ...notes,
-        ],
-      };
-    }
-
-    return { verdict: parsed as "approved" | "changes-requested", notes };
   };
 }
 
@@ -1597,10 +1568,24 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
   const promptFile = findPromptFileInFolder(slug, "run", tasksDir);
   const content = fs.readFileSync(promptFile, "utf-8");
   const parsed = parsePrompt(content);
+
+  // Gate: only review a Worker's declared-complete result. A prompt fresh out
+  // of a changes-requested round must have its output_status reset to
+  // `pending` (by the Worker, after addressing the feedback) before another
+  // review-output pass is allowed.
+  if (parsed.frontmatter.outputStatus !== "pending") {
+    throw new Error(
+      `Refusing review-output: prompt "${path.basename(promptFile)}" has ` +
+      `output_status="${parsed.frontmatter.outputStatus ?? parsed.frontmatter.raw["output_status"] ?? "none"}" ` +
+      "(expected \"pending\" — the Worker has not declared completion).",
+    );
+  }
+
   const prevRound = parsed.frontmatter.outputRound ?? 0;
   const nextRound = prevRound + 1;
 
-  // Round cap → blocked-review (mirrors runReview).
+  // Round cap → blocked-review (mirrors runReview). Checked BEFORE any Analyst
+  // invocation so a capped prompt never triggers a wasted spawn.
   if (prevRound >= maxRounds) {
     setOutputStatus(promptFile, "blocked-review");
     appendOutputReviewRound(promptFile, nextRound, "blocked-review", [
@@ -1612,25 +1597,66 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
     return { slug, promptFile, outputStatus: "blocked-review", outputRound: nextRound, verdict: "blocked-review" };
   }
 
-  // Resolved after the round-cap check so a missing config surfaces as a hard
-  // error only when a real review is actually about to run.
-  const reviewFn =
-    options.reviewFn ??
-    makeAnalystReviewFn({
+  const diff = diffFn(repoRoot);
+  const context = extractScopeAndCriteria(content);
+
+  // The injected (test) reviewFn path keeps today's behavior: it returns a
+  // verdict directly, and this function writes the frontmatter + log itself.
+  // The DEFAULT path spawns the real Analyst, which edits the prompt file
+  // in place (frontmatter + `## Output review log` round) — this function
+  // then reads the verdict back from disk, mirroring runReview's
+  // readPromptStatus pattern. Resolved after the round-cap check so a
+  // missing config surfaces as a hard error only when a real review is
+  // actually about to run.
+  if (options.reviewFn === undefined) {
+    const analystFn = makeAnalystReviewFn({
       configPath: options.configPath ?? ADAPTERS_CONFIG_PATH,
       analyst: options.analyst ?? "codex",
       repoRoot,
+      nextRound,
       logFn: log,
+      spawnFn: options.spawnFn,
     });
 
-  const diff = diffFn(repoRoot);
-  const context = extractScopeAndCriteria(content);
+    let verdict: "approved" | "changes-requested";
+
+    try {
+      analystFn({ diff, context, promptFile });
+
+      const after = parsePrompt(fs.readFileSync(promptFile, "utf-8"));
+
+      if (after.frontmatter.outputStatus === "approved" || after.frontmatter.outputStatus === "changes-requested") {
+        verdict = after.frontmatter.outputStatus;
+      }
+
+      else {
+        verdict = "changes-requested";
+        appendOutputReviewRound(promptFile, nextRound, verdict, [
+          "Analyst did not write a parsable output_status — conservative changes-requested.",
+        ]);
+      }
+    }
+
+    catch (err) {
+      log(`[review-output] reviewer failed (${err instanceof Error ? err.message : String(err)}) — conservative changes-requested.`);
+      verdict = "changes-requested";
+      appendOutputReviewRound(promptFile, nextRound, verdict, [
+        `Analyst step failed: ${err instanceof Error ? err.message : String(err)} — conservative changes-requested.`,
+      ]);
+    }
+
+    setOutputStatus(promptFile, verdict);
+    setOutputRound(promptFile, nextRound);
+    log(`[review-output] round ${nextRound} verdict: ${verdict}`);
+
+    return { slug, promptFile, outputStatus: verdict, outputRound: nextRound, verdict };
+  }
 
   let verdict: "approved" | "changes-requested";
   let analystNotes: string[] = [];
 
   try {
-    const v = reviewFn({ diff, context, promptFile });
+    const v = options.reviewFn({ diff, context, promptFile });
 
     if (typeof v === "object" && v !== null) {
       verdict = v.verdict === "approved" ? "approved" : "changes-requested";
