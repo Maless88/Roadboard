@@ -1175,6 +1175,13 @@ export interface ReviewOptions {
   configPath?: string;
   spawnFn?: (command: string, args: string[]) => number;
   logFn?: (msg: string) => void;
+  /**
+   * Injectable working-tree snapshot for the integrity guard. Defaults to
+   * `snapshotWorkingTree`. Tests inject a function returning a constant
+   * string (no-op) or a value that changes between calls (simulated
+   * out-of-scope Analyst edit).
+   */
+  snapshotFn?: (repoRoot: string) => string;
 }
 
 export interface ReviewResult {
@@ -1357,6 +1364,126 @@ function buildAnalystPrompt(relPath: string): string {
 }
 
 /**
+ * Content-sensitive working-tree snapshot: `git status --porcelain` (catches
+ * new/deleted/renamed paths) combined with `git diff HEAD` (carries the full
+ * content of every tracked-file modification, so a mutation inside a file
+ * that was ALREADY dirty before the Analyst ran is still detected even though
+ * its porcelain line does not change).
+ */
+export function snapshotWorkingTree(repoRoot: string): string {
+  const opts = { cwd: repoRoot, encoding: "utf-8" as const, maxBuffer: 20 * 1024 * 1024 };
+  const status = child_process.spawnSync("git", ["status", "--porcelain"], opts);
+  const diff = child_process.spawnSync("git", ["diff", "HEAD"], opts);
+
+  return `${status.stdout ?? ""}\n===DIFF===\n${diff.stdout ?? ""}`;
+}
+
+/** Extracts the path from a `git status --porcelain` line (handles renames). */
+function porcelainPath(line: string): string {
+  const rest = line.slice(3).trim();
+  const arrow = rest.indexOf(" -> ");
+
+  return arrow >= 0 ? rest.slice(arrow + 4).trim() : rest;
+}
+
+/** Splits a `git diff` payload into per-file blocks keyed by the "b/" path. */
+function extractDiffBlocksByPath(diffText: string): Map<string, string> {
+  const blocks = diffText.split(/(?=^diff --git )/m).filter((b) => b.trim() !== "");
+  const map = new Map<string, string>();
+
+  for (const block of blocks) {
+    const m = block.match(/^diff --git a\/(.+?) b\/(.+?)\r?\n/);
+    map.set(m ? m[2] : block.slice(0, 40), block);
+  }
+
+  return map;
+}
+
+/**
+ * Compares two `snapshotWorkingTree` outputs, ignoring changes confined to
+ * the prompt file under review, and returns the offending paths (empty when
+ * the tree is otherwise unchanged).
+ */
+function diffWorkingTreeSnapshots(before: string, after: string, promptRelPath: string): string[] {
+  const normalizedPrompt = promptRelPath.replace(/\\/g, "/");
+  const [statusBefore = "", diffBefore = ""] = before.split("\n===DIFF===\n");
+  const [statusAfter = "", diffAfter = ""] = after.split("\n===DIFF===\n");
+
+  const parseLines = (text: string): Set<string> =>
+    new Set(
+      text.split("\n").filter((l) => l.trim() !== "" && porcelainPath(l) !== normalizedPrompt),
+    );
+
+  const offending = new Set<string>();
+  const beforeLines = parseLines(statusBefore);
+  const afterLines = parseLines(statusAfter);
+
+  for (const line of beforeLines) {
+    if (!afterLines.has(line)) offending.add(porcelainPath(line));
+  }
+
+  for (const line of afterLines) {
+    if (!beforeLines.has(line)) offending.add(porcelainPath(line));
+  }
+
+  const diffBlocksBefore = extractDiffBlocksByPath(diffBefore);
+  const diffBlocksAfter = extractDiffBlocksByPath(diffAfter);
+  diffBlocksBefore.delete(normalizedPrompt);
+  diffBlocksAfter.delete(normalizedPrompt);
+
+  for (const key of new Set([...diffBlocksBefore.keys(), ...diffBlocksAfter.keys()])) {
+    if (diffBlocksBefore.get(key) !== diffBlocksAfter.get(key)) offending.add(key);
+  }
+
+  return [...offending];
+}
+
+/**
+ * Throws if the working tree changed between two snapshots outside the
+ * reviewed prompt file — an Analyst is only ever allowed to edit that file.
+ */
+function assertWorkingTreeUnchanged(
+  before: string,
+  after: string,
+  promptRelPath: string,
+  stepLabel: string,
+): void {
+  const offending = diffWorkingTreeSnapshots(before, after, promptRelPath);
+
+  if (offending.length > 0) {
+    throw new Error(
+      `${stepLabel}: Analyst modified tracked files outside the reviewed prompt: ${offending.join(", ")}.`,
+    );
+  }
+}
+
+/**
+ * Throws if `sectionHeading` (e.g. "## Review log") does not contain a
+ * `### Round <round>` entry — guards against a verdict written without the
+ * matching append-only log round.
+ */
+function assertLogRoundPresent(
+  filePath: string,
+  sectionHeading: string,
+  round: number,
+  stepLabel: string,
+): void {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const escapedHeading = sectionHeading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const sectionMatch = content.match(
+    new RegExp(`^${escapedHeading}\\s*([\\s\\S]*?)(?=\\n## |(?![\\s\\S]))`, "im"),
+  );
+  const body = sectionMatch ? sectionMatch[1] : "";
+  const roundRe = new RegExp(`###\\s+Round\\s+${round}\\s*[—-]`, "i");
+
+  if (!roundRe.test(body)) {
+    throw new Error(
+      `${stepLabel}: verdict written without a matching "### Round ${round}" entry in "${sectionHeading}" — rejecting.`,
+    );
+  }
+}
+
+/**
  * Drive the Architect <-> Analyst review loop until the prompt reaches
  * `status: approved`, or `blocked-review` after maxRounds without convergence.
  * Architect = claude; Analyst = codex by default, or claude when analyst="claude".
@@ -1442,17 +1569,25 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
     }
 
     // Analyst step: write verdict into the prompt
+    const expectedRound = parsePrompt(fs.readFileSync(promptFile, "utf-8")).frontmatter.reviewRound ?? 0;
     log(`[review] round ${i + 1}: Analyst (${analystRole.binary}) reviewing…`);
     const { command, args } = buildRoleInvocation(analystRole, buildAnalystPrompt(relPath), ROOT);
+    const snapshotFn = options.snapshotFn ?? snapshotWorkingTree;
+    const treeBefore = snapshotFn(ROOT);
     const code = spawn(command, args);
+    const treeAfter = snapshotFn(ROOT);
 
     if (code !== 0) {
       throw new Error(`Analyst step failed (exit ${code}).`);
     }
 
+    assertWorkingTreeUnchanged(treeBefore, treeAfter, relPath, "[review]");
+
     rounds++;
     const verdict = readPromptStatus(promptFile);
     log(`[review] round ${i + 1} verdict: ${verdict ?? "unknown"}`);
+
+    assertLogRoundPresent(promptFile, "## Review log", expectedRound, "[review]");
 
     if (verdict === "approved") {
       return { slug, promptFile, finalStatus: verdict, rounds, outcome: "approved" };
@@ -1540,6 +1675,11 @@ export interface ReviewOutputOptions {
   logFn?: (msg: string) => void;
   /** Bypass the single-task-in-run guard. */
   force?: boolean;
+  /**
+   * Injectable working-tree snapshot for the integrity guard. Defaults to
+   * `snapshotWorkingTree`. Only applies to the default (non-`reviewFn`) path.
+   */
+  snapshotFn?: (repoRoot: string) => string;
 }
 
 
@@ -1722,13 +1862,19 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
     });
 
     let verdict: "approved" | "changes-requested";
+    const snapshotFn = options.snapshotFn ?? snapshotWorkingTree;
 
     try {
+      const treeBefore = snapshotFn(repoRoot);
       analystFn({ diff, context, promptFile });
+      const treeAfter = snapshotFn(repoRoot);
+
+      assertWorkingTreeUnchanged(treeBefore, treeAfter, path.relative(repoRoot, promptFile), "[review-output]");
 
       const after = parsePrompt(fs.readFileSync(promptFile, "utf-8"));
 
       if (after.frontmatter.outputStatus === "approved" || after.frontmatter.outputStatus === "changes-requested") {
+        assertLogRoundPresent(promptFile, "## Output review log", nextRound, "[review-output]");
         verdict = after.frontmatter.outputStatus;
       }
 

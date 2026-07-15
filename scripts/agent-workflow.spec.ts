@@ -1,3 +1,4 @@
+import * as child_process from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -1269,8 +1270,21 @@ describe("runReview", () => {
     );
   }
 
+  // Appends a "### Round N — verdict" entry under "## Review log" (creating
+  // the heading if absent), mirroring what a real Analyst writes in place.
+  function appendReviewLogRound(file: string, round: number, verdict: string): void {
+    const content = fs.readFileSync(file, "utf-8");
+    const entry = `### Round ${round} — ${verdict}\n- simulated verdict\n`;
+    const updated = /## Review log/i.test(content)
+      ? `${content.replace(/\s*$/, "\n")}\n${entry}`
+      : `${content.replace(/\s*$/, "\n")}\n## Review log\n\n${entry}`;
+
+    fs.writeFileSync(file, updated, "utf-8");
+  }
+
   // Simulates the two agents by mutating the prompt's frontmatter status:
-  // an Architect call sets in-review; an Analyst call applies the next scripted verdict.
+  // an Architect call sets in-review; an Analyst call applies the next scripted verdict
+  // and appends the matching "## Review log" round (required by the integrity guard).
   function makeSpawn(file: string, verdicts: string[]): (cmd: string, args: string[]) => number {
     let v = 0;
 
@@ -1282,7 +1296,10 @@ describe("runReview", () => {
       }
 
       else if (text.includes("Analyst role")) {
-        setPromptStatus(file, (verdicts[v++] ?? "changes-requested") as never);
+        const verdict = (verdicts[v++] ?? "changes-requested") as never;
+        const round = parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.reviewRound ?? 0;
+        setPromptStatus(file, verdict);
+        appendReviewLogRound(file, round, verdict);
       }
 
       return 0;
@@ -1372,6 +1389,7 @@ describe("runReview", () => {
 
       else if (text.includes("Analyst role")) {
         setPromptStatus(file, "approved");
+        appendReviewLogRound(file, 0, "approved");
       }
 
       return 0;
@@ -1380,6 +1398,61 @@ describe("runReview", () => {
     expect(result.outcome).toBe("approved");
     // both architect and analyst invoked the claude binary
     expect(seen.every((c) => c === "claude")).toBe(true);
+  });
+
+  describe("integrity guards", () => {
+    it("happy path: no-op snapshotFn never trips the working-tree guard", () => {
+      const file = writeFile(todoDir, "feat-g.md", "---\nstatus: draft\nreview_round: 0\n---\n# g\n");
+      const result = runReview("g", {
+        tasksDir,
+        configPath,
+        spawnFn: makeSpawn(file, ["approved"]),
+        snapshotFn: () => "constant",
+        logFn: () => undefined,
+      });
+
+      expect(result.outcome).toBe("approved");
+    });
+
+    it("throws when the Analyst mutates the working tree beyond the reviewed prompt", () => {
+      const file = writeFile(todoDir, "feat-h.md", "---\nstatus: draft\nreview_round: 0\n---\n# h\n");
+      let call = 0;
+      const result = runReview;
+
+      expect(() =>
+        result("h", {
+          tasksDir,
+          configPath,
+          spawnFn: makeSpawn(file, ["approved"]),
+          snapshotFn: () => (call++ === 0 ? "before" : "after: scripts/foo.ts changed"),
+          logFn: () => undefined,
+        }),
+      ).toThrow(/Analyst modified tracked files outside the reviewed prompt/);
+    });
+
+    it("throws when the Analyst verdict has no matching Review log round", () => {
+      const file = writeFile(todoDir, "feat-i.md", "---\nstatus: draft\nreview_round: 0\n---\n# i\n");
+      const spawnFn = (_cmd: string, args: string[]) => {
+        const text = args.join(" ");
+
+        if (text.includes("Architect role")) {
+          setPromptStatus(file, "in-review");
+        }
+
+        else if (text.includes("Analyst role")) {
+          // Verdict written WITHOUT appending a "## Review log" round.
+          setPromptStatus(file, "approved");
+        }
+
+        return 0;
+      };
+
+      expect(() =>
+        runReview("i", {
+          tasksDir, configPath, spawnFn, snapshotFn: () => "constant", logFn: () => undefined,
+        }),
+      ).toThrow(/verdict written without a matching "### Round 0" entry/);
+    });
   });
 });
 
@@ -1857,6 +1930,203 @@ output_round: 0
       expect(second.outputRound).toBe(2);
       expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputRound).toBe(2);
     });
+
+    describe("integrity guards", () => {
+      it("happy path: no-op snapshotFn never trips the working-tree guard", () => {
+        const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+        const result = runReviewOutput("y", {
+          tasksDir,
+          configPath,
+          diffFn: () => "d",
+          snapshotFn: () => "constant",
+          spawnFn: () => {
+            setOutputStatus(file, "approved");
+            fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- looks good\n");
+
+            return 0;
+          },
+          logFn: () => undefined,
+        });
+
+        expect(result.verdict).toBe("approved");
+      });
+
+      it("falls back to changes-requested when the Analyst mutates the working tree beyond the reviewed prompt", () => {
+        const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+        let call = 0;
+        const result = runReviewOutput("y", {
+          tasksDir,
+          configPath,
+          diffFn: () => "d",
+          snapshotFn: () => (call++ === 0 ? "before" : "after: scripts/foo.ts changed"),
+          spawnFn: () => {
+            setOutputStatus(file, "approved");
+            fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- looks good\n");
+
+            return 0;
+          },
+          logFn: () => undefined,
+        });
+
+        expect(result.verdict).toBe("changes-requested");
+        expect(fs.readFileSync(file, "utf-8")).toContain("Analyst modified tracked files outside the reviewed prompt");
+      });
+
+      it("falls back to changes-requested when the verdict has no matching Output review log round", () => {
+        const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+        const result = runReviewOutput("y", {
+          tasksDir,
+          configPath,
+          diffFn: () => "d",
+          snapshotFn: () => "constant",
+          spawnFn: () => {
+            // Verdict written WITHOUT appending an "## Output review log" round.
+            setOutputStatus(file, "approved");
+
+            return 0;
+          },
+          logFn: () => undefined,
+        });
+
+        expect(result.verdict).toBe("changes-requested");
+        expect(fs.readFileSync(file, "utf-8")).toContain('verdict written without a matching "### Round 1" entry');
+      });
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Integrity guard: real-git dirty-tree detection (snapshotWorkingTree)
+// ---------------------------------------------------------------------------
+
+describe("runReviewOutput — real-git dirty-tree detection", () => {
+  let repoRoot: string;
+  let tasksDir: string;
+  let runDir: string;
+  let configPath: string;
+
+  const RUN_PROMPT = `---
+status: approved
+review_round: 2
+output_status: pending
+output_round: 0
+---
+
+# feat-z: z
+
+## Scope
+
+- Implement Z
+
+## Acceptance criteria
+
+- [x] Z works
+`;
+
+  function git(args: string[]): void {
+    child_process.execFileSync("git", args, { cwd: repoRoot, encoding: "utf-8" });
+  }
+
+  beforeEach(() => {
+    repoRoot = makeTempDir();
+    git(["init", "-q"]);
+    git(["config", "user.email", "test@test.com"]);
+    git(["config", "user.name", "Test"]);
+    fs.writeFileSync(path.join(repoRoot, "foo.ts"), "export const a = 1;\n");
+    // Mirrors the real project: .agent/ (the default Analyst diff-file scratch
+    // dir) is gitignored, so its writes never surface in `git status`.
+    fs.writeFileSync(path.join(repoRoot, ".gitignore"), ".agent/\n");
+    tasksDir = path.join(repoRoot, "tasks");
+    runDir = path.join(tasksDir, "run");
+    fs.mkdirSync(runDir, { recursive: true });
+    // Track tasks/run/ itself so a later new prompt file shows as its own
+    // "?? tasks/run/<file>" porcelain line rather than a collapsed untracked
+    // "?? tasks/" directory entry.
+    fs.writeFileSync(path.join(runDir, ".gitkeep"), "");
+    configPath = path.join(repoRoot, "adapters.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        adapters: {},
+        roles: {
+          architect: { binary: "claude", model: "opus", flags: [] },
+          analyst: { binary: "codex", flags: [] },
+        },
+      }),
+      "utf-8",
+    );
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "init"]);
+  });
+
+  afterEach(() => {
+    fs.rmSync(repoRoot, { recursive: true, force: true });
+  });
+
+  it("detects a newly-modified tracked file (positive)", () => {
+    const file = writeFile(runDir, "feat-z.md", RUN_PROMPT);
+    const result = runReviewOutput("z", {
+      tasksDir,
+      configPath,
+      repoRoot,
+      diffFn: () => "d",
+      spawnFn: () => {
+        // Analyst mutates a tracked file that was clean before this step.
+        fs.writeFileSync(path.join(repoRoot, "foo.ts"), "export const a = 2;\n");
+        setOutputStatus(file, "approved");
+        fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- ok\n");
+
+        return 0;
+      },
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("changes-requested");
+    expect(fs.readFileSync(file, "utf-8")).toContain("foo.ts");
+  });
+
+  it("detects a content change inside an already-dirty tracked file (positive)", () => {
+    // foo.ts is ALREADY dirty before the Analyst step — porcelain shows "M foo.ts"
+    // both before and after, so only the git-diff content comparison catches this.
+    fs.writeFileSync(path.join(repoRoot, "foo.ts"), "export const a = 2;\n");
+    const file = writeFile(runDir, "feat-z.md", RUN_PROMPT);
+    const result = runReviewOutput("z", {
+      tasksDir,
+      configPath,
+      repoRoot,
+      diffFn: () => "d",
+      spawnFn: () => {
+        fs.writeFileSync(path.join(repoRoot, "foo.ts"), "export const a = 3;\n");
+        setOutputStatus(file, "approved");
+        fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- ok\n");
+
+        return 0;
+      },
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("changes-requested");
+    expect(fs.readFileSync(file, "utf-8")).toContain("foo.ts");
+  });
+
+  it("ignores a change confined to the prompt file under review (negative)", () => {
+    const file = writeFile(runDir, "feat-z.md", RUN_PROMPT);
+    const result = runReviewOutput("z", {
+      tasksDir,
+      configPath,
+      repoRoot,
+      diffFn: () => "d",
+      spawnFn: () => {
+        // Only the reviewed prompt file changes — expected and exempted.
+        setOutputStatus(file, "approved");
+        fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- ok\n");
+
+        return 0;
+      },
+      logFn: () => undefined,
+    });
+
+    expect(result.verdict).toBe("approved");
   });
 });
 
