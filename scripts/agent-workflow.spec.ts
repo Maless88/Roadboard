@@ -893,6 +893,71 @@ describe("runWorker", () => {
     expect(output).toContain("feat-go.md");
   });
 
+  it("moves the approved prompt todo/ → run/ as part of spawning", () => {
+    writeFile(
+      todoDir,
+      "feat-move.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# move prompt\n",
+    );
+
+    const result = runWorker("move", "worker", {
+      tasksDir,
+      configPath,
+      execFn: () => "ok",
+      logFn: () => undefined,
+    });
+
+    expect(fs.existsSync(path.join(todoDir, "feat-move.md"))).toBe(false);
+    expect(fs.existsSync(path.join(tasksDir, "run", "feat-move.md"))).toBe(true);
+    expect(result.promptFile).toContain(path.join("run", "feat-move.md"));
+  });
+
+  it("runs an approved prompt already in run/ (retry) without moving", () => {
+    const runDir = path.join(tasksDir, "run");
+    fs.mkdirSync(runDir, { recursive: true });
+    writeFile(
+      runDir,
+      "feat-retry.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# retry prompt\n",
+    );
+
+    const result = runWorker("retry", "worker", {
+      tasksDir,
+      configPath,
+      execFn: () => "ok",
+      logFn: () => undefined,
+    });
+
+    expect(result.dryRun).toBe(false);
+    expect(fs.existsSync(path.join(runDir, "feat-retry.md"))).toBe(true);
+    expect(result.promptFile).toContain(path.join("run", "feat-retry.md"));
+  });
+
+  it("dry-run does not move the file todo/ → run/", () => {
+    writeFile(
+      todoDir,
+      "feat-dry.md",
+      "---\nstatus: approved\nreview_round: 1\n---\n# dry prompt\n",
+    );
+
+    runWorker("dry", "worker", {
+      tasksDir,
+      configPath,
+      dryRun: true,
+      execFn: () => "",
+      logFn: () => undefined,
+    });
+
+    expect(fs.existsSync(path.join(todoDir, "feat-dry.md"))).toBe(true);
+    expect(fs.existsSync(path.join(tasksDir, "run", "feat-dry.md"))).toBe(false);
+  });
+
+  it("throws when the prompt is in neither todo/ nor run/", () => {
+    expect(() => runWorker("ghost", "worker", { tasksDir, configPath })).toThrow(
+      /No prompt file found in tasks\/todo\/ or tasks\/run\/ matching slug: "ghost"/,
+    );
+  });
+
   it("throws when the adapter is disabled, even for an approved prompt", () => {
     fs.writeFileSync(
       configPath,

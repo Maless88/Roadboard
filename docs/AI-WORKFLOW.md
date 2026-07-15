@@ -39,8 +39,10 @@ The CLI encodes the same gate: `pnpm agent:workflow run --slug <slug> --adapter 
 
 ### 2. GO to Worker (manual)
 
-7. Architect moves the prompt `tasks/todo/` → `tasks/run/` and spawns the Worker (via the Agent tool, or via `pnpm agent:workflow run --slug <slug> --adapter <name>` for the optional CLI adapter path).
-8. This move and spawn are always manual. Nothing in the CLI moves a file from `todo/` to `run/` on its own — `run` only checks the gate and invokes the adapter on a file already understood to be in play.
+7. The prompt goes `tasks/todo/` → `tasks/run/` and a Worker is spawned. Two paths:
+   - **Agent-tool subagent** (the operating-model default in `CLAUDE.md`): the Architect moves the file manually, then spawns the subagent pointed at it.
+   - **CLI adapter** (`pnpm agent:workflow run --slug <slug> --adapter <name>`): the command itself moves the approved prompt `todo/` → `run/` as part of spawning, then invokes the adapter on the `run/` path. A prompt already in `run/` (a retry) is used in place. `--dry-run` reports the move without performing it.
+8. Either way the move happens only for an `approved` prompt (the `run` command refuses any other status). `run` moves `todo/` → `run/` but never `run/` → `done/` — that transition belongs to `promote` alone.
 
 ### 3. Output review loop (`run/`, after the Worker finishes)
 
@@ -112,6 +114,10 @@ Analyst appends `### Round 1 — changes-requested` to `## Review log` with a pr
 pnpm agent:workflow ready
 # feat-mcp-auth-token-refresh.md — approved (spawnable)
 
+# CLI adapter path — `run` moves todo/ → run/ itself, then spawns the adapter:
+pnpm agent:workflow run --slug fix-mcp-auth-token-refresh --adapter claude
+
+# — or — Agent-tool subagent path (move manually, then spawn the subagent):
 mv tasks/todo/fix-mcp-auth-token-refresh.md tasks/run/
 # → Architect spawns a Worker subagent pointed at the file
 ```
@@ -152,7 +158,7 @@ pnpm agent:workflow <command> [options]
 | `ready` | — | Partition `tasks/todo/` prompts into approved (spawnable) vs. pending |
 | `sync` | — | Regenerate `TASK_LIST.md` from `tasks/todo/`, `tasks/run/`, and `tasks/done/` |
 | `review` | `--slug <slug> [--analyst <codex\|claude>] [--max-rounds <n>]` | Drive the Architect↔Analyst **prompt** review loop to convergence (`approved` or `blocked-review`) |
-| `run` | `--slug <slug> --adapter <name> [--dry-run]` | Spawn a Worker adapter on an **approved** prompt — refuses any other status |
+| `run` | `--slug <slug> --adapter <name> [--dry-run]` | Move an **approved** prompt `todo/`→`run/` and spawn a Worker adapter on it — refuses any other status |
 | `review-output` | `--slug <slug> [--max-rounds <n>]` | Review a finished Worker's result in `tasks/run/`: diff + Scope/Acceptance → `output_status` verdict + `## Output review log` round |
 | `promote` | `--slug <slug> [--dry-run]` | The single `run/`→`done/` path: requires `output_status: approved`, re-runs build + tests, enforces evidence |
 | `adapters <sub>` | see below | Optional model CLI adapter layer (opt-in, safe by default) |
@@ -206,7 +212,7 @@ pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude
 pnpm agent:workflow run --slug feat-task-bulk-delete --adapter claude --dry-run
 ```
 
-Refuses immediately if the prompt's `status` is not `approved`. `--dry-run` prints the command that would run without invoking anything. On success, adapter output is saved under `tasks/run/<slug>-<adapter>-output.md` (or the adapter's configured `outputDir`).
+Refuses immediately if the prompt's `status` is not `approved`. Otherwise it moves the prompt `todo/`→`run/` (a prompt already in `run/` — a retry — is used in place), then invokes the adapter on the `run/` path. `--dry-run` reports the move and prints the command that would run, without moving or invoking anything. On success, adapter output is saved under the adapter's configured `outputDir` (default `.agent/worker-output/<slug>-<adapter>-output.md` — kept out of `tasks/run/` so it never pollutes lifecycle counts).
 
 **`review-output --slug <slug>`** — review the Worker's result:
 
@@ -300,7 +306,7 @@ Passive, read-only commands — never invoke a model CLI, never touch git, never
 `review`, `run`, `review-output`, and `promote` are the commands that actually change state:
 
 - `review` invokes the configured Analyst/Architect role binaries and edits the prompt's frontmatter + `## Review log`. It never moves files or spawns a Worker.
-- `run` invokes a Worker adapter, but **only** on a prompt already `status: approved`. It never moves files between `tasks/` folders and never updates RoadBoard.
+- `run` invokes a Worker adapter, but **only** on a prompt already `status: approved`. It moves the approved prompt `todo/` → `run/` as part of spawning (a prompt already in `run/` is used in place; `--dry-run` reports the move without doing it), but never moves `run/` → `done/` and never updates RoadBoard.
 - `review-output` invokes the configured reviewer and edits `output_status` + `## Output review log`. It never moves files.
 - `promote` is the only command that moves a file from `run/` to `done/`, and only after all three gates (output approval, green build+tests, evidence) pass. `--dry-run` reports the same checks without running commands or moving anything.
 
@@ -312,4 +318,4 @@ The CLI is designed to never:
 - Update RoadBoard task statuses
 - Modify `PLAN.md` or `CLAUDE.md`
 
-All `todo/`→`run/` moves and RoadBoard/`PLAN.md` updates are manual actions performed by the Architect or Developer, per `CLAUDE.md`.
+`todo/`→`run/` is performed either manually (Agent-tool subagent path) or by the `run` command itself (CLI adapter path); RoadBoard/`PLAN.md` updates remain manual actions performed by the Architect or Developer, per `CLAUDE.md`. The `run/`→`done/` move is `promote`'s alone.

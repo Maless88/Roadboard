@@ -1010,7 +1010,28 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
     child_process.execFileSync(binary, args, { ...opts, encoding: "utf-8" }) as string);
   const log = options.logFn ?? ((msg: string) => console.log(msg));
 
-  const promptFile = findPromptFile(slug, tasksDir);
+  // Resolve the prompt: normally in todo/ (the Architect drafted and approved it
+  // there); fall back to run/ for a retry whose file a prior run already moved.
+  let promptFile: string;
+  let inTodo = false;
+
+  try {
+    promptFile = findPromptFile(slug, tasksDir);
+    inTodo = true;
+  }
+
+  catch {
+    try {
+      promptFile = findPromptFileInFolder(slug, "run", tasksDir);
+    }
+
+    catch {
+      throw new Error(
+        `No prompt file found in tasks/todo/ or tasks/run/ matching slug: "${slug}"`,
+      );
+    }
+  }
+
   const status = readPromptStatus(promptFile);
 
   // --- Review gate -----------------------------------------------------------
@@ -1038,10 +1059,17 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
   }
 
   const command = adapterCfg.binary;
-  const args = [...(adapterCfg.flags ?? []), promptFile];
 
   if (dryRun) {
-    log(`[dry-run] would run worker on approved prompt: ${command} ${args.join(" ")}`);
+    // Report the move without performing it; args reflect the post-move run/ path.
+    const wouldPath = inTodo
+      ? path.join(tasksDir, "run", path.basename(promptFile))
+      : promptFile;
+    const args = [...(adapterCfg.flags ?? []), wouldPath];
+    log(
+      `[dry-run] would ${inTodo ? "move todo/→run/ then " : ""}run worker on approved prompt: ` +
+      `${command} ${args.join(" ")}`,
+    );
 
     return { slug, promptFile, adapter: adapterName, status, dryRun: true, command, args, outputPath: null };
   }
@@ -1052,6 +1080,20 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
       "Set enabled: true in the config to proceed.",
     );
   }
+
+  // Spawn = move the approved prompt todo/ → run/, then invoke the Worker on the
+  // run/ path. The file lives in run/ for the whole execution (single source of
+  // truth for "a Worker is on this"). A retry already in run/ (inTodo=false)
+  // skips the move.
+  if (inTodo) {
+    const dest = path.join(tasksDir, "run", path.basename(promptFile));
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.renameSync(promptFile, dest);
+    promptFile = dest;
+    log(`[run] moved ${path.basename(dest)} todo/ → run/`);
+  }
+
+  const args = [...(adapterCfg.flags ?? []), promptFile];
 
   // Worker output artifacts are NOT lifecycle prompts — default them into
   // .agent/ so they never pollute tasks/run/ counts and sync.
