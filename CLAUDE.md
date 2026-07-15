@@ -66,7 +66,6 @@ Only for non-semantic searches: string literals, config keys, env-var names, com
 | Find a file by name pattern              | `mcp__serena__find_file`                                    |
 | Replace an entire symbol body            | `mcp__serena__replace_symbol_body`                          |
 | Insert code before/after a symbol        | `mcp__serena__insert_before_symbol` / `insert_after_symbol` |
-| Regex/string replacement within a symbol | `mcp__serena__replace_content`                              |
 
 ## 4. ROADBOARD 2.0 — WORKFLOW RULES
 - **Session start**: Always call `prepare_project_summary` or `get_project_changelog` to load the current project context before starting any work.

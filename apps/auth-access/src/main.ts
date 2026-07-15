@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import fastifyHelmet from '@fastify/helmet';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { optionalEnv } from '@roadboard/config';
 import { AppModule } from './app.module';
@@ -14,6 +15,9 @@ async function bootstrap(): Promise<void> {
     AppModule,
     new FastifyAdapter(),
   );
+
+  // Security headers. CSP is disabled: JSON API + Swagger UI at /docs.
+  await app.register(fastifyHelmet as never, { contentSecurityPolicy: false });
 
   app.useGlobalPipes(new ValidationPipe(createValidationPipeOptions()));
   app.useGlobalFilters(new ApiExceptionFilter());

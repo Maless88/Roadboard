@@ -14,6 +14,14 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+// Credentials for the live-stack integration run come from the environment —
+// never hardcode real passwords in specs.
+const TEST_USERNAME = process.env.RB_TEST_USERNAME ?? 'admin';
+const TEST_PASSWORD = process.env.RB_TEST_PASSWORD ?? '';
+const TEST_DEV_USERNAME = process.env.RB_TEST_DEV_USERNAME ?? 'dev3';
+const TEST_DEV_PASSWORD = process.env.RB_TEST_DEV_PASSWORD ?? '';
+
+
 const AUTH_URL = 'http://localhost:3002';
 const CORE_URL = 'http://localhost:3001';
 
@@ -79,7 +87,7 @@ describe('Per-User Archive Integration', () => {
     const ownerLogin = await fetch(`${AUTH_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'alessio', password: '***REDACTED***' }),
+      body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD }),
     });
 
     expect(ownerLogin.status).toBe(201);
@@ -90,7 +98,7 @@ describe('Per-User Archive Integration', () => {
     const mateLogin = await fetch(`${AUTH_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'dev3', password: '***REDACTED***' }),
+      body: JSON.stringify({ username: TEST_DEV_USERNAME, password: TEST_DEV_PASSWORD }),
     });
 
     expect(mateLogin.status).toBe(201);

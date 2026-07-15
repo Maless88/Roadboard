@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+// Credentials for the live-stack integration run come from the environment —
+// never hardcode real passwords in specs.
+const TEST_USERNAME = process.env.RB_TEST_USERNAME ?? 'admin';
+const TEST_PASSWORD = process.env.RB_TEST_PASSWORD ?? '';
+
+
 
 const AUTH_URL = 'http://localhost:3002';
 const CORE_URL = 'http://localhost:3001';
@@ -74,7 +80,7 @@ describe('Domain Groups Integration', () => {
 
   beforeAll(async () => {
 
-    const loginRes = await login('alessio', '***REDACTED***');
+    const loginRes = await login(TEST_USERNAME, TEST_PASSWORD);
     token = loginRes.token;
 
     const teamsRes = await fetch(`${AUTH_URL}/teams`, { headers: authHeaders(token) });

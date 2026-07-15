@@ -17,7 +17,7 @@ SALVO_CWD="$HOME/agent-workspaces/salvo"
 HC_LOG="$HOME/work/rb/logs/rb-healthcheck.log"
 HISTORY="$HOME/work/rb/logs/rb-health-history.md"
 LOG="$HOME/work/rb/logs/rb-salvo-digest.log"
-ALERT_CHAT="218660141"
+# Personal chat id lives in TG_ENV (ALERT_CHAT) — never hardcoded here.
 
 mkdir -p "$(dirname "$LOG")"
 log(){ echo "$(date '+%F %T') $*" >>"$LOG"; }
@@ -25,6 +25,7 @@ envval(){ grep -E "^$1=" "$2" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r';
 
 BRIDGE_TOKEN=$(envval AGENT_CLI_BRIDGE_TOKEN "$BRIDGE_ENV")
 NOTIFY_TOKEN=$(envval NOTIFY_TOKEN "$TG_ENV")
+ALERT_CHAT=$(envval ALERT_CHAT "$TG_ENV")
 
 TODAY=$(date '+%Y-%m-%d'); YDAY=$(date -d 'yesterday' '+%Y-%m-%d' 2>/dev/null || echo "$TODAY")
 

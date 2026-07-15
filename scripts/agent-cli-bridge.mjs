@@ -40,7 +40,7 @@ function claudeDisallowed(policy, repoRw, scopedReads = []) {
   return scopedReads.length ? restricted.filter((t) => t !== 'Read') : restricted;
 }
 // RoadBoard MCP per-agent access (slug derived from cwd). Read tool list enumerated
-// 2026-06-26 from the company MCP (10.4.0.23); re-check on a new RoadBoard release.
+// 2026-06-26 from an internal MCP deployment; re-check on a new RoadBoard release.
 const RB_READ = ['initial_instructions','list_projects','list_teams','get_user','get_project','list_active_tasks','list_phases','get_project_memory','prepare_task_context','prepare_project_summary','list_recent_decisions','get_project_changelog','search_memory','get_architecture_map','get_node_context','get_architecture_snapshot','list_scheduled_activities','list_events'];
 // RB access levels: 'full' (all tools) | 'archive' (read + persist artifacts via
 // create_memory_entry/create_handoff) | 'read' (read-only) | 'none'.

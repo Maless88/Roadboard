@@ -111,7 +111,9 @@ services:
       AGENT_CLI_BRIDGE_URL: ${AGENT_CLI_BRIDGE_URL:-http://host.docker.internal:8787/run}
       AGENT_CLI_BRIDGE_TOKEN: ${AGENT_CLI_BRIDGE_TOKEN:-}
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
-      AGENT_WORKSPACES_BASE: ${AGENT_WORKSPACES_BASE:-/home/alessio/agent-workspaces}
+      AGENT_WORKSPACES_BASE: ${AGENT_WORKSPACES_BASE:-/var/lib/roadboard/agent-workspaces}
+      LIFEOS_ALLOWED_USERNAMES: ${LIFEOS_ALLOWED_USERNAMES:-admin}
+      EMAIL_DEFAULT_ACCOUNT: ${EMAIL_DEFAULT_ACCOUNT:-default}
       NOTIFY_URL: ${NOTIFY_URL:-http://host.docker.internal:8788/send}
       NOTIFY_TOKEN: ${NOTIFY_TOKEN:-}
       FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE:-/run/secrets/fcm-service-account.json}
@@ -178,6 +180,7 @@ services:
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
       MCP_TRANSPORT: "http"
       MCP_HTTP_PORT: "3005"
+      EMAIL_DEFAULT_ACCOUNT: ${EMAIL_DEFAULT_ACCOUNT:-default}
       EMAIL_HELPER_URL: ${EMAIL_HELPER_URL:-http://host.docker.internal:8789}
       EMAIL_HELPER_TOKEN: ${EMAIL_HELPER_TOKEN:-}
       CALENDAR_HELPER_URL: ${CALENDAR_HELPER_URL:-http://host.docker.internal:8790}
@@ -267,7 +270,9 @@ services:
       # when serving the web-app behind HTTPS.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
-      - "3000:3000"
+      # WEB_BIND_ADDR: set to 127.0.0.1 (or a tailnet IP) to keep the web-app
+      # off untrusted interfaces when a reverse proxy fronts it.
+      - "${WEB_BIND_ADDR:-0.0.0.0}:3000:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1"]
       interval: 10s

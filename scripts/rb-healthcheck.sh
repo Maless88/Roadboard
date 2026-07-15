@@ -18,8 +18,7 @@ ENV_FILE="$HOME/.config/roadboard/telegram-bot.env"
 LOG_DIR="$HOME/work/rb/logs"
 LOG="$LOG_DIR/rb-healthcheck.log"
 LOCK="/tmp/rb-healthcheck.lock"
-ALERT_CHAT="218660141"
-PROBE_URL="http://100.93.131.14:3001/agents/rooms/direct"
+
 
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -32,6 +31,11 @@ exec 9>"$LOCK"
 if ! flock -n 9; then log "another run in progress, skip"; exit 0; fi
 
 envval(){ grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'; }
+
+# Personal/infra values live in ENV_FILE (ALERT_CHAT, PROBE_URL) — never hardcoded here.
+ALERT_CHAT="$(envval ALERT_CHAT)"
+PROBE_URL="$(envval PROBE_URL)"
+[ -z "$PROBE_URL" ] && PROBE_URL="http://127.0.0.1:3001/agents/rooms/direct"
 
 notify(){
   local msg="$1" tok

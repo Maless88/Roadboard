@@ -723,7 +723,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox to read (default aruba)." },
+        account: { type: "string", description: "Mailbox account name as configured in the email helper (defaults to EMAIL_DEFAULT_ACCOUNT)." },
         limit: { type: "number", description: "How many recent messages (1-30, default 10)." },
       },
     },
@@ -735,7 +735,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox (default aruba)." },
+        account: { type: "string", description: "Mailbox account name as configured in the email helper (defaults to EMAIL_DEFAULT_ACCOUNT)." },
         uids: { type: "array", items: { type: "number" }, description: "UIDs of the messages to mark read (from read_inbox)." },
       },
       required: ["uids"],
@@ -748,7 +748,7 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
     inputSchema: {
       type: "object" as const,
       properties: {
-        account: { type: "string", enum: ["aruba", "gmail-perso", "gmail-xstream"], description: "Mailbox (default aruba)." },
+        account: { type: "string", description: "Mailbox account name as configured in the email helper (defaults to EMAIL_DEFAULT_ACCOUNT)." },
         to: { type: "string", description: "Recipient address(es), comma-separated." },
         subject: { type: "string", description: "Subject line." },
         body: { type: "string", description: "Plain-text body." },
@@ -937,7 +937,9 @@ function checkScope(toolName: string, allowedScopes: string[]): string | null {
   const required = TOOL_REQUIRED_SCOPES[toolName];
 
   if (!required) {
-    return null;
+    // Default-deny: every tool must be explicitly mapped (or listed in
+    // NO_SCOPE_TOOLS). An unmapped tool is a wiring bug, not an open door.
+    return `Tool '${toolName}' has no scope mapping — denied by default`;
   }
 
   const hasScope =
@@ -1294,7 +1296,7 @@ export async function handleToolCall(
     }
 
     case "read_inbox": {
-      const account = (args.account as string) || "aruba";
+      const account = (args.account as string) || process.env.EMAIL_DEFAULT_ACCOUNT || "default";
       const limit = Math.max(1, Math.min(30, Number(args.limit) || 10));
       const r = await fetch(`${EMAIL_HELPER_URL}/inbox?account=${encodeURIComponent(account)}&limit=${limit}`, {
         headers: EMAIL_HELPER_TOKEN ? { Authorization: `Bearer ${EMAIL_HELPER_TOKEN}` } : {},
@@ -1304,7 +1306,7 @@ export async function handleToolCall(
     }
 
     case "mark_read": {
-      const account = (args.account as string) || "aruba";
+      const account = (args.account as string) || process.env.EMAIL_DEFAULT_ACCOUNT || "default";
       const uids = Array.isArray(args.uids) ? (args.uids as unknown[]).map((u) => Number(u)).filter((u) => Number.isFinite(u)) : [];
       if (uids.length === 0) return errorResponse("mark_read: 'uids' must be a non-empty array of message UIDs (from read_inbox).");
       const r = await fetch(`${EMAIL_HELPER_URL}/mark_read`, {
@@ -1317,7 +1319,7 @@ export async function handleToolCall(
     }
 
     case "create_draft": {
-      const account = (args.account as string) || "aruba";
+      const account = (args.account as string) || process.env.EMAIL_DEFAULT_ACCOUNT || "default";
       if (!args.to || !args.body) return errorResponse("create_draft: 'to' and 'body' are required.");
       const r = await fetch(`${EMAIL_HELPER_URL}/draft`, {
         method: "POST",
@@ -2072,7 +2074,7 @@ async function startHttp(): Promise<void> {
   app.use(express.json());
 
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} auth=${req.headers.authorization?.slice(0, 20) ?? 'none'}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} auth=${req.headers.authorization ? 'bearer:present' : 'none'}`);
     next();
   });
 

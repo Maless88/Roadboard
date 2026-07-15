@@ -89,7 +89,7 @@ infra/
 ```bash
 # Clone
 git clone https://github.com/Maless88/Roadboard.git
-cd rb
+cd Roadboard
 
 # Install dependencies
 pnpm install

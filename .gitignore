@@ -41,8 +41,9 @@ infra/docker/data/
 .agent/
 /tasks/
 
-# Generated task list is committed — exclude the source dirs only
-!TASK_LIST.md
+# Internal working artifacts — regenerate locally, do not track
+TASK_LIST.md
+IMPL_SUMMARY.md
 
 # Logs
 *.log

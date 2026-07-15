@@ -23,7 +23,7 @@ const TRIAGE_TZ = process.env.TRIAGE_TZ || "Europe/Rome";
 const QUIET_START_MIN = Number(process.env.TRIAGE_QUIET_START_MIN ?? 23 * 60);   // 23:00
 const QUIET_END_MIN = Number(process.env.TRIAGE_QUIET_END_MIN ?? 7 * 60 + 30);   // 07:30
 const CAL_LOOKAHEAD_MS = Number(process.env.TRIAGE_CAL_LOOKAHEAD_MS ?? 30 * 60 * 1000);
-const TRIAGE_EMAIL_ACCOUNT = process.env.TRIAGE_EMAIL_ACCOUNT || "aruba";
+const TRIAGE_EMAIL_ACCOUNT = process.env.TRIAGE_EMAIL_ACCOUNT || process.env.EMAIL_DEFAULT_ACCOUNT || "default";
 
 /**
  * Polls for due scheduled activities every 60s. For each due activity it claims

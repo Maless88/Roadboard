@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { getToken } from '@/lib/auth';
 
 
 const AUTH_API = process.env.AUTH_URL ?? 'http://localhost:3002';
@@ -9,6 +10,14 @@ export const runtime = 'nodejs';
 
 
 export async function POST(request: NextRequest) {
+
+  // Session-gated: without this the route is an unauthenticated online
+  // validity oracle for MCP tokens.
+  const session = await getToken();
+
+  if (!session) {
+    return NextResponse.json({ valid: false, error: 'unauthorized' }, { status: 401 });
+  }
 
   let body: { token?: string };
 

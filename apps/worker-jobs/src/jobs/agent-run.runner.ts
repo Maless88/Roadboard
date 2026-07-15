@@ -8,7 +8,7 @@ import {
   type ChatMessage,
 } from '@roadboard/agent-runtime';
 
-const WS_BASE = optionalEnv('AGENT_WORKSPACES_BASE', '/home/alessio/agent-workspaces');
+const WS_BASE = optionalEnv('AGENT_WORKSPACES_BASE', '/var/lib/roadboard/agent-workspaces');
 const PREVIEW_LEN = 280;
 
 

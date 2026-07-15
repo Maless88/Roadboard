@@ -5,7 +5,7 @@ import type { AgentExecConfig, AgentRuntime } from "./agent-executor.service";
 import { AgentCredentialsService } from "./credentials.service";
 import { AgentSkillsService } from "./skills.service";
 
-const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/home/alessio/agent-workspaces");
+const WS_BASE = optionalEnv("AGENT_WORKSPACES_BASE", "/var/lib/roadboard/agent-workspaces");
 function wsFor(slug: string): string { return `${WS_BASE}/${slug}`; }
 
 function bullets(t: string | null | undefined): string {

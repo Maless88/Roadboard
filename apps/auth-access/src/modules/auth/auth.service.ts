@@ -62,8 +62,9 @@ export class AuthService {
     });
 
     if (existing) {
-      const field = existing.username === dto.username ? 'username' : 'email';
-      throw new ConflictException(`This ${field} is already taken`);
+      // Single generic message: revealing WHICH identifier exists enables
+      // username/email enumeration.
+      throw new ConflictException('Username or email already in use');
     }
 
     const hashed = await hashPassword(dto.password);

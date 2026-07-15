@@ -82,7 +82,7 @@ After manual Cypher MERGE repair, **totalDrift: 0** across all 5 entity types (c
 # 1. Obtain a session token
 TOKEN=$(curl -s -X POST http://localhost:3002/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "alessio", "password": "***REDACTED***"}' \
+  -d '{"username": "<user>", "password": "<password>"}' \
   | jq -r '.token')
 
 # 2. Run drift check against any project ID (detector is global — result is identical for all)

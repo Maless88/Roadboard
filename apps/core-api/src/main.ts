@@ -1,5 +1,6 @@
 import { NestFactory } from "@nestjs/core";
 import { FastifyAdapter, NestFastifyApplication } from "@nestjs/platform-fastify";
+import fastifyHelmet from "@fastify/helmet";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
 import { Logger, ValidationPipe } from "@nestjs/common";
@@ -25,6 +26,10 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(optionalEnv("CORE_API_PORT", "3001"));
   const logger = new Logger("Bootstrap");
+
+  // Security headers. CSP is disabled: this service is a JSON API (plus
+  // Swagger UI at /docs, which a strict CSP would break).
+  await app.register(fastifyHelmet as never, { contentSecurityPolicy: false });
 
   // Multipart for thumbnail upload.
   await app.register(fastifyMultipart as never, {

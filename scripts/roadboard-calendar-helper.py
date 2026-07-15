@@ -30,13 +30,13 @@ def load_env(p):
 
 def cfg(env):
     c = {
-        "url": env.get("NEXTCLOUD_URL", "https://cloud.xstream-labs.com"),
+        "url": env.get("NEXTCLOUD_URL"),
         "user": env.get("NEXTCLOUD_USER"),
         "password": env.get("NEXTCLOUD_APP_PASSWORD"),
         "default_calendar": env.get("CALENDAR_DEFAULT", ""),
     }
-    if not (c["user"] and c["password"]):
-        raise ValueError("credenziali CalDAV mancanti")
+    if not (c["url"] and c["user"] and c["password"]):
+        raise ValueError("configurazione CalDAV mancante (NEXTCLOUD_URL/USER/APP_PASSWORD)")
     return c
 
 

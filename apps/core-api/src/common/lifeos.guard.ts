@@ -13,7 +13,7 @@ import { optionalEnv } from "@roadboard/config";
  * surfaces to allowlisted human users; the MCP-token channel is exempt
  * because it is already scoped per-token and is how agents reach the API.
  *
- * Allowlist: env LIFEOS_ALLOWED_USERNAMES (csv, default "alessio,admin")
+ * Allowlist: env LIFEOS_ALLOWED_USERNAMES (csv, default "admin")
  * plus any user with global role "admin". Keep in sync with the web-app
  * lib/access.ts isLifeOsUser helper.
  */
@@ -24,7 +24,7 @@ export class LifeOsGuard implements CanActivate {
 
   constructor() {
 
-    this.allowed = (optionalEnv("LIFEOS_ALLOWED_USERNAMES", "alessio,admin") || "alessio,admin")
+    this.allowed = (optionalEnv("LIFEOS_ALLOWED_USERNAMES", "admin") || "admin")
       .split(",")
       .map((s) => s.trim().toLowerCase())
       .filter(Boolean);

@@ -14,6 +14,12 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
+// Credentials for the live-stack integration run come from the environment —
+// never hardcode real passwords in specs.
+const TEST_USERNAME = process.env.RB_TEST_USERNAME ?? 'admin';
+const TEST_PASSWORD = process.env.RB_TEST_PASSWORD ?? '';
+
+
 const AUTH_URL = 'http://localhost:3002';
 const CORE_URL = 'http://localhost:3001';
 
@@ -59,7 +65,7 @@ describe('Chatbot Config Integration', () => {
     const login = await fetch(`${AUTH_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'alessio', password: '***REDACTED***' }),
+      body: JSON.stringify({ username: TEST_USERNAME, password: TEST_PASSWORD }),
     });
 
     expect(login.status).toBe(201);
