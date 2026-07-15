@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 
 import { AuthGuard } from "../../common/auth.guard";
+import { AdminGuard } from "../../common/admin.guard";
 import { ReleaseService } from "./release.service";
 
 
@@ -37,6 +38,7 @@ export class ReleaseController {
     return this.release.getStatus();
   }
 
+  @UseGuards(AdminGuard)
   @Post("deploy")
   async triggerDeploy(): Promise<TriggerDeployResponse> {
 

@@ -5,9 +5,18 @@ import { optionalEnv } from "@roadboard/config";
  * AES-256-GCM symmetric encryption for at-rest secrets (per-user provider keys).
  * Key is derived (sha256 -> 32 bytes) from CRED_ENC_KEY, falling back to JWT_SECRET
  * so existing deployments work without a new env. Blob format: iv.tag.ciphertext (base64).
+ * There is deliberately NO hardcoded fallback: encrypting under a publicly-known
+ * constant would make every stored credential trivially decryptable.
  */
 function key(): Buffer {
-  const raw = optionalEnv("CRED_ENC_KEY", "") || optionalEnv("JWT_SECRET", "roadboard-dev-secret");
+  const raw = optionalEnv("CRED_ENC_KEY", "") || optionalEnv("JWT_SECRET", "");
+
+  if (!raw || raw === "change-me-in-production") {
+    throw new Error(
+      "CRED_ENC_KEY (or JWT_SECRET) must be set to a non-default value to encrypt/decrypt stored credentials",
+    );
+  }
+
   return createHash("sha256").update(raw).digest();
 }
 

@@ -125,26 +125,43 @@ export class GrantCheckGuard implements CanActivate {
       return params.projectId;
     }
 
-    // Resolve via DB when only a resource ID is in params (e.g. PATCH /tasks/:id)
+    // Resolve via DB when only a resource ID is in params (e.g. PATCH /tasks/:id).
+    // Every project-scoped table addressed by a bare :id must be resolvable here,
+    // otherwise the grant check would silently no-op (cross-project IDOR).
     if (params && typeof params.id === 'string') {
 
-      const task = await this.prisma.task.findUnique({
-        where: { id: params.id },
-        select: { projectId: true },
+      const id = params.id;
+
+      const project = await this.prisma.project.findUnique({
+        where: { id },
+        select: { id: true },
       }).catch(() => null);
 
-      if (task) {
-        return task.projectId;
+      if (project) {
+        return project.id;
       }
 
-      const phase = await this.prisma.phase.findUnique({
-        where: { id: params.id },
-        select: { projectId: true },
-      }).catch(() => null);
+      const lookups: Array<() => Promise<{ projectId: string } | null>> = [
+        () => this.prisma.task.findUnique({ where: { id }, select: { projectId: true } }),
+        () => this.prisma.phase.findUnique({ where: { id }, select: { projectId: true } }),
+        () => this.prisma.decision.findUnique({ where: { id }, select: { projectId: true } }),
+        () => this.prisma.memoryEntry.findUnique({ where: { id }, select: { projectId: true } }),
+        () => this.prisma.codeRepository.findUnique({ where: { id }, select: { projectId: true } }),
+        () => this.prisma.domainGroup.findUnique({ where: { id }, select: { projectId: true } }),
+      ];
 
-      if (phase) {
-        return phase.projectId;
+      for (const lookup of lookups) {
+
+        const row = await lookup().catch(() => null);
+
+        if (row) {
+          return row.projectId;
+        }
       }
+
+      // Fail closed: a bare :id that matches no known project-scoped resource
+      // must not silently bypass the grant check.
+      throw new ForbiddenException('Unable to resolve project for grant check');
     }
 
     return undefined;

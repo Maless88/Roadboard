@@ -262,6 +262,10 @@ services:
       CORE_API_URL: http://core-api:3001
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
       AUTH_URL: http://auth-access:3002
+      # Plain-HTTP deployment (localhost / Tailscale): the Secure cookie
+      # attribute would make browsers drop the session cookie. Set to true
+      # when serving the web-app behind HTTPS.
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
       - "3000:3000"
     healthcheck:
