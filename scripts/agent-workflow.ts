@@ -1419,6 +1419,7 @@ function buildAnalystPrompt(relPath: string): string {
     "Judge: correctness, completeness, unambiguity, scope cleanliness, safety.",
     "Write your verdict by editing ONLY this file: set frontmatter `status` to `approved` or `changes-requested`, and APPEND a new `### Round <n>` section under `## Review log` (never overwrite prior rounds). Use the current `review_round` value as <n>.",
     "Default to `changes-requested` if anything is ambiguous, incomplete, unverifiable, or risky. Approval is earned.",
+    "Re-evaluate the prompt AS IT STANDS RIGHT NOW, from scratch. Do not assume a finding from a previous `## Review log` round still applies — verify each potential issue against the CURRENT prompt text before reporting it, and do not pattern-match against prior rounds.",
     "Do NOT modify source code, do NOT move the file, do NOT commit.",
   ].join("\n\n");
 }
@@ -1849,6 +1850,7 @@ function buildOutputAnalystPrompt(
     `Write your verdict by editing ONLY the prompt file (${promptRelPath}): set frontmatter \`output_status\` to \`approved\` or \`changes-requested\`, and APPEND a new section under \`## Output review log\` (create the heading if absent) with the EXACT heading \`### Round ${nextRound} — <verdict>\` (never overwrite prior rounds), followed by bullet findings.`,
     "Use exactly the round number given above — do not compute or increment it yourself.",
     "Default to changes-requested if the diff is incomplete, out of scope, or logically inconsistent with the prompt — but NOT merely because a build or test command could not be executed in this environment. Approval is earned.",
+    "Re-evaluate the CURRENT diff from scratch. Do not assume a finding from a previous `## Output review log` round still applies — verify each potential issue against the diff and prompt provided to you now before reporting it, and do not pattern-match against prior rounds.",
     "Do NOT modify any other file, do NOT move files, do NOT commit.",
   ].join("\n\n");
 }

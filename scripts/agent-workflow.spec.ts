@@ -1467,6 +1467,29 @@ describe("runReview", () => {
     expect(seen.every((c) => c === "claude")).toBe(true);
   });
 
+  it("Analyst prompt instructs re-evaluating the prompt from scratch, ignoring prior rounds", () => {
+    const file = writeFile(todoDir, "feat-g.md", "---\nstatus: draft\nreview_round: 0\n---\n# g\n");
+    let analystPromptText = "";
+    const spawnFn = (_cmd: string, args: string[]) => {
+      const text = args.join(" ");
+
+      if (text.includes("Architect role")) {
+        setPromptStatus(file, "in-review");
+      }
+
+      else if (text.includes("Analyst role")) {
+        analystPromptText = text;
+        setPromptStatus(file, "approved");
+        appendReviewLogRound(file, 0, "approved");
+      }
+
+      return 0;
+    };
+    runReview("g", { tasksDir, configPath, spawnFn, logFn: () => undefined });
+    expect(analystPromptText).toMatch(/from scratch/i);
+    expect(analystPromptText).toMatch(/do not assume a finding from a previous `## Review log` round still applies/i);
+  });
+
   it("throws a clear timeout error naming the role and elapsed time when the Architect step times out", () => {
     fs.writeFileSync(
       configPath,
@@ -2114,6 +2137,21 @@ output_round: 0
       expect(seenRound).toBe(2);
       expect(second.outputRound).toBe(2);
       expect(parsePrompt(fs.readFileSync(file, "utf-8")).frontmatter.outputRound).toBe(2);
+    });
+
+    it("Output Analyst prompt instructs re-evaluating the diff from scratch, ignoring prior rounds", () => {
+      const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
+      let analystPromptText = "";
+      const spawnFn = (_cmd: string, args: string[]) => {
+        analystPromptText = args.join(" ");
+        setOutputStatus(file, "approved");
+        fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- looks good\n");
+
+        return 0;
+      };
+      runReviewOutput("y", { tasksDir, configPath, diffFn: () => "d", spawnFn, logFn: () => undefined });
+      expect(analystPromptText).toMatch(/from scratch/i);
+      expect(analystPromptText).toMatch(/do not assume a finding from a previous `## Output review log` round still applies/i);
     });
 
     describe("integrity guards", () => {
