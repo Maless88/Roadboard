@@ -16,6 +16,17 @@
 - [x] feat-agent-workflow-cli-adapters — Optional model CLI adapters
 - [x] enh-agent-workflow-version-flag — `--version` flag on root CLI
 
+## LLM Runtime
+
+- [x] feat-llm-runtime-capability-contract — ADR + contratto capability
+- [ ] LLM Runtime — Provider registry e detection
+- [ ] LLM Runtime — Adapter openai-compatible e Ollama baseline
+- [ ] LLM Runtime — Adapter nativi OpenAI Anthropic Gemini
+- [ ] LLM Runtime — Router ruoli policy e budget
+- [ ] LLM Runtime — Diagnostica configurazione utente
+- [ ] LLM Runtime — Integrazione agenti e context pack
+- [ ] LLM Runtime — Test matrix e documentazione provider
+
 ## Docs / MCP guide
 
 - [x] feat-mcp-guide-refresh — Refresh schema Zed/VSCode/Claude Code in /mcp-guide page
