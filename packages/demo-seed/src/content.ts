@@ -123,7 +123,7 @@ const itContent: DemoContent = {
   ],
   memories: [
     { type: MemoryEntryType.LEARNING, title: 'Prisma migrate vs db push', body: 'In team usiamo sempre `migrate dev` — `db push` salta la history e rende impossibile il rollback pulito.' },
-    { type: MemoryEntryType.ARCHITECTURE, title: 'Topologia servizi Roadboard', body: 'core-api gestisce dominio (project/task/memory), auth-access gestisce identità e sessioni, mcp-service espone 17 tool agli agenti AI.' },
+    { type: MemoryEntryType.ARCHITECTURE, title: 'Topologia servizi Roadboard', body: 'core-api gestisce dominio (project/task/memory), auth-access gestisce identità e sessioni, mcp-service espone 50 tool agli agenti AI.' },
     { type: MemoryEntryType.OPERATIONAL_NOTE, title: 'Redis volatile', body: 'I dati su Redis (code BullMQ, cache) non sono persistenti. Ogni restart azzera le code in attesa — non salvare nulla di critico solo lì.' },
     { type: MemoryEntryType.OPEN_QUESTION, title: 'Rate limit sugli endpoint pubblici?', body: 'Al momento non c’ un rate limit sul login. Valutare se mettere express-rate-limit o passare dietro un reverse proxy che lo gestisca.' },
   ],
@@ -173,7 +173,7 @@ const enContent: DemoContent = {
   ],
   memories: [
     { type: MemoryEntryType.LEARNING, title: 'Prisma migrate vs db push', body: 'We always use `migrate dev` — `db push` skips the history and makes clean rollbacks impossible.' },
-    { type: MemoryEntryType.ARCHITECTURE, title: 'Roadboard service topology', body: 'core-api owns the domain (project/task/memory), auth-access owns identity and sessions, mcp-service exposes 17 tools to AI agents.' },
+    { type: MemoryEntryType.ARCHITECTURE, title: 'Roadboard service topology', body: 'core-api owns the domain (project/task/memory), auth-access owns identity and sessions, mcp-service exposes 50 tools to AI agents.' },
     { type: MemoryEntryType.OPERATIONAL_NOTE, title: 'Redis is volatile', body: 'Data on Redis (BullMQ queues, cache) is not persistent. Every restart wipes queued jobs — do not store anything critical only there.' },
     { type: MemoryEntryType.OPEN_QUESTION, title: 'Rate limit on public endpoints?', body: 'No rate limit on login today. Consider express-rate-limit or a reverse proxy that handles it.' },
   ],

@@ -19,7 +19,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 
 const MCP_URL = process.env.NEXT_PUBLIC_MCP_URL ?? '<YOUR_MCP_URL>';
-const TOOL_COUNT = 32;
+const TOOL_COUNT = 50;
 
 
 function CodeBlock({ code, lang = 'json' }: { code: string; lang?: string }) {
@@ -98,6 +98,12 @@ function buildTools(dict: Dictionary): { name: string; desc: string; category: '
     { name: 'search_memory', desc: get('search_memory'), category: 'read' },
     { name: 'get_architecture_map', desc: get('get_architecture_map'), category: 'read' },
     { name: 'get_node_context', desc: get('get_node_context'), category: 'read' },
+    { name: 'get_architecture_snapshot', desc: get('get_architecture_snapshot'), category: 'read' },
+    { name: 'get_user', desc: get('get_user'), category: 'read' },
+    { name: 'list_skills', desc: get('list_skills'), category: 'read' },
+    { name: 'read_inbox', desc: get('read_inbox'), category: 'read' },
+    { name: 'list_events', desc: get('list_events'), category: 'read' },
+    { name: 'list_scheduled_activities', desc: get('list_scheduled_activities'), category: 'read' },
 
     { name: 'prepare_project_summary', desc: get('prepare_project_summary'), category: 'context' },
     { name: 'prepare_task_context', desc: get('prepare_task_context'), category: 'context' },
@@ -121,6 +127,18 @@ function buildTools(dict: Dictionary): { name: string; desc: string; category: '
     { name: 'create_architecture_annotation', desc: get('create_architecture_annotation'), category: 'write' },
     { name: 'link_task_to_node', desc: get('link_task_to_node'), category: 'write' },
     { name: 'ingest_architecture', desc: get('ingest_architecture'), category: 'write' },
+    { name: 'attach_skill', desc: get('attach_skill'), category: 'write' },
+    { name: 'detach_skill', desc: get('detach_skill'), category: 'write' },
+    { name: 'sync_skills_catalog', desc: get('sync_skills_catalog'), category: 'write' },
+    { name: 'mark_read', desc: get('mark_read'), category: 'write' },
+    { name: 'create_draft', desc: get('create_draft'), category: 'write' },
+    { name: 'create_event', desc: get('create_event'), category: 'write' },
+    { name: 'delete_event', desc: get('delete_event'), category: 'write' },
+    { name: 'notify', desc: get('notify'), category: 'write' },
+    { name: 'create_scheduled_activity', desc: get('create_scheduled_activity'), category: 'write' },
+    { name: 'create_reminder', desc: get('create_reminder'), category: 'write' },
+    { name: 'pause_scheduled_activity', desc: get('pause_scheduled_activity'), category: 'write' },
+    { name: 'delete_scheduled_activity', desc: get('delete_scheduled_activity'), category: 'write' },
   ];
 }
 
