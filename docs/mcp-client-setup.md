@@ -189,7 +189,7 @@ env = { KEY = "value" }
 
 ## 3. Verify the connection
 
-Restart the MCP client. It should discover 50 tools; `list_projects` is the quickest smoke test:
+Restart the MCP client. With the default profile it should discover 50 tools (see [Tool profiles](#tool-profiles) below); `list_projects` is the quickest smoke test:
 
 ```
 agent> list_projects
@@ -197,6 +197,23 @@ agent> list_projects
 ```
 
 For Claude Code you can also run `/mcp` to list all connected servers and their tool counts.
+
+### Tool profiles
+
+How many tools the server exposes is chosen **server-side** at startup via the `MCP_TOOL_PROFILE` environment variable — it is not negotiated per client. A given `mcp-service` instance exposes exactly one profile to every client that connects.
+
+| `MCP_TOOL_PROFILE` | Tools | Use |
+|--------------------|-------|-----|
+| `full` (default)   | 50    | Backwards-compatible full set |
+| `workflow`         | 21    | Agents executing tasks (compact context) |
+| `atlas`            | 16    | CodeFlow / architecture work |
+| `personal`         | 13    | Personal project management |
+
+Notes:
+
+- Unset or `full` → all 50 tools; this is what a default client sees.
+- A tool omitted by the active profile is unavailable even if the client knows its name — calling it returns a clear "not available in MCP_TOOL_PROFILE=…" error.
+- Pick a compact profile to reduce the tool-schema context sent to the model. To do so, start the `mcp-service` instance with e.g. `MCP_TOOL_PROFILE=workflow`.
 
 ---
 
