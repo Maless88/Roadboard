@@ -114,6 +114,16 @@ describe('workflow tools', () => {
     expect(PREPARE_PROJECT_SUMMARY_TOOL.inputSchema.required).toContain('projectId');
   });
 
+  it('prepare_project_summary exposes bounded compact options', () => {
+    const props = PREPARE_PROJECT_SUMMARY_TOOL.inputSchema.properties as Record<string, unknown>;
+    expect(props.taskLimit).toBeDefined();
+    expect(props.memoryLimit).toBeDefined();
+    expect(props.compact).toBeDefined();
+    expect(props.taskCursor).toBeDefined();
+    expect(props.statuses).toBeDefined();
+    expect((props.statuses as { uniqueItems?: boolean }).uniqueItems).toBe(true);
+  });
+
   it('create_handoff requires projectId and summary', () => {
     expect(CREATE_HANDOFF_TOOL.name).toBe('create_handoff');
     expect(CREATE_HANDOFF_TOOL.inputSchema.required).toContain('projectId');
@@ -127,6 +137,15 @@ describe('changelog and search tools', () => {
   it('get_project_changelog requires projectId', () => {
     expect(GET_PROJECT_CHANGELOG_TOOL.name).toBe('get_project_changelog');
     expect(GET_PROJECT_CHANGELOG_TOOL.inputSchema.required).toContain('projectId');
+  });
+
+  it('get_project_changelog exposes limits for expandable collections', () => {
+    const props = GET_PROJECT_CHANGELOG_TOOL.inputSchema.properties as Record<string, unknown>;
+    expect(props.auditLimit).toBeDefined();
+    expect(props.memoryLimit).toBeDefined();
+    expect(props.decisionLimit).toBeDefined();
+    expect(props.urgentTaskLimit).toBeDefined();
+    expect(props.phaseLimit).toBeDefined();
   });
 
   it('search_memory requires projectId and q', () => {
@@ -234,8 +253,9 @@ describe('task naming convention', () => {
       expect(CREATE_TASK_TOOL.description).toContain('Area — description');
     });
 
-    it('description contains positive examples', () => {
-      expect(CREATE_TASK_TOOL.description).toContain('Atlas — Gruppi di dominio (CRUD)');
+    it('description contains CodeFlow linking guidance', () => {
+      expect(CREATE_TASK_TOOL.description).toContain('get_architecture_map');
+      expect(CREATE_TASK_TOOL.description).toContain('link_task_to_node');
     });
 
     it('title field description warns against legacy codes', () => {

@@ -10,8 +10,10 @@ const TEST_PASSWORD = process.env.RB_TEST_PASSWORD ?? '';
 
 const AUTH_URL = 'http://localhost:3002';
 const CORE_URL = 'http://localhost:3001';
+const RUN_LIVE_INTEGRATION = process.env.RB_RUN_LIVE_MCP_INTEGRATION === '1';
+const describeLive = RUN_LIVE_INTEGRATION ? describe : describe.skip;
 
-const SVC_ENTRY = resolve(__dirname, '../src/main.ts');
+const SVC_ENTRY = resolve(__dirname, '../dist/main.js');
 
 
 interface JsonRpcRequest {
@@ -70,7 +72,7 @@ function sendRequest(proc: ChildProcess, req: JsonRpcRequest): Promise<JsonRpcRe
 }
 
 
-describe('mcp-service Integration', () => {
+describeLive('mcp-service Integration', () => {
   let mcpProc: ChildProcess;
   let mcpToken: string;
   let projectId: string;
@@ -126,8 +128,8 @@ describe('mcp-service Integration', () => {
     projectId = project.id;
 
     // Spawn mcp-service with valid token
-    mcpProc = spawn('node', ['--import', 'tsx/esm', SVC_ENTRY], {
-      env: { ...process.env, MCP_TOKEN: mcpToken, CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002' },
+    mcpProc = spawn('node', [SVC_ENTRY], {
+      env: { ...process.env, MCP_TOKEN: mcpToken, CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002', MCP_TOOL_PROFILE: 'full' },
       stdio: ['pipe', 'pipe', 'inherit'],
     });
 
@@ -356,12 +358,16 @@ describe('mcp-service Integration', () => {
       task_summary: { total: number; by_status: Record<string, number> };
       open_tasks: unknown[];
       memory: unknown[];
+      collection_metadata: { memory: { total: number; returned: number } };
+      truncation: Record<string, unknown>;
     };
 
     expect(summary.project).toBeDefined();
     expect(typeof summary.task_summary.total).toBe('number');
     expect(Array.isArray(summary.open_tasks)).toBe(true);
     expect(Array.isArray(summary.memory)).toBe(true);
+    expect(typeof summary.collection_metadata.memory.total).toBe('number');
+    expect(summary.truncation).toBeDefined();
   });
 
 
@@ -398,15 +404,15 @@ describe('mcp-service Integration', () => {
 });
 
 
-describe('mcp-service — invalid token', () => {
+describeLive('mcp-service — invalid token', () => {
   let invalidProc: ChildProcess;
   let reqId = 100;
 
 
   beforeAll(async () => {
 
-    invalidProc = spawn('node', ['--import', 'tsx/esm', SVC_ENTRY], {
-      env: { ...process.env, MCP_TOKEN: 'invalid-token-xyz', CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002' },
+    invalidProc = spawn('node', [SVC_ENTRY], {
+      env: { ...process.env, MCP_TOKEN: 'invalid-token-xyz', CORE_API_PORT: '3001', AUTH_ACCESS_PORT: '3002', MCP_TOOL_PROFILE: 'full' },
       stdio: ['pipe', 'pipe', 'inherit'],
     });
 

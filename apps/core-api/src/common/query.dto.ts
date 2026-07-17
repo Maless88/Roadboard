@@ -1,6 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayUnique,
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsEnum,
@@ -13,7 +14,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { MemoryEntryType, ProjectStatus, TaskStatus } from '@roadboard/domain';
+import { MemoryEntryType, PhaseStatus, ProjectStatus, TaskStatus } from '@roadboard/domain';
 
 
 export const TASK_FIELD_WHITELIST = [
@@ -65,6 +66,10 @@ export class ProjectScopedQueryDto {
 export class FindPhasesQueryDto extends ProjectScopedQueryDto {
 
   @IsOptional()
+  @IsEnum(PhaseStatus)
+  status?: PhaseStatus;
+
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   decisionId?: string;
@@ -97,6 +102,14 @@ export class FindTasksQueryDto extends ProjectScopedQueryDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',').map((s) => s.trim()).filter(Boolean) : value))
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsEnum(TaskStatus, { each: true })
+  statuses?: TaskStatus[];
 
   @IsOptional()
   @IsISO8601()

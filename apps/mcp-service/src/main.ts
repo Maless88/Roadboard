@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import express, { Request, Response, NextFunction } from "express";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -22,6 +23,35 @@ const CALENDAR_HELPER_TOKEN = optionalEnv("CALENDAR_HELPER_TOKEN", "");
 const MCP_TRANSPORT = optionalEnv("MCP_TRANSPORT", "stdio");
 const MCP_HTTP_PORT = Number(optionalEnv("MCP_HTTP_PORT", "3005"));
 const MCP_TOKEN = optionalEnv("MCP_TOKEN", "");
+const MCP_TOOL_PROFILE = optionalEnv("MCP_TOOL_PROFILE", "full");
+
+const TOOL_PROFILES = ["workflow", "atlas", "personal", "full"] as const;
+type ToolProfile = (typeof TOOL_PROFILES)[number];
+
+const TASK_STATUSES = ["todo", "in_progress", "done", "blocked", "cancelled"] as const;
+const OPEN_TASK_STATUSES = ["todo", "in_progress", "blocked"] as const;
+const DEFAULT_SUMMARY_TASK_LIMIT = 25;
+const DEFAULT_SUMMARY_MEMORY_LIMIT = 10;
+const DEFAULT_CHANGELOG_AUDIT_LIMIT = 15;
+const DEFAULT_CHANGELOG_MEMORY_LIMIT = 10;
+const DEFAULT_CHANGELOG_DECISION_LIMIT = 5;
+const DEFAULT_CHANGELOG_URGENT_TASK_LIMIT = 10;
+const DEFAULT_CHANGELOG_PHASE_LIMIT = 10;
+const MAX_AGGREGATE_LIMIT = 50;
+const MAX_CHANGELOG_URGENT_TASK_LIMIT = 10;
+
+
+export function parseToolProfile(value: string): ToolProfile {
+
+  if ((TOOL_PROFILES as readonly string[]).includes(value)) {
+    return value as ToolProfile;
+  }
+
+  throw new Error(`Invalid MCP_TOOL_PROFILE '${value}'. Allowed values: ${TOOL_PROFILES.join(", ")}`);
+}
+
+
+const ACTIVE_TOOL_PROFILE = parseToolProfile(MCP_TOOL_PROFILE);
 
 
 const TOOLS = [
@@ -138,9 +168,7 @@ const TOOLS = [
   },
   {
     name: "create_task",
-    description: `Create a new task in a project phase. If phaseId is omitted the first available phase is used automatically. IMPORTANT: immediately after the task is created, if it will modify any code (most tasks), call link_task_to_node for each ArchitectureNode it will touch. Use get_architecture_map to discover the right nodeId. This is mandatory unless the task is purely meta — it is how Roadboard populates the graph that powers future context retrieval.
-
-TITLE NAMING CONVENTION: Title MUST follow the format "Area — description". Examples: "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link", "CodeFlow Stabilization — Fix drift validator false positives", "Workspaces — Invite flow per team condivisi", "UX & Vibe Coding — Empty state per lista task vuota". Avoid legacy codes like CF-XX-YY, [W4-06], audit-01 in the title.`,
+    description: `Create a task in a project phase. If it modifies code, use get_architecture_map then link_task_to_node for each touched ArchitectureNode. Title format: "Area — description"; avoid legacy codes like CF-XX-YY, [W4-06], audit-01.`,
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -342,11 +370,21 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
   },
   {
     name: "prepare_project_summary",
-    description: "Generate a structured project snapshot for agent onboarding: project details, task counts by status, open tasks, and memory entries.",
+    description: "Generate a bounded project snapshot for agent onboarding: project details, task counts by status, limited compact open tasks, and limited memory entries.",
     inputSchema: {
       type: "object" as const,
       properties: {
         projectId: { type: "string", description: "The project ID" },
+        taskLimit: { type: "number", description: "Max open tasks to return (1-50, default 25)." },
+        memoryLimit: { type: "number", description: "Max memory entries to return (1-50, default 10)." },
+        compact: { type: "boolean", description: "Return compact task and memory shapes by default. Set false for full returned items." },
+        taskCursor: { type: "string", description: "Cursor from collection_metadata.open_tasks.nextCursor for the next open_tasks page." },
+        statuses: {
+          type: "array",
+          uniqueItems: true,
+          items: { type: "string", enum: ["todo", "in_progress", "done", "blocked", "cancelled"] },
+          description: "Task statuses to include in open_tasks. Default: todo, in_progress, blocked.",
+        },
       },
       required: ["projectId"],
     },
@@ -404,15 +442,19 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
   },
   {
     name: "get_project_changelog",
-    description: "Generate a structured, agent-readable changelog for a project: task summary, active phases, recent decisions, recent memory entries, and recent audit events. Use this at session start for rapid onboarding.",
+    description: "Generate a bounded, agent-readable changelog for a project: task summary, active phases, decisions, memory, urgent tasks, and audit events. Use this at session start for rapid onboarding.",
     inputSchema: {
       type: "object" as const,
       properties: {
         projectId: { type: "string", description: "The project ID" },
         auditLimit: {
           type: "number",
-          description: "Number of recent audit events to include (default: 15)",
+          description: "Number of recent audit events to include (1-50, default: 15)",
         },
+        memoryLimit: { type: "number", description: "Number of recent memory entries to include (1-50, default: 10)." },
+        decisionLimit: { type: "number", description: "Number of decisions per section to include (1-50, default: 5)." },
+        urgentTaskLimit: { type: "number", description: "Number of urgent tasks to include (1-10, default: 10; dashboard currently pages at 10)." },
+        phaseLimit: { type: "number", description: "Number of active/recent phases to include (1-50, default: 10)." },
       },
       required: ["projectId"],
     },
@@ -870,6 +912,82 @@ TITLE NAMING CONVENTION: Phase title MUST follow the format "Area — descriptio
   },
 ];
 
+const TOOL_PROFILE_NAMES: Record<ToolProfile, readonly string[]> = {
+  workflow: [
+    "initial_instructions",
+    "list_projects",
+    "get_project",
+    "list_active_tasks",
+    "list_phases",
+    "create_task",
+    "update_task_status",
+    "update_task",
+    "create_phase",
+    "update_phase",
+    "create_memory_entry",
+    "prepare_task_context",
+    "prepare_project_summary",
+    "create_handoff",
+    "list_recent_decisions",
+    "create_decision",
+    "update_decision",
+    "get_project_changelog",
+    "search_memory",
+    "get_architecture_map",
+    "link_task_to_node",
+  ],
+  atlas: [
+    "initial_instructions",
+    "list_projects",
+    "get_project",
+    "list_active_tasks",
+    "prepare_task_context",
+    "get_project_changelog",
+    "get_architecture_map",
+    "get_node_context",
+    "get_architecture_snapshot",
+    "create_architecture_repository",
+    "create_architecture_node",
+    "create_architecture_edge",
+    "create_architecture_link",
+    "create_architecture_annotation",
+    "link_task_to_node",
+    "ingest_architecture",
+  ],
+  personal: [
+    "initial_instructions",
+    "read_inbox",
+    "mark_read",
+    "create_draft",
+    "list_events",
+    "create_event",
+    "delete_event",
+    "notify",
+    "create_scheduled_activity",
+    "create_reminder",
+    "list_scheduled_activities",
+    "pause_scheduled_activity",
+    "delete_scheduled_activity",
+  ],
+  full: TOOLS.map((tool) => tool.name),
+};
+
+export const SUPPORTED_TOOL_PROFILES = TOOL_PROFILES;
+export const DEFAULT_TOOL_PROFILE = "full";
+
+
+export function getToolsForProfile(profile: ToolProfile = ACTIVE_TOOL_PROFILE): typeof TOOLS {
+
+  const names = new Set(TOOL_PROFILE_NAMES[profile]);
+  return TOOLS.filter((tool) => names.has(tool.name));
+}
+
+
+function getToolNameSet(profile: ToolProfile = ACTIVE_TOOL_PROFILE): Set<string> {
+
+  return new Set(getToolsForProfile(profile).map((tool) => tool.name));
+}
+
 
 // Tools that require no scope (meta / protocol bootstrap)
 const NO_SCOPE_TOOLS = new Set(["initial_instructions"]);
@@ -970,281 +1088,193 @@ function errorResponse(message: string): { content: { type: "text"; text: string
 }
 
 
+function boundedNumber(
+  value: unknown,
+  defaultValue: number,
+  max: number,
+  name: string,
+): number {
+
+  if (value === undefined || value === null) {
+    return defaultValue;
+  }
+
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > max) {
+    throw new Error(`${name} must be an integer between 1 and ${max}`);
+  }
+
+  return value;
+}
+
+
+function pageItems(value: unknown): Array<Record<string, unknown>> {
+
+  if (Array.isArray(value)) {
+    return value as Array<Record<string, unknown>>;
+  }
+
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    Array.isArray((value as { items?: unknown }).items)
+  ) {
+    return (value as { items: Array<Record<string, unknown>> }).items;
+  }
+
+  return [];
+}
+
+
+function nextCursor(value: unknown): string | null {
+
+  if (value !== null && typeof value === "object" && "nextCursor" in value) {
+    const cursor = (value as { nextCursor?: unknown }).nextCursor;
+    return typeof cursor === "string" ? cursor : null;
+  }
+
+  return null;
+}
+
+
+function compactTask(task: Record<string, unknown>): Record<string, unknown> {
+
+  return {
+    id: task.id,
+    title: task.title,
+    status: task.status,
+    priority: task.priority,
+    phaseId: task.phaseId,
+    assigneeId: task.assigneeId,
+    dueDate: task.dueDate,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  };
+}
+
+
+function compactMemory(entry: Record<string, unknown>, compact: boolean): Record<string, unknown> {
+
+  if (!compact) {
+    return entry;
+  }
+
+  return {
+    id: entry.id,
+    type: entry.type,
+    title: entry.title,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+
+function parseSummaryStatuses(value: unknown): string[] {
+
+  if (value === undefined) {
+    return [...OPEN_TASK_STATUSES];
+  }
+
+  if (!Array.isArray(value)) {
+    throw new Error("statuses must be an array of task status strings");
+  }
+
+  if (value.length === 0) {
+    throw new Error("statuses must contain at least one task status");
+  }
+
+  const statuses: string[] = [];
+
+  for (const item of value) {
+
+    if (typeof item !== "string") {
+      throw new Error("statuses must contain only task status strings");
+    }
+
+    if (!(TASK_STATUSES as readonly string[]).includes(item)) {
+      throw new Error(`statuses contains invalid task status '${item}'`);
+    }
+
+    if (!statuses.includes(item)) {
+      statuses.push(item);
+    }
+  }
+
+  return statuses;
+}
+
+
+function responseByteSize(response: { content: { type: "text"; text: string }[]; isError?: true }): number {
+
+  return Buffer.byteLength(JSON.stringify(response), "utf8");
+}
+
+
+function logToolCall(
+  name: string,
+  durationMs: number,
+  response: { content: { type: "text"; text: string }[]; isError?: true },
+): void {
+
+  console.error(JSON.stringify({
+    event: "mcp.tool_call",
+    tool: name,
+    responseBytes: responseByteSize(response),
+    durationMs,
+    success: response.isError !== true,
+  }));
+}
+
+
 export async function handleToolCall(
   client: CoreApiClient,
   name: string,
   args: Record<string, unknown>,
   allowedScopes: string[],
   callerUserId?: string,
+  allowedToolNames: Set<string> = getToolNameSet(),
 ): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> {
+
+  const startedAt = Date.now();
+  let response: { content: { type: "text"; text: string }[]; isError?: true };
+
+  if (!allowedToolNames.has(name)) {
+    response = errorResponse(`Tool '${name}' is not available in MCP_TOOL_PROFILE='${ACTIVE_TOOL_PROFILE}'`);
+    logToolCall(name, Date.now() - startedAt, response);
+    return response;
+  }
 
   const scopeError = checkScope(name, allowedScopes);
 
   if (scopeError) {
-    return errorResponse(scopeError);
+    response = errorResponse(scopeError);
+    logToolCall(name, Date.now() - startedAt, response);
+    return response;
   }
 
-  switch (name) {
+  try {
+    response = await (async (): Promise<{ content: { type: "text"; text: string }[]; isError?: true }> => {
+      switch (name) {
 
     case "initial_instructions": {
       return jsonResponse({
-        instruction_for_agent:
-          "Call this tool once at the start of every session. It defines the RoadBoard 2.0 MCP operational protocol.",
+        instruction_for_agent: "RoadBoard keeps project execution state, tasks, phases, decisions, memory, handoffs, and architecture context for human/AI work.",
         system: {
           name: "RoadBoard 2.0",
-          description:
-            "Multi-project execution, memory, and collaboration platform for humans and AI agents.",
-          transport: "MCP (stdio or HTTP StreamableHTTP)",
-        },
-        tools: {
-          project_management: [
-            {
-              name: "create_project",
-              purpose: "Bootstrap a new project in RoadBoard. If the user has not specified the owner team, call list_teams first and ASK the user which team to use.",
-              when: "When onboarding a new codebase or work stream that has no RoadBoard project yet.",
-              required_args: ["name", "slug"],
-              optional_args: ["ownerTeamId", "ownerTeamSlug", "description", "status"],
-            },
-          ],
-          read: [
-            {
-              name: "list_projects",
-              purpose: "Discover all projects accessible with the current token.",
-              when: "At session start or when switching project context.",
-              required_args: [],
-              optional_args: ["status"],
-            },
-            {
-              name: "list_teams",
-              purpose: "List teams the current user belongs to (id, slug, role). Use before create_project to let the user pick an owner team.",
-              when: "Before create_project when the owner team has not been specified by the user.",
-              required_args: [],
-              optional_args: [],
-            },
-            {
-              name: "get_project",
-              purpose: "Get full project details including phases.",
-              when: "When you need structured project metadata.",
-              required_args: ["projectId"],
-              optional_args: [],
-            },
-            {
-              name: "list_active_tasks",
-              purpose:
-                "List tasks for a project. On large projects, the full payload may exceed MCP token limits — pass compact=true to drop verbose fields and limit/cursor for cursor-based pagination.",
-              when: "When browsing or searching for tasks. Default to compact=true unless you specifically need descriptions.",
-              required_args: ["projectId"],
-              optional_args: ["status", "limit", "cursor", "compact", "fields"],
-            },
-            {
-              name: "get_project_memory",
-              purpose: "Retrieve memory entries (decisions, handoffs, notes) for a project.",
-              when: "When you need historical context or past decisions.",
-              required_args: ["projectId"],
-              optional_args: ["type"],
-            },
-          ],
-          context: [
-            {
-              name: "prepare_project_summary",
-              purpose:
-                "Generate a full onboarding snapshot: project details, task counts by status, open tasks, memory entries.",
-              when: "Use at the start of work on a project to load its full context in one call.",
-              required_args: ["projectId"],
-              optional_args: [],
-            },
-            {
-              name: "prepare_task_context",
-              purpose:
-                "Assemble all context for a specific task: project info, the task itself, sibling tasks in the same phase, and recent memory.",
-              when: "Before starting work on a specific task.",
-              required_args: ["projectId", "taskId"],
-              optional_args: [],
-            },
-          ],
-          write: [
-            {
-              name: "create_task",
-              purpose: "Create a new task in a project.",
-              when: "Before starting any unit of work — always open a task first.",
-              required_args: ["projectId", "title"],
-              optional_args: ["phaseId", "description", "priority", "assigneeId", "dueDate"],
-            },
-            {
-              name: "update_task",
-              purpose: "Update task fields: title, description, priority, phase, assignee, due date.",
-              when: "When task details change during execution (scope change, reassignment, deadline update).",
-              required_args: ["taskId"],
-              optional_args: ["title", "description", "phaseId", "priority", "assigneeId", "dueDate"],
-            },
-            {
-              name: "update_task_status",
-              purpose: "Update the status of a task. Provide completionReport when marking as done.",
-              when: "As work progresses and on completion.",
-              required_args: ["taskId", "status"],
-              optional_args: ["completionReport"],
-            },
-            {
-              name: "delete_task",
-              purpose: "Permanently delete a task. Irreversible.",
-              when: "Only when the task was created in error or is obsolete. Prefer update_task_status with status='cancelled' to preserve history.",
-              required_args: ["taskId"],
-              optional_args: [],
-            },
-            {
-              name: "create_phase",
-              purpose: "Create a new roadmap phase in a project.",
-              when: "When planning a new milestone or sprint that groups related tasks.",
-              required_args: ["projectId", "title"],
-              optional_args: ["description", "decisionId", "orderIndex", "status", "startDate", "endDate"],
-            },
-            {
-              name: "update_phase",
-              purpose: "Update phase fields: title, status, dates, linked decision.",
-              when: "When a phase progresses, is blocked, or its timeline changes.",
-              required_args: ["phaseId"],
-              optional_args: ["title", "description", "decisionId", "orderIndex", "status", "startDate", "endDate"],
-            },
-            {
-              name: "create_memory_entry",
-              purpose: "Store a decision, note, or context entry for future sessions.",
-              when: "After any meaningful decision, architectural choice, or discovery.",
-              required_args: ["projectId", "type", "title"],
-              optional_args: ["body"],
-            },
-            {
-              name: "create_handoff",
-              purpose: "Create a structured handoff memory entry summarizing the session and next steps.",
-              when: "At the END of every session, before disconnecting.",
-              required_args: ["projectId", "summary"],
-              optional_args: ["next_steps"],
-            },
-            {
-              name: "create_decision",
-              purpose: "Record an architectural or project decision with rationale.",
-              when: "After any architectural choice, technology selection, or significant design decision.",
-              required_args: ["projectId", "title", "summary"],
-              optional_args: ["rationale", "impactLevel"],
-            },
-            {
-              name: "update_decision",
-              purpose: "Update a decision: record outcome, change status, mark as resolved.",
-              when: "When a decision is accepted/rejected, its outcome is known, or it is superseded.",
-              required_args: ["decisionId"],
-              optional_args: ["title", "summary", "rationale", "outcome", "status", "impactLevel", "resolvedAt"],
-            },
-          ],
-          decisions: [
-            {
-              name: "list_recent_decisions",
-              purpose: "Retrieve recorded decisions for a project.",
-              when: "When onboarding on a project or before making a new decision to avoid duplication.",
-              required_args: ["projectId"],
-              optional_args: ["status"],
-            },
-          ],
-          changelog: [
-            {
-              name: "get_project_changelog",
-              purpose: "Structured agent-readable changelog: task summary, active roadmap phases, decisions, memory, recent audit events. Fastest way to onboard on what changed recently.",
-              when: "At session start as an alternative to prepare_project_summary when you need audit trail context too.",
-              required_args: ["projectId"],
-              optional_args: ["auditLimit"],
-            },
-          ],
-          memory: [
-            {
-              name: "search_memory",
-              purpose: "Full-text search over memory entries (title + body).",
-              when: "When looking for a specific past decision, note, or context by keyword.",
-              required_args: ["projectId", "q"],
-              optional_args: [],
-            },
-          ],
-          architecture: [
-            {
-              name: "get_architecture_map",
-              purpose: "Retrieve the architecture graph for a project: nodes (apps, packages, modules) and edges (depends_on, imports, etc.) at overview or module level.",
-              when: "When working on CodeFlow tasks, assessing change impact, or understanding the codebase structure before making architectural decisions.",
-              required_args: ["projectId"],
-              optional_args: ["level"],
-            },
-            {
-              name: "get_node_context",
-              purpose: "Get full context for a specific architecture node: annotations, linked Tasks, Decisions, Memory entries, and impacted-by analysis.",
-              when: "When investigating a specific component, before modifying a node, or to understand what RB entities are linked to it.",
-              required_args: ["projectId", "nodeId"],
-              optional_args: [],
-            },
-            {
-              name: "link_task_to_node",
-              purpose: "Tie a task to the ArchitectureNode(s) it will touch. Populates the task↔node graph so that subsequent prepare_task_context calls return richer execution context.",
-              when: "IMMEDIATELY after create_task, whenever the task clearly modifies a known workspace/module. Check get_architecture_map first to find the matching nodeId. If multiple nodes are involved, call link_task_to_node once per node.",
-              required_args: ["projectId", "taskId", "nodeId"],
-              optional_args: ["linkType", "note"],
-            },
-            {
-              name: "ingest_architecture",
-              purpose: "One-shot orchestrator for agent-driven repository onboarding (B.2). The agent scans the repo locally, builds a manifest (repository + nodes + edges + optional annotations), and sends it as a single tool call. Use replaceExisting=true to re-scan idempotently.",
-              when: "At project onboarding when no architecture graph exists yet, or when re-scanning a repo after structural changes.",
-              required_args: ["projectId", "repository", "nodes"],
-              optional_args: ["replaceExisting", "edges"],
-            },
-          ],
+          toolProfile: ACTIVE_TOOL_PROFILE,
+          defaultToolProfile: DEFAULT_TOOL_PROFILE,
+          profileEnv: "MCP_TOOL_PROFILE",
         },
         recommended_workflow: [
-          {
-            step: 0,
-            action: "FIRST-TIME ONBOARDING ONLY — skip if the project already has phases/tasks. When create_project has just been called for a brand-new project that maps a real codebase, you MUST bootstrap it with exactly three initial tasks under a 'Discovery & Baseline' phase (create_phase with status=in_progress). The three tasks, each created via create_task with priority=high: (a) 'Discovery del progetto' — explore the repo, identify stack/architecture/domain; (b) 'Baseline del prodotto' — write a create_memory_entry of type=architecture capturing current state, components, entrypoints, external deps; (c) 'Caricare Atlas' — run ingest_architecture with the manifest extracted during discovery (repository + nodes + edges). Never skip these three tasks — they are the contract of a correct onboarding. Only after they exist, proceed with the rest of the workflow.",
-          },
-          {
-            step: 1,
-            action: "Call get_project_changelog(projectId) or prepare_project_summary(projectId) to load full project context including active roadmap phases.",
-          },
-          {
-            step: 2,
-            action: "If working on a specific task, call prepare_task_context(projectId, taskId).",
-          },
-          {
-            step: 3,
-            action: "When planning any activity: (a) call list_phases(projectId) to discover existing phases; (b) if the work fits an existing phase, create the task with that phaseId; (c) if no suitable phase exists, call create_phase first, then create_task with the new phaseId. Never create a task without a phaseId. Never create a duplicate phase if one already covers the work.",
-          },
-          {
-            step: 4,
-            action: "IMMEDIATELY after create_task: call get_architecture_map(projectId) (if you haven't already) and then call link_task_to_node for every ArchitectureNode the task will touch. This is mandatory for any task that modifies code — it populates the graph so later sessions can reconstruct the execution context. Skip only if the task is purely meta (e.g. renaming a project) and touches no code.",
-          },
-          {
-            step: 5,
-            action: "If the task involves broader architecture concerns, also call get_node_context for the touched nodes to read existing annotations and decisions before proposing changes.",
-          },
-          {
-            step: 6,
-            action: "Update task status as work progresses via update_task_status.",
-          },
-          {
-            step: 7,
-            action: "Store important decisions or discoveries with create_memory_entry or create_decision.",
-          },
-          {
-            step: 8,
-            action: "At session end, call create_handoff to preserve context for the next agent or session.",
-          },
+          "If projectId is unknown, call list_projects.",
+          "At project start, call get_project_changelog or prepare_project_summary with compact=true and explicit limits.",
+          "For task work, call prepare_task_context, update status as work progresses, persist material findings, and create_handoff at session end.",
+          "For planning, inspect list_phases first, reuse a matching phase, and avoid duplicate phases.",
         ],
         operating_rules: [
-          "Always call initial_instructions once at session start.",
-          "On first-time project onboarding (right after create_project, when the project has no phases yet), you MUST create the 'Discovery & Baseline' phase and its three mandatory tasks (Discovery del progetto, Baseline del prodotto, Caricare Atlas) before doing anything else. Proposing just an empty phase is insufficient — the three tasks are the onboarding contract.",
-          "The 'Caricare Atlas' task is not optional: complete it by calling ingest_architecture with a manifest (repository + nodes + edges) derived from the local repo scan. Atlas MUST NOT remain empty after onboarding.",
-          "Always open or identify a task before starting work. Every task MUST have a phaseId.",
-          "When planning any activity: call list_phases first, assign the task to an existing phase if one fits, otherwise create a new phase first. Never skip phase assignment.",
-          "Right after create_task, if the task modifies code, call link_task_to_node for EVERY ArchitectureNode the task touches. This is not optional — it is how Roadboard builds the graph that powers future context retrieval. If the architecture graph is empty, first run ingest_architecture or create_architecture_node.",
-          "Do not report completion without updating the task status.",
-          "Use create_memory_entry to persist architectural decisions and key findings.",
-          "Use create_decision for any architectural choice, technology selection, or significant design decision.",
-          "Always call create_handoff at the end of every session.",
-          "Prefer get_project_changelog over multiple individual reads for onboarding — it includes roadmap phases, decisions, memory, and audit in one call.",
-          "If a projectId is unknown, call list_projects first.",
-          "For CodeFlow or architecture tasks, always call get_architecture_map before proposing changes.",
-          "Use search_memory before creating a new memory entry to avoid duplicates.",
+          "Tool schemas are authoritative for arguments; this response intentionally does not repeat the catalog.",
+          "Use compact=true, limit, and cursor for list_active_tasks and aggregate helpers.",
+          "Aggregated context responses may be truncated; inspect counts/truncation metadata before assuming completeness.",
+          "A tool omitted by the active profile is unavailable even if its name is known.",
         ],
       });
     }
@@ -1467,9 +1497,13 @@ export async function handleToolCall(
     }
 
     case "list_active_tasks": {
+      const limit = args.limit === undefined
+        ? undefined
+        : boundedNumber(args.limit, 50, 200, "limit");
+
       const result = await client.listTasks(args.projectId as string, {
         status: args.status as string | undefined,
-        limit: args.limit as number | undefined,
+        limit,
         cursor: args.cursor as string | undefined,
         compact: args.compact as boolean | undefined,
         fields: args.fields as string[] | undefined,
@@ -1612,24 +1646,30 @@ export async function handleToolCall(
       const projectId = args.projectId as string;
       const taskId = args.taskId as string;
 
-      const [project, tasks, memory, decisions, entityLinks] = await Promise.all([
+      const [project, taskRaw, memory, decisions, entityLinks] = await Promise.all([
         client.getProject(projectId),
-        client.listTasks(projectId),
-        client.listMemory(projectId),
-        client.listDecisions(projectId).catch(() => []),
+        client.getTask(taskId),
+        client.listMemory(projectId, undefined, { limit: 10 }),
+        client.listDecisions(projectId, undefined, { limit: 10 }).catch(() => []),
         client.listEntityArchitectureLinks(projectId, 'task', taskId).catch(() => ({ links: [], nodes: [] })),
       ]);
 
-      const taskList = tasks as Array<Record<string, unknown>>;
-      const task = taskList.find((t) => t.id === taskId);
+      const task = taskRaw as Record<string, unknown>;
 
-      if (!task) {
+      if (task.id !== taskId) {
         return errorResponse(`Task ${taskId} not found in project ${projectId}`);
       }
 
-      const relatedTasks = taskList.filter(
-        (t) => t.id !== taskId && t.phaseId === task.phaseId,
-      );
+      const relatedPage = task.phaseId
+        ? await client.listTasks(projectId, {
+            phaseId: task.phaseId as string,
+            limit: 20,
+            compact: true,
+          })
+        : { items: [], nextCursor: null };
+      const relatedTasks = pageItems(relatedPage)
+        .filter((t) => t.id !== taskId)
+        .map(compactTask);
 
       // Architecture nodes linkati al task
       const graphPayload = entityLinks as { links?: unknown[]; nodes?: unknown[] };
@@ -1642,7 +1682,7 @@ export async function handleToolCall(
       for (const l of directLinks as Array<{ entityType?: string; entityId?: string }>) {
         if (l.entityType === 'decision' && l.entityId) linkedDecisionIds.add(l.entityId);
       }
-      const decisionList = decisions as Array<Record<string, unknown>>;
+      const decisionList = pageItems(decisions);
       const phaseId = task.phaseId as string | null | undefined;
       const linkedDecisions = decisionList.filter((d) => linkedDecisionIds.has(d.id as string));
       // Phase-level decision (Phase.decisionId) — resolver opzionale se phase include decisionId
@@ -1650,7 +1690,7 @@ export async function handleToolCall(
 
       // Memory targeted: filtra per tipi rilevanti ad esecuzione task
       const relevantTypes = new Set(['architecture', 'decision', 'issue', 'learning', 'done']);
-      const memoryList = memory as Array<Record<string, unknown>>;
+      const memoryList = pageItems(memory);
       const relatedMemory = memoryList.filter((m) => relevantTypes.has(m.type as string)).slice(0, 10);
 
       return jsonResponse({
@@ -1664,31 +1704,86 @@ export async function handleToolCall(
         linked_decisions: linkedDecisions,
         related_memory: relatedMemory,
         task_phase_id: phaseId,
+        truncation: {
+          related_tasks: nextCursor(relatedPage) !== null,
+          memory: nextCursor(memory) !== null,
+          decisions: nextCursor(decisions) !== null,
+        },
       });
     }
 
     case "prepare_project_summary": {
       const projectId = args.projectId as string;
+      const taskLimit = boundedNumber(
+        args.taskLimit,
+        DEFAULT_SUMMARY_TASK_LIMIT,
+        MAX_AGGREGATE_LIMIT,
+        "taskLimit",
+      );
+      const memoryLimit = boundedNumber(
+        args.memoryLimit,
+        DEFAULT_SUMMARY_MEMORY_LIMIT,
+        MAX_AGGREGATE_LIMIT,
+        "memoryLimit",
+      );
+      const compact = args.compact !== false;
+      const statuses = parseSummaryStatuses(args.statuses);
 
-      const [project, tasks, memory] = await Promise.all([
+      const [project, memoryPage, memoryTotal, ...taskCounts] = await Promise.all([
         client.getProject(projectId),
-        client.listTasks(projectId),
-        client.listMemory(projectId),
+        client.listMemory(projectId, undefined, { limit: memoryLimit }),
+        client.countMemory(projectId),
+        ...TASK_STATUSES.map((status) => client.countTasks(projectId, status)),
       ]);
 
-      const taskList = tasks as Array<Record<string, unknown>>;
-
-      const byStatus = taskList.reduce<Record<string, number>>((acc, t) => {
-        const s = t.status as string;
-        acc[s] = (acc[s] ?? 0) + 1;
+      const taskPage = await client.listTasks(projectId, {
+        statuses,
+        limit: taskLimit,
+        cursor: args.taskCursor as string | undefined,
+        compact,
+      });
+      const openTasks = pageItems(taskPage);
+      const memoryItems = pageItems(memoryPage).map((entry) => compactMemory(entry, compact));
+      const byStatus = TASK_STATUSES.reduce<Record<string, number>>((acc, status, index) => {
+        acc[status] = taskCounts[index] ?? 0;
         return acc;
       }, {});
+      const totalTasks = Object.values(byStatus).reduce((sum, count) => sum + count, 0);
+      const openTaskTotal = statuses.reduce((sum, status) => sum + (byStatus[status] ?? 0), 0);
+      const taskNextCursor = nextCursor(taskPage);
+      const memoryNextCursor = nextCursor(memoryPage);
 
       return jsonResponse({
         project,
-        task_summary: { total: taskList.length, by_status: byStatus },
-        open_tasks: taskList.filter((t) => t.status !== "done"),
-        memory,
+        task_summary: {
+          total: totalTasks,
+          by_status: byStatus,
+          returned_open_tasks: openTasks.length,
+          open_task_total: openTaskTotal,
+        },
+        open_tasks: compact ? openTasks.map(compactTask) : openTasks,
+        memory: memoryItems,
+        collection_metadata: {
+          open_tasks: {
+            total: openTaskTotal,
+            returned: openTasks.length,
+            nextCursor: taskNextCursor,
+            statuses,
+          },
+          memory: {
+            total: memoryTotal,
+            returned: memoryItems.length,
+            nextCursor: memoryNextCursor,
+          },
+        },
+        truncation: {
+          open_tasks: openTasks.length < openTaskTotal || taskNextCursor !== null,
+          memory: memoryItems.length < memoryTotal || memoryNextCursor !== null,
+          taskLimit,
+          memoryLimit,
+          compact,
+          statuses,
+        },
       });
     }
 
@@ -1764,34 +1859,86 @@ export async function handleToolCall(
 
     case "get_project_changelog": {
       const projectId = args.projectId as string;
-      const auditLimit = (args.auditLimit as number | undefined) ?? 15;
+      const auditLimit = boundedNumber(args.auditLimit, DEFAULT_CHANGELOG_AUDIT_LIMIT, MAX_AGGREGATE_LIMIT, "auditLimit");
+      const memoryLimit = boundedNumber(args.memoryLimit, DEFAULT_CHANGELOG_MEMORY_LIMIT, MAX_AGGREGATE_LIMIT, "memoryLimit");
+      const decisionLimit = boundedNumber(args.decisionLimit, DEFAULT_CHANGELOG_DECISION_LIMIT, MAX_AGGREGATE_LIMIT, "decisionLimit");
+      const urgentTaskLimit = boundedNumber(args.urgentTaskLimit, DEFAULT_CHANGELOG_URGENT_TASK_LIMIT, MAX_CHANGELOG_URGENT_TASK_LIMIT, "urgentTaskLimit");
+      const phaseLimit = boundedNumber(args.phaseLimit, DEFAULT_CHANGELOG_PHASE_LIMIT, MAX_AGGREGATE_LIMIT, "phaseLimit");
 
-      const [project, dashboard, decisions, memory, auditPage] = await Promise.all([
+      const [project, dashboard, phasesPage, openDecisionsPage, recentDecisionsPage, memoryPage, memoryTotal, auditPage] = await Promise.all([
         client.getProject(projectId),
         client.getDashboard(projectId),
-        client.listDecisions(projectId),
-        client.listMemory(projectId),
+        client.listPhasesPage(projectId, { status: "in_progress", limit: phaseLimit }),
+        client.listDecisions(projectId, "open", { limit: decisionLimit }),
+        client.listDecisions(projectId, undefined, { limit: decisionLimit }),
+        client.listMemory(projectId, undefined, { limit: memoryLimit }),
+        client.countMemory(projectId),
         client.getAuditEvents(projectId, auditLimit),
       ]);
 
       const snap = dashboard as Record<string, unknown>;
-      const memoryList = memory as Array<Record<string, unknown>>;
-      const decisionList = decisions as Array<Record<string, unknown>>;
       const audit = auditPage as { events: Array<Record<string, unknown>>; total: number };
-
-      const recentMemory = memoryList.slice(0, 10);
+      const urgentSource = Array.isArray(snap.urgentTasks) ? snap.urgentTasks as Array<Record<string, unknown>> : [];
+      const urgentTasksTotal = typeof snap.urgentTasksTotal === "number"
+        ? snap.urgentTasksTotal
+        : urgentSource.length;
+      const urgentTasks = urgentSource.slice(0, urgentTaskLimit).map(compactTask);
+      const activePhases = pageItems(phasesPage);
+      const openDecisions = pageItems(openDecisionsPage);
+      const recentDecisions = pageItems(recentDecisionsPage);
+      const recentMemory = pageItems(memoryPage).map((entry) => compactMemory(entry, true));
 
       return jsonResponse({
         generated_at: new Date().toISOString(),
         project,
         task_summary: snap.tasks,
-        active_phases: snap.activePhases,
-        urgent_tasks: snap.urgentTasks,
-        open_decisions: decisionList.filter((d) => d.status === "open"),
-        recent_decisions: decisionList.slice(0, 5),
+        active_phases: activePhases,
+        urgent_tasks: urgentTasks,
+        open_decisions: openDecisions,
+        recent_decisions: recentDecisions,
         recent_memory: recentMemory,
         recent_activity: audit.events,
         total_audit_events: audit.total,
+        collection_metadata: {
+          active_phases: {
+            total: null,
+            returned: activePhases.length,
+            nextCursor: nextCursor(phasesPage),
+          },
+          urgent_tasks: {
+            total: urgentTasksTotal,
+            returned: urgentTasks.length,
+            nextCursor: null,
+          },
+          open_decisions: {
+            total: null,
+            returned: openDecisions.length,
+            nextCursor: nextCursor(openDecisionsPage),
+          },
+          recent_decisions: {
+            total: null,
+            returned: recentDecisions.length,
+            nextCursor: nextCursor(recentDecisionsPage),
+          },
+          recent_memory: {
+            total: memoryTotal,
+            returned: recentMemory.length,
+            nextCursor: nextCursor(memoryPage),
+          },
+          recent_activity: {
+            total: audit.total,
+            returned: audit.events.length,
+            nextCursor: null,
+          },
+        },
+        truncation: {
+          audit: audit.events.length < audit.total,
+          memory: recentMemory.length < memoryTotal || nextCursor(memoryPage) !== null,
+          decisions: nextCursor(openDecisionsPage) !== null || nextCursor(recentDecisionsPage) !== null,
+          urgent_tasks: urgentTasks.length < urgentTasksTotal,
+          phases: nextCursor(phasesPage) !== null,
+          limits: { auditLimit, memoryLimit, decisionLimit, urgentTaskLimit, phaseLimit },
+        },
       });
     }
 
@@ -2006,11 +2153,24 @@ export async function handleToolCall(
 
     default:
       return errorResponse(`Unknown tool: ${name}`);
+    }
+    })();
+    logToolCall(name, Date.now() - startedAt, response);
+    return response;
+  } catch (err) {
+    response = errorResponse(err instanceof Error ? err.message : String(err));
+    logToolCall(name, Date.now() - startedAt, response);
+    return response;
   }
 }
 
 
-function buildServer(client: CoreApiClient, allowedScopes: string[], callerUserId?: string): Server {
+export function buildServer(
+  client: CoreApiClient,
+  allowedScopes: string[],
+  callerUserId?: string,
+  allowedToolNames: Set<string> = getToolNameSet(),
+): Server {
 
   const server = new Server(
     { name: "roadboard-mcp", version: "0.0.1" },
@@ -2019,7 +2179,8 @@ function buildServer(client: CoreApiClient, allowedScopes: string[], callerUserI
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
 
-    return { tools: TOOLS };
+    const tools = TOOLS.filter((tool) => allowedToolNames.has(tool.name));
+    return { tools };
   });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -2027,7 +2188,14 @@ function buildServer(client: CoreApiClient, allowedScopes: string[], callerUserI
     const { name, arguments: args } = request.params;
 
     try {
-      return await handleToolCall(client, name, (args ?? {}) as Record<string, unknown>, allowedScopes, callerUserId);
+      return await handleToolCall(
+        client,
+        name,
+        (args ?? {}) as Record<string, unknown>,
+        allowedScopes,
+        callerUserId,
+        allowedToolNames,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return errorResponse(message);
@@ -2184,7 +2352,7 @@ async function startStdio(): Promise<void> {
 }
 
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
 
   if (MCP_TRANSPORT === "http") {
     await startHttp();
@@ -2194,7 +2362,9 @@ async function main(): Promise<void> {
 }
 
 
-main().catch((err) => {
-  console.error("MCP service failed to start:", err);
-  process.exit(1);
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((err) => {
+    console.error("MCP service failed to start:", err);
+    process.exit(1);
+  });
+}

@@ -16,6 +16,7 @@ export class DashboardsService {
       recentMemory,
       recentDecisions,
       urgentTasks,
+      urgentTasksTotal,
     ] = await Promise.all([
       this.prisma.task.groupBy({
         by: ['status'],
@@ -49,6 +50,13 @@ export class DashboardsService {
         orderBy: { priority: 'desc' },
         take: 10,
       }),
+      this.prisma.task.count({
+        where: {
+          projectId,
+          status: { in: ['todo', 'in_progress', 'blocked'] },
+          priority: { in: ['high', 'critical'] },
+        },
+      }),
     ]);
 
     const taskSummary: Record<string, number> = {};
@@ -64,6 +72,7 @@ export class DashboardsService {
       recentMemory,
       recentDecisions,
       urgentTasks,
+      urgentTasksTotal,
     };
   }
 
@@ -87,4 +96,3 @@ export class DashboardsService {
 
 
 }
-

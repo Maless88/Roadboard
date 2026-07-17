@@ -1,5 +1,6 @@
 import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
+import { PhaseStatus } from '@roadboard/domain';
 import type { AuthUser } from '../../common/auth-user';
 import { AuditService } from '../audit/audit.service';
 import { CreatePhaseDto } from './create-phase.dto';
@@ -8,6 +9,7 @@ import { UpdatePhaseDto } from './update-phase.dto';
 
 interface FindAllFilters {
   projectId: string;
+  status?: PhaseStatus;
   decisionId?: string;
   updatedSince?: string;
   limit?: number;
@@ -93,6 +95,10 @@ export class PhasesService {
 
     if (filters.decisionId) {
       where.decisionId = filters.decisionId;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
     }
 
     if (filters.updatedSince) {

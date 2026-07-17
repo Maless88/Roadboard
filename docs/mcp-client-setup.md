@@ -5,7 +5,32 @@
 
 This guide shows how to point Claude Code, Zed, VS Code, or Codex CLI at a Roadboard instance so an agent can read project state and onboard a repository via `ingest_architecture`.
 
-The MCP server exposes **50 tools** via Streamable HTTP on port 3005.
+The MCP server exposes tools via Streamable HTTP on port 3005. By default it uses
+`MCP_TOOL_PROFILE=full`, which keeps the full 50-tool catalog for compatibility.
+For lower bootstrap token usage in normal project work, run the service with
+`MCP_TOOL_PROFILE=workflow`; that profile exposes only project, phase, task,
+memory, decision, handoff, and essential context tools. Other valid profiles are
+`atlas` for architecture/CodeFlow tools and `personal` for email, calendar,
+notifications, and scheduling.
+
+Tools outside the active profile do not appear in `tools/list` and cannot be
+called directly by name.
+
+Changing `MCP_TOOL_PROFILE` requires restarting `mcp-service`.
+
+Aggregate helper responses remain backward-compatible: legacy collections such as
+`memory`, `active_phases`, `urgent_tasks`, `open_decisions`, and
+`recent_decisions` are still arrays. They may be bounded and compact; read
+`collection_metadata` for `total`, `returned`, and `nextCursor`, and read
+`truncation` before assuming the returned arrays are complete.
+For `prepare_project_summary.open_tasks`, pass
+`collection_metadata.open_tasks.nextCursor` back as `taskCursor` to continue the
+same globally ordered multi-status task page.
+
+Live MCP integration tests require running `auth-access` and `core-api`; enable
+them with `RB_RUN_LIVE_MCP_INTEGRATION=1 pnpm --filter @roadboard/mcp-service
+test:integration`. Without that env var, the dedicated command still verifies
+test discovery and skips the live cases.
 
 ## 1. Generate an MCP token
 

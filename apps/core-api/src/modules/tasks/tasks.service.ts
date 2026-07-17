@@ -1,4 +1,4 @@
-import { ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaClient } from '@roadboard/database';
 import { TaskStatus } from '@roadboard/domain';
 import type { AuthUser } from '../../common/auth-user';
@@ -12,12 +12,21 @@ interface FindAllFilters {
   projectId: string;
   phaseId?: string;
   status?: TaskStatus;
+  statuses?: TaskStatus[];
   updatedSince?: string;
   take?: number;
   limit?: number;
   cursor?: string;
   compact?: boolean;
   fields?: TaskField[];
+}
+
+
+interface CountFilters {
+  projectId: string;
+  phaseId?: string;
+  status?: TaskStatus;
+  statuses?: TaskStatus[];
 }
 
 
@@ -104,6 +113,8 @@ export class TasksService {
 
   async findAll(filters: FindAllFilters) {
 
+    this.validateStatusFilters(filters);
+
     const where: Record<string, unknown> = { projectId: filters.projectId };
 
     if (filters.phaseId) {
@@ -112,6 +123,8 @@ export class TasksService {
 
     if (filters.status) {
       where.status = filters.status;
+    } else if (filters.statuses && filters.statuses.length > 0) {
+      where.status = { in: filters.statuses };
     }
 
     if (filters.updatedSince) {
@@ -161,12 +174,33 @@ export class TasksService {
   }
 
 
-  async count(filters: { projectId: string; phaseId?: string; status?: TaskStatus }): Promise<number> {
+  async count(filters: CountFilters): Promise<number> {
 
+    this.validateStatusFilters(filters);
     const where: Record<string, unknown> = { projectId: filters.projectId };
     if (filters.phaseId) where.phaseId = filters.phaseId;
-    if (filters.status) where.status = filters.status;
+    if (filters.status) {
+      where.status = filters.status;
+    } else if (filters.statuses && filters.statuses.length > 0) {
+      where.status = { in: filters.statuses };
+    }
     return this.prisma.task.count({ where });
+  }
+
+
+  private validateStatusFilters(filters: { status?: TaskStatus; statuses?: TaskStatus[] }): void {
+
+    if (filters.status && filters.statuses !== undefined) {
+      throw new BadRequestException('Use either status or statuses, not both');
+    }
+
+    if (filters.statuses !== undefined && filters.statuses.length === 0) {
+      throw new BadRequestException('statuses must contain at least one status');
+    }
+
+    if (filters.statuses?.some((status) => !Object.values(TaskStatus).includes(status))) {
+      throw new BadRequestException('statuses contains an invalid task status');
+    }
   }
 
 

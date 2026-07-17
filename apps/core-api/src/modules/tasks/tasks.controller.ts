@@ -45,6 +45,7 @@ export class TasksController {
       projectId: query.projectId,
       phaseId: query.phaseId,
       status: query.status,
+      statuses: query.statuses,
       updatedSince: query.updatedSince,
       take: query.take,
       limit: query.limit,
@@ -63,6 +64,7 @@ export class TasksController {
       projectId: query.projectId,
       phaseId: query.phaseId,
       status: query.status,
+      statuses: query.statuses,
     });
     return { count };
   }

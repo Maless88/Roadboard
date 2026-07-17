@@ -43,6 +43,7 @@ export class PhasesController {
 
     return this.phasesService.findAll({
       projectId: query.projectId,
+      status: query.status,
       decisionId: query.decisionId,
       updatedSince: query.updatedSince,
       limit: query.limit,

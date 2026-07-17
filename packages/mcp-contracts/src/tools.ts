@@ -116,13 +116,17 @@ export const GET_PROJECT_MEMORY_TOOL: McpToolDefinition = {
 
 export const CREATE_TASK_TOOL: McpToolDefinition = {
   name: 'create_task',
-  description: `Create a new task in a project. TITLE NAMING CONVENTION: Title MUST follow the format "Area — description". Examples: "Atlas — Gruppi di dominio (CRUD)", "Memgraph — Estendi mirror a Link", "CodeFlow Stabilization — Fix drift validator false positives", "Workspaces — Invite flow per team condivisi", "UX & Vibe Coding — Empty state per lista task vuota". Avoid legacy codes like CF-XX-YY, [W4-06], audit-01 in the title.`,
+  description: `Create a task in a project phase. If it modifies code, use get_architecture_map then link_task_to_node for each touched ArchitectureNode. Title format: "Area — description"; avoid legacy codes like CF-XX-YY, [W4-06], audit-01.`,
   inputSchema: {
     type: 'object',
     properties: {
       projectId: {
         type: 'string',
         description: 'The project ID',
+      },
+      phaseId: {
+        type: 'string',
+        description: 'The phase ID to assign the task to',
       },
       title: {
         type: 'string',
@@ -205,13 +209,35 @@ export const PREPARE_TASK_CONTEXT_TOOL: McpToolDefinition = {
 
 export const PREPARE_PROJECT_SUMMARY_TOOL: McpToolDefinition = {
   name: 'prepare_project_summary',
-  description: 'Generate a structured project snapshot for agent onboarding: project details, task counts by status, open tasks, and memory entries.',
+  description: 'Generate a bounded project snapshot for agent onboarding: project details, task counts by status, limited compact open tasks, and limited memory entries.',
   inputSchema: {
     type: 'object',
     properties: {
       projectId: {
         type: 'string',
         description: 'The project ID',
+      },
+      taskLimit: {
+        type: 'number',
+        description: 'Max open tasks to return (1-50, default 25).',
+      },
+      memoryLimit: {
+        type: 'number',
+        description: 'Max memory entries to return (1-50, default 10).',
+      },
+      compact: {
+        type: 'boolean',
+        description: 'Return compact task and memory shapes by default. Set false for full returned items.',
+      },
+      taskCursor: {
+        type: 'string',
+        description: 'Cursor from collection_metadata.open_tasks.nextCursor for the next open_tasks page.',
+      },
+      statuses: {
+        type: 'array',
+        uniqueItems: true,
+        items: { type: 'string', enum: ['todo', 'in_progress', 'done', 'blocked', 'cancelled'] },
+        description: 'Task statuses to include in open_tasks. Default: todo, in_progress, blocked.',
       },
     },
     required: ['projectId'],
@@ -300,7 +326,7 @@ export const CREATE_DECISION_TOOL: McpToolDefinition = {
 
 export const GET_PROJECT_CHANGELOG_TOOL: McpToolDefinition = {
   name: 'get_project_changelog',
-  description: 'Generate a structured, agent-readable changelog for a project: task summary, active phases, recent decisions, recent memory entries, and recent audit events.',
+  description: 'Generate a bounded, agent-readable changelog for a project: task summary, active phases, decisions, memory, urgent tasks, and audit events.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -310,7 +336,23 @@ export const GET_PROJECT_CHANGELOG_TOOL: McpToolDefinition = {
       },
       auditLimit: {
         type: 'number',
-        description: 'Number of recent audit events to include (default: 15)',
+        description: 'Number of recent audit events to include (1-50, default: 15)',
+      },
+      memoryLimit: {
+        type: 'number',
+        description: 'Number of recent memory entries to include (1-50, default: 10).',
+      },
+      decisionLimit: {
+        type: 'number',
+        description: 'Number of decisions per section to include (1-50, default: 5).',
+      },
+      urgentTaskLimit: {
+        type: 'number',
+        description: 'Number of urgent tasks to include (1-10, default: 10; dashboard currently pages at 10).',
+      },
+      phaseLimit: {
+        type: 'number',
+        description: 'Number of active/recent phases to include (1-50, default: 10).',
       },
     },
     required: ['projectId'],

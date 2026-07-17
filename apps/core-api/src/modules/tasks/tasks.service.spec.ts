@@ -3,11 +3,17 @@ import { TasksService } from './tasks.service';
 
 function buildService(findManyImpl: (args: Record<string, unknown>) => Promise<unknown>) {
 
-  const prisma = { task: { findMany: vi.fn(findManyImpl) } } as unknown;
+  const prisma = {
+    task: {
+      findMany: vi.fn(findManyImpl),
+      count: vi.fn(async () => 7),
+    },
+  } as unknown;
   const audit = {} as unknown;
   return {
     service: new TasksService(prisma as never, audit as never),
     findMany: (prisma as { task: { findMany: ReturnType<typeof vi.fn> } }).task.findMany,
+    count: (prisma as { task: { count: ReturnType<typeof vi.fn> } }).task.count,
   };
 }
 
@@ -87,6 +93,36 @@ describe('TasksService.findAll', () => {
   });
 
 
+  it('statuses filter uses one global query with stable pagination', async () => {
+    const rows = [
+      { id: 't3', status: 'todo' },
+      { id: 't2', status: 'in_progress' },
+      { id: 't1', status: 'blocked' },
+    ];
+    const { service, findMany } = buildService(async () => rows);
+
+    const result = await service.findAll({
+      projectId: 'p1',
+      statuses: ['todo', 'in_progress', 'blocked'],
+      limit: 2,
+      cursor: 't4',
+      compact: true,
+    });
+
+    expect(findMany).toHaveBeenCalledTimes(1);
+    const args = findMany.mock.calls[0][0] as Record<string, unknown>;
+    expect(args.where).toMatchObject({
+      projectId: 'p1',
+      status: { in: ['todo', 'in_progress', 'blocked'] },
+    });
+    expect(args.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
+    expect(args.cursor).toEqual({ id: 't4' });
+    expect(args.skip).toBe(1);
+    expect(args.take).toBe(3);
+    expect(result).toEqual({ items: [rows[0], rows[1]], nextCursor: 't2' });
+  });
+
+
   it('updatedSince adds gt filter and asc ordering', async () => {
     const { service, findMany } = buildService(async () => []);
 
@@ -98,6 +134,66 @@ describe('TasksService.findAll', () => {
       gt: new Date('2026-01-01T00:00:00.000Z'),
     });
     expect(args.orderBy).toEqual([{ updatedAt: 'asc' }, { id: 'asc' }]);
+  });
+});
+
+
+describe('TasksService.count', () => {
+
+  it('counts with a single status filter', async () => {
+    const { service, count } = buildService(async () => []);
+
+    const result = await service.count({ projectId: 'p1', status: 'todo' });
+
+    expect(result).toBe(7);
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        projectId: 'p1',
+        status: 'todo',
+      },
+    });
+  });
+
+
+  it('counts multiple statuses with one Prisma in filter', async () => {
+    const { service, count } = buildService(async () => []);
+
+    await service.count({ projectId: 'p1', statuses: ['todo', 'blocked'] });
+
+    expect(count).toHaveBeenCalledTimes(1);
+    expect(count).toHaveBeenCalledWith({
+      where: {
+        projectId: 'p1',
+        status: { in: ['todo', 'blocked'] },
+      },
+    });
+  });
+
+
+  it('rejects status combined with statuses', async () => {
+    const { service, count } = buildService(async () => []);
+
+    await expect(service.count({ projectId: 'p1', status: 'todo', statuses: ['blocked'] }))
+      .rejects.toThrow('Use either status or statuses');
+    expect(count).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects empty statuses', async () => {
+    const { service, count } = buildService(async () => []);
+
+    await expect(service.count({ projectId: 'p1', statuses: [] }))
+      .rejects.toThrow('statuses must contain at least one status');
+    expect(count).not.toHaveBeenCalled();
+  });
+
+
+  it('rejects unknown status values before counting', async () => {
+    const { service, count } = buildService(async () => []);
+
+    await expect(service.count({ projectId: 'p1', statuses: ['not-a-status' as never] }))
+      .rejects.toThrow('statuses contains an invalid task status');
+    expect(count).not.toHaveBeenCalled();
   });
 });
 

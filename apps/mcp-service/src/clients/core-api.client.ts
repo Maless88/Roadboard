@@ -82,6 +82,8 @@ export class CoreApiClient {
     projectId: string,
     options: {
       status?: string;
+      statuses?: string[];
+      phaseId?: string;
       limit?: number;
       cursor?: string;
       compact?: boolean;
@@ -92,6 +94,10 @@ export class CoreApiClient {
     const params = new URLSearchParams({ projectId });
 
     if (options.status) params.set("status", options.status);
+    if (options.statuses && options.statuses.length > 0) {
+      params.set("statuses", options.statuses.join(","));
+    }
+    if (options.phaseId) params.set("phaseId", options.phaseId);
     if (options.limit !== undefined) params.set("limit", String(options.limit));
     if (options.cursor) params.set("cursor", options.cursor);
     if (options.compact) params.set("compact", "true");
@@ -113,6 +119,20 @@ export class CoreApiClient {
   }
 
 
+  async getTask(taskId: string): Promise<unknown> {
+
+    const res = await fetch(`${BASE_URL}/tasks/${encodeURIComponent(taskId)}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api getTask failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
+  }
+
+
   async listPhases(projectId: string): Promise<unknown[]> {
 
     const params = new URLSearchParams({ projectId });
@@ -125,6 +145,29 @@ export class CoreApiClient {
     }
 
     return res.json() as Promise<unknown[]>;
+  }
+
+
+  async listPhasesPage(
+    projectId: string,
+    options: { status?: string; limit?: number; cursor?: string } = {},
+  ): Promise<unknown> {
+
+    const params = new URLSearchParams({ projectId });
+
+    if (options.status) params.set("status", options.status);
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
+
+    const res = await fetch(`${BASE_URL}/phases?${params.toString()}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api listPhasesPage failed: ${res.status}`);
+    }
+
+    return res.json() as Promise<unknown>;
   }
 
 
@@ -265,13 +308,19 @@ export class CoreApiClient {
   }
 
 
-  async listMemory(projectId: string, type?: string): Promise<unknown[]> {
+  async listMemory(
+    projectId: string,
+    type?: string,
+    options: { limit?: number; cursor?: string } = {},
+  ): Promise<unknown> {
 
     const params = new URLSearchParams({ projectId });
 
     if (type) {
       params.set("type", type);
     }
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
 
     const res = await fetch(`${BASE_URL}/memory?${params.toString()}`, {
       headers: this.headers(),
@@ -281,7 +330,28 @@ export class CoreApiClient {
       throw new Error(`core-api listMemory failed: ${res.status}`);
     }
 
-    return res.json() as Promise<unknown[]>;
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async countMemory(projectId: string, type?: string): Promise<number> {
+
+    const params = new URLSearchParams({ projectId });
+
+    if (type) {
+      params.set("type", type);
+    }
+
+    const res = await fetch(`${BASE_URL}/memory/count?${params.toString()}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api countMemory failed: ${res.status}`);
+    }
+
+    const data = await res.json() as { count: number };
+    return data.count;
   }
 
 
@@ -307,13 +377,19 @@ export class CoreApiClient {
   }
 
 
-  async listDecisions(projectId: string, status?: string): Promise<unknown[]> {
+  async listDecisions(
+    projectId: string,
+    status?: string,
+    options: { limit?: number; cursor?: string } = {},
+  ): Promise<unknown> {
 
     const params = new URLSearchParams({ projectId });
 
     if (status) {
       params.set("status", status);
     }
+    if (options.limit !== undefined) params.set("limit", String(options.limit));
+    if (options.cursor) params.set("cursor", options.cursor);
 
     const res = await fetch(`${BASE_URL}/decisions?${params.toString()}`, {
       headers: this.headers(),
@@ -323,7 +399,28 @@ export class CoreApiClient {
       throw new Error(`core-api listDecisions failed: ${res.status}`);
     }
 
-    return res.json() as Promise<unknown[]>;
+    return res.json() as Promise<unknown>;
+  }
+
+
+  async countTasks(projectId: string, status?: string): Promise<number> {
+
+    const params = new URLSearchParams({ projectId });
+
+    if (status) {
+      params.set("status", status);
+    }
+
+    const res = await fetch(`${BASE_URL}/tasks/count?${params.toString()}`, {
+      headers: this.headers(),
+    });
+
+    if (!res.ok) {
+      throw new Error(`core-api countTasks failed: ${res.status}`);
+    }
+
+    const data = await res.json() as { count: number };
+    return data.count;
   }
 
 
