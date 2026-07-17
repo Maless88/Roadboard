@@ -2763,6 +2763,156 @@ output_round: 0
     fs.rmSync(repo, { recursive: true });
   });
 
+  function setupHeadSnapshotRepo(modify: (repo: string) => void): { repo: string; repoTasks: string } {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoRun = path.join(repoTasks, "run");
+    const snapshotDir = path.join(repo, ".agent", "worker-snapshots");
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(snapshotDir, { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "tracked.txt"), "base\n", "utf-8");
+    fs.writeFileSync(path.join(repoRun, "feat-y.md"), RUN_PROMPT, "utf-8");
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(path.join(snapshotDir, "y.json"), JSON.stringify({
+      version: 1,
+      slug: "y",
+      createdAt: new Date().toISOString(),
+      repoRoot: repo,
+      files: {},
+    }), "utf-8");
+    fs.writeFileSync(path.join(snapshotDir, "y.latest"), path.relative(repo, path.join(snapshotDir, "y.json")) + "\n", "utf-8");
+    modify(repo);
+
+    return { repo, repoTasks };
+  }
+
+  it("fails on git ls-tree errors without leaking command output or falling back", () => {
+    const { repo, repoTasks } = setupHeadSnapshotRepo((r) => {
+      fs.writeFileSync(path.join(r, "tracked.txt"), "base\nchange\n", "utf-8");
+    });
+    let reviewCalled = false;
+
+    try {
+      let thrown: unknown;
+
+      try {
+        runReviewOutput("y", {
+          tasksDir: repoTasks,
+          repoRoot: repo,
+          gitHeadReader: (operation, _args, _repoRoot, relPath) => {
+            if (operation === "ls-tree" && relPath === "tracked.txt") {
+              return { status: 2, stdout: Buffer.from("STDOUT_SECRET_MARKER") };
+            }
+
+            return { status: 0, stdout: Buffer.from("") };
+          },
+          reviewFn: () => {
+            reviewCalled = true;
+            throw new Error("fallback used");
+          },
+          logFn: () => undefined,
+        });
+      }
+
+      catch (err) {
+        thrown = err;
+      }
+
+      expect(String(thrown)).toMatch(/git ls-tree failed for path "tracked\.txt"/);
+      expect(String(thrown)).not.toContain("STDOUT_SECRET_MARKER");
+      expect(reviewCalled).toBe(false);
+    }
+
+    finally {
+      fs.rmSync(repo, { recursive: true });
+    }
+  });
+
+  it("fails on git show errors without leaking command output or falling back", () => {
+    const { repo, repoTasks } = setupHeadSnapshotRepo((r) => {
+      fs.writeFileSync(path.join(r, "tracked.txt"), "base\nchange\n", "utf-8");
+    });
+    let reviewCalled = false;
+
+    try {
+      let thrown: unknown;
+
+      try {
+        runReviewOutput("y", {
+          tasksDir: repoTasks,
+          repoRoot: repo,
+          gitHeadReader: (operation, _args, _repoRoot, relPath) => {
+            if (operation === "ls-tree" && relPath === "tracked.txt") {
+              return { status: 0, stdout: Buffer.from(`100644 blob ${"a".repeat(40)}\ttracked.txt\0`) };
+            }
+
+            if (operation === "show" && relPath === "tracked.txt") {
+              return { status: 128, stdout: Buffer.from("SHOW_STDOUT_SECRET_MARKER") };
+            }
+
+            return { status: 0, stdout: Buffer.from("") };
+          },
+          reviewFn: () => {
+            reviewCalled = true;
+            throw new Error("fallback used");
+          },
+          logFn: () => undefined,
+        });
+      }
+
+      catch (err) {
+        thrown = err;
+      }
+
+      expect(String(thrown)).toMatch(/git show failed for path "tracked\.txt"/);
+      expect(String(thrown)).not.toContain("SHOW_STDOUT_SECRET_MARKER");
+      expect(reviewCalled).toBe(false);
+    }
+
+    finally {
+      fs.rmSync(repo, { recursive: true });
+    }
+  });
+
+  it("treats an empty successful git ls-tree result as a missing HEAD path", () => {
+    const { repo, repoTasks } = setupHeadSnapshotRepo((r) => {
+      fs.writeFileSync(path.join(r, "new-file.txt"), "new content\n", "utf-8");
+    });
+    let seenDiff = "";
+
+    try {
+      runReviewOutput("y", {
+        tasksDir: repoTasks,
+        repoRoot: repo,
+        gitHeadReader: (operation, _args, _repoRoot, relPath) => {
+          if (operation === "ls-tree" && relPath === "new-file.txt") {
+            return { status: 0, stdout: Buffer.from("") };
+          }
+
+          throw new Error(`unexpected git ${operation} for ${relPath}`);
+        },
+        reviewFn: (input) => {
+          seenDiff = input.diff;
+          return "approved";
+        },
+        logFn: () => undefined,
+      });
+
+      expect(seenDiff).toContain("new-file.txt");
+      expect(seenDiff).toContain("new content");
+    }
+
+    finally {
+      fs.rmSync(repo, { recursive: true });
+    }
+  });
+
   it("snapshot diff handles delete, rename, spaces, symlink, binary, sensitive redaction, and temp cleanup", () => {
     const repo = makeTempDir();
     const repoTasks = path.join(repo, "tasks");

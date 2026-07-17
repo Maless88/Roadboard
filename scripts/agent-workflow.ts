@@ -2454,6 +2454,20 @@ type SnapshotEntry =
   | { state: "content"; content: string }
   | { state: "redacted"; exists: boolean; hash: string | null; reason: string };
 
+type GitHeadOperation = "ls-tree" | "show";
+
+interface GitHeadResult {
+  status: number | null;
+  stdout: Buffer;
+}
+
+type GitHeadReader = (
+  operation: GitHeadOperation,
+  args: string[],
+  repoRoot: string,
+  relPath: string,
+) => GitHeadResult;
+
 
 function captureWorkerSnapshot(repoRoot: string, slug: string): string {
   const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
@@ -2486,7 +2500,7 @@ function writeWorkerSnapshotPointer(repoRoot: string, slug: string, snapshotPath
 }
 
 
-function computeWorkerDiff(repoRoot: string, slug: string): string | null {
+function computeWorkerDiff(repoRoot: string, slug: string, gitHeadReader: GitHeadReader = readGitHeadEntry): string | null {
   const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
   const pointerPath = path.join(snapshotDir, `${slug}.latest`);
 
@@ -2516,7 +2530,7 @@ function computeWorkerDiff(repoRoot: string, slug: string): string | null {
   for (const relPath of [...new Set([...beforePaths, ...afterPaths])].sort()) {
     const before = beforePaths.has(relPath)
       ? snapshot.files[relPath]
-      : snapshotHeadPath(repoRoot, relPath);
+      : snapshotHeadPath(repoRoot, relPath, gitHeadReader);
     const after = snapshotWorktreePath(repoRoot, relPath);
 
     if (!snapshotEntriesEqual(before, after)) {
@@ -2608,22 +2622,39 @@ function snapshotWorktreePath(repoRoot: string, relPath: string): SnapshotEntry 
 }
 
 
-function snapshotHeadPath(repoRoot: string, relPath: string): SnapshotEntry {
+function readGitHeadEntry(operation: GitHeadOperation, args: string[], repoRoot: string): GitHeadResult {
+  const result = child_process.spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "buffer",
+    maxBuffer: 20 * 1024 * 1024,
+  });
+
+  return {
+    status: result.status,
+    stdout: Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout ?? ""),
+  };
+}
+
+
+function assertGitHeadSuccess(operation: GitHeadOperation, relPath: string, status: number | null): void {
+  if (status !== 0) {
+    throw new Error(`Worker snapshot git ${operation} failed for path "${relPath}".`);
+  }
+}
+
+
+function snapshotHeadPath(
+  repoRoot: string,
+  relPath: string,
+  gitHeadReader: GitHeadReader = readGitHeadEntry,
+): SnapshotEntry {
   if (!isSafeRepoRelativePath(relPath)) {
     return { state: "redacted", exists: false, hash: null, reason: "unsafe-path" };
   }
 
-  const opts = { cwd: repoRoot, encoding: "utf-8" as const, maxBuffer: 20 * 1024 * 1024 };
-  const tree = child_process.spawnSync("git", ["ls-tree", "-z", "HEAD", "--", relPath], {
-    ...opts,
-    encoding: "buffer",
-  });
-
-  if (tree.status !== 0) {
-    return { state: "missing" };
-  }
-
-  const treeOut = Buffer.isBuffer(tree.stdout) ? tree.stdout.toString("utf-8").replace(/\0$/, "") : "";
+  const tree = gitHeadReader("ls-tree", ["ls-tree", "-z", "HEAD", "--", relPath], repoRoot, relPath);
+  assertGitHeadSuccess("ls-tree", relPath, tree.status);
+  const treeOut = tree.stdout.toString("utf-8").replace(/\0$/, "");
 
   if (treeOut === "") {
     return { state: "missing" };
@@ -2639,13 +2670,9 @@ function snapshotHeadPath(repoRoot: string, relPath: string): SnapshotEntry {
     return { state: "redacted", exists: true, hash: null, reason: "symlink" };
   }
 
-  const result = child_process.spawnSync("git", ["show", `HEAD:${relPath}`], { ...opts, encoding: "buffer" });
-
-  if (result.status !== 0) {
-    return { state: "missing" };
-  }
-
-  const buffer = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout ?? "");
+  const result = gitHeadReader("show", ["show", `HEAD:${relPath}`], repoRoot, relPath);
+  assertGitHeadSuccess("show", relPath, result.status);
+  const buffer = result.stdout;
 
   if (isSensitivePath(relPath)) {
     return { state: "redacted", exists: true, hash: hashBuffer(buffer), reason: "sensitive-path" };
@@ -2833,6 +2860,7 @@ export interface ReviewOutputOptions {
     | "changes-requested"
     | { verdict: "approved" | "changes-requested"; notes?: string[] };
   diffFn?: (repoRoot: string) => string;
+  gitHeadReader?: GitHeadReader;
   /**
    * Injectable spawn for the DEFAULT (non-`reviewFn`) path — the process that
    * would normally invoke the real Analyst adapter. Receives (command, args)
@@ -3031,7 +3059,7 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
 
   const diff = options.diffFn
     ? options.diffFn(repoRoot)
-    : computeWorkerDiff(repoRoot, slug) ?? computeGitDiff(repoRoot);
+    : computeWorkerDiff(repoRoot, slug, options.gitHeadReader) ?? computeGitDiff(repoRoot);
   const context = extractScopeAndCriteria(content);
 
   // The injected (test) reviewFn path keeps today's behavior: it returns a
