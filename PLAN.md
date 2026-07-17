@@ -24,7 +24,7 @@
 - [x] LLM Runtime — Adapter nativi OpenAI Anthropic Gemini
 - [x] LLM Runtime — Router ruoli policy e budget
 - [x] LLM Runtime — Diagnostica configurazione utente
-- [ ] LLM Runtime — Integrazione agenti e context pack
+- [x] LLM Runtime — Integrazione agenti e context pack
 - [ ] LLM Runtime — Test matrix e documentazione provider
 
 ## Docs / MCP guide
