@@ -25,7 +25,7 @@
 - [x] LLM Runtime — Router ruoli policy e budget
 - [x] LLM Runtime — Diagnostica configurazione utente
 - [x] LLM Runtime — Integrazione agenti e context pack
-- [ ] LLM Runtime — Test matrix e documentazione provider
+- [x] LLM Runtime — Test matrix e documentazione provider
 
 ## Docs / MCP guide
 
