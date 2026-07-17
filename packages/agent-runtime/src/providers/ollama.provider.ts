@@ -37,52 +37,11 @@ export class OllamaProvider implements ChatProvider {
       throw new ProviderError(`Ollama error ${res.status}: ${body.slice(0, 200)}`, res.status);
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-
-      while (true) {
-
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-
-          const trimmed = line.trim();
-
-          if (!trimmed) continue;
-
-          try {
-            const parsed = JSON.parse(trimmed) as OllamaStreamLine;
-
-            if (parsed.error) {
-              throw new ProviderError(`Ollama error: ${parsed.error}`);
-            }
-
-            if (parsed.message?.content) {
-              yield parsed.message.content;
-            }
-
-            if (parsed.done) return;
-          } catch (err) {
-
-            if (err instanceof ProviderError) throw err;
-
-            continue;
-          }
-        }
-      }
-    } finally {
-
-      reader.releaseLock();
-    }
+    yield* parseNdjsonDeltas(res.body, (chunk: OllamaStreamLine) => ({
+      text: chunk.message?.content,
+      done: chunk.done,
+      error: chunk.error,
+    }));
   }
 
 
@@ -98,5 +57,58 @@ export class OllamaProvider implements ChatProvider {
     if (!res.ok) {
       throw new ProviderError(`Ollama ping failed: ${res.status}`, res.status);
     }
+  }
+}
+
+
+export async function* parseNdjsonDeltas<T>(
+  body: ReadableStream<Uint8Array>,
+  pick: (chunk: T) => { text?: string; done?: boolean; error?: string },
+): AsyncIterable<string> {
+
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+
+    while (true) {
+
+      const { value, done } = await reader.read();
+
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+
+        const trimmed = line.trim();
+
+        if (!trimmed) continue;
+
+        try {
+          const parsed = JSON.parse(trimmed) as T;
+          const { text, done: isDone, error } = pick(parsed);
+
+          if (error) {
+            throw new ProviderError(`Ollama error: ${error}`);
+          }
+
+          if (text) yield text;
+
+          if (isDone) return;
+        } catch (err) {
+
+          if (err instanceof ProviderError) throw err;
+
+          continue;
+        }
+      }
+    }
+  } finally {
+
+    reader.releaseLock();
   }
 }

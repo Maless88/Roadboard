@@ -1,10 +1,10 @@
 import { OpenAIProvider, parseSseDeltas } from './openai.provider';
 import { AnthropicProvider } from './anthropic.provider';
-import { OllamaProvider } from './ollama.provider';
+import { OllamaProvider, parseNdjsonDeltas } from './ollama.provider';
 import type { ChatProvider } from './types';
 
 export * from './types';
-export { OpenAIProvider, AnthropicProvider, OllamaProvider, parseSseDeltas };
+export { OpenAIProvider, AnthropicProvider, OllamaProvider, parseSseDeltas, parseNdjsonDeltas };
 
 
 export type ProviderName = 'openai' | 'anthropic' | 'ollama';

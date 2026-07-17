@@ -20,7 +20,7 @@
 
 - [x] feat-llm-runtime-capability-contract — ADR + contratto capability
 - [x] LLM Runtime — Provider registry e detection
-- [ ] LLM Runtime — Adapter openai-compatible e Ollama baseline
+- [x] LLM Runtime — Adapter openai-compatible e Ollama baseline
 - [ ] LLM Runtime — Adapter nativi OpenAI Anthropic Gemini
 - [ ] LLM Runtime — Router ruoli policy e budget
 - [ ] LLM Runtime — Diagnostica configurazione utente
