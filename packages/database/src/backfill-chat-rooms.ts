@@ -8,7 +8,7 @@
  *
  * Idempotent: skips threads whose agent already has a direct room for that user.
  */
-import { PrismaClient } from "@prisma/client";
+import { ChatMessage, ChatParticipant, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -24,7 +24,7 @@ async function main() {
   });
   const seen = new Set<string>();
   for (const r of directRooms) {
-    const agent = r.participants.find((p) => p.kind === "agent");
+    const agent = r.participants.find((p: ChatParticipant) => p.kind === "agent");
     if (agent) seen.add(`${r.ownerUserId}::${agent.refId}`);
   }
 
@@ -50,7 +50,7 @@ async function main() {
           ],
         },
         messages: {
-          create: t.messages.map((m) => ({
+          create: t.messages.map((m: ChatMessage) => ({
             senderKind: m.role === "user" ? "user" : "agent",
             senderId: m.role === "user" ? t.ownerUserId : t.agentSlug,
             content: m.content,
