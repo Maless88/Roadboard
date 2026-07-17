@@ -50,6 +50,34 @@ describe('listModels', () => {
     expect(models).toEqual(injected);
   });
 
+  it('returns an empty gemini list when no listGeminiModels dependency is injected', async () => {
+    const models = await listModels('gemini');
+
+    expect(models).toEqual([]);
+  });
+
+  it('returns injected gemini models when the dependency is provided', async () => {
+    const injected: LlmModelDescriptor[] = [
+      {
+        id: 'gemini-custom',
+        capabilities: {
+          toolUse: true,
+          structuredOutput: true,
+          vision: true,
+          streaming: true,
+          longContext: true,
+          contextWindowTokens: 1_000_000,
+        },
+        costClass: 'medium',
+        latencyClass: 'interactive',
+      },
+    ];
+
+    const models = await listModels('gemini', { listGeminiModels: () => injected });
+
+    expect(models).toEqual(injected);
+  });
+
   it('returns an empty enterprise list by default, never reusing the OpenAI catalog', async () => {
     const models = await listModels('enterprise');
 
@@ -115,6 +143,37 @@ describe('buildRegistry', () => {
 
     expect(registry.profile).toBe('multi-provider');
     expect(registry.providers.map((p) => p.id).sort()).toEqual(['anthropic', 'openai']);
+  });
+
+  it('registers gemini as a public-cloud provider detected via GEMINI_API_KEY', async () => {
+    const registry = await buildRegistry({ GEMINI_API_KEY: 'gm-test' });
+
+    expect(registry.profile).toBe('single-provider');
+    expect(registry.providers).toHaveLength(1);
+    expect(registry.providers[0]).toMatchObject({ id: 'gemini', privacyClass: 'public-cloud' });
+    expect(registry.providers[0].models).toEqual([]);
+  });
+
+  it('lists gemini models from deps.listGeminiModels when injected', async () => {
+    const injected: LlmModelDescriptor[] = [
+      {
+        id: 'gemini-custom',
+        capabilities: {
+          toolUse: true,
+          structuredOutput: true,
+          vision: true,
+          streaming: true,
+          longContext: true,
+          contextWindowTokens: 1_000_000,
+        },
+        costClass: 'medium',
+        latencyClass: 'interactive',
+      },
+    ];
+
+    const registry = await buildRegistry({ GEMINI_API_KEY: 'gm-test' }, { listGeminiModels: () => injected });
+
+    expect(registry.providers[0].models).toEqual(injected);
   });
 
   it('returns enterprise with a metadata-only RegisteredProvider, no complete/stream/ping', async () => {

@@ -80,10 +80,18 @@ export interface LlmUsage {
 }
 
 
+export interface LlmToolCall {
+  id: string;
+  name: string;
+  arguments: unknown;
+}
+
+
 export interface LlmResponse {
   content: string;
   usage: LlmUsage;
   finishReason: 'stop' | 'tool_call' | 'length' | 'error';
+  toolCalls?: readonly LlmToolCall[];
 }
 
 

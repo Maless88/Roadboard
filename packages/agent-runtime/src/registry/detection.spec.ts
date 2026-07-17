@@ -11,10 +11,17 @@ describe('detectConfig', () => {
       anthropic: false,
       openai: false,
       ollama: false,
+      gemini: false,
       enterprise: false,
       enterpriseBaseUrl: undefined,
       enterpriseApiKey: undefined,
     });
+  });
+
+  it('detects gemini from GEMINI_API_KEY', () => {
+    const detected = detectConfig({ GEMINI_API_KEY: 'gm-test' });
+
+    expect(detected.gemini).toBe(true);
   });
 
   it('detects enterprise from a non-empty OPENAI_BASE_URL without requiring OPENAI_API_KEY', () => {
@@ -63,6 +70,20 @@ describe('classifyProfile', () => {
     const profile = classifyProfile(detectConfig({ ANTHROPIC_API_KEY: 'sk-ant' }));
 
     expect(profile).toBe('single-provider');
+  });
+
+  it('classifies single-provider when only gemini is detected', () => {
+    const profile = classifyProfile(detectConfig({ GEMINI_API_KEY: 'gm-test' }));
+
+    expect(profile).toBe('single-provider');
+  });
+
+  it('counts gemini toward multi-provider', () => {
+    const profile = classifyProfile(
+      detectConfig({ GEMINI_API_KEY: 'gm-test', ANTHROPIC_API_KEY: 'sk-ant' }),
+    );
+
+    expect(profile).toBe('multi-provider');
   });
 
   it('classifies multi-provider when two or more providers are detected', () => {

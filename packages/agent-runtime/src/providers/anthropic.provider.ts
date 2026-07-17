@@ -1,10 +1,28 @@
 import type { ChatMessage, ChatProvider, ChatProviderConfig } from './types';
 import { ProviderError } from './types';
+import { parseSseDeltas } from './openai.provider';
 
 
-interface AnthropicStreamEvent {
+export interface AnthropicStreamEvent {
   type: string;
   delta?: { type?: string; text?: string };
+}
+
+
+/**
+ * Picks the incremental text from an Anthropic Messages SSE event. Only
+ * `content_block_delta` events carry `delta.text`; every other event type
+ * (message_start, content_block_start/stop, message_delta/stop, ping) yields
+ * nothing. Shared between the legacy `AnthropicProvider` and the native
+ * `AnthropicAdapter` so the SSE parsing logic is never duplicated.
+ */
+export function pickAnthropicTextDelta(event: AnthropicStreamEvent): string | undefined {
+
+  if (event.type === 'content_block_delta' && event.delta?.text) {
+    return event.delta.text;
+  }
+
+  return undefined;
 }
 
 
@@ -45,48 +63,7 @@ export class AnthropicProvider implements ChatProvider {
       throw new ProviderError(`Anthropic error ${res.status}: ${body.slice(0, 200)}`, res.status);
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    try {
-
-      while (true) {
-
-        const { value, done } = await reader.read();
-
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-
-          const trimmed = line.trim();
-
-          if (!trimmed.startsWith('data:')) continue;
-
-          const data = trimmed.slice(5).trim();
-
-          if (!data || data === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(data) as AnthropicStreamEvent;
-
-            if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
-              yield parsed.delta.text;
-            }
-          } catch {
-
-            continue;
-          }
-        }
-      }
-    } finally {
-
-      reader.releaseLock();
-    }
+    yield* parseSseDeltas(res.body, pickAnthropicTextDelta);
   }
 
 

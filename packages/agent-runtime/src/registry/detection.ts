@@ -14,6 +14,7 @@ export function detectConfig(env: RegistryEnvInput): DetectedConfig {
     anthropic: Boolean(env.ANTHROPIC_API_KEY),
     openai: Boolean(env.OPENAI_API_KEY),
     ollama: Boolean(env.OLLAMA_BASE_URL),
+    gemini: Boolean(env.GEMINI_API_KEY),
     enterprise: enterpriseBaseUrl !== undefined,
     enterpriseBaseUrl,
     enterpriseApiKey: env.OPENAI_API_KEY,
@@ -33,7 +34,7 @@ export function classifyProfile(detected: DetectedConfig): RuntimeProfile {
     return 'enterprise';
   }
 
-  const detectedCount = [detected.anthropic, detected.openai, detected.ollama].filter(Boolean).length;
+  const detectedCount = [detected.anthropic, detected.openai, detected.ollama, detected.gemini].filter(Boolean).length;
 
   if (detectedCount === 0) {
     return 'offline-limited';
@@ -66,5 +67,6 @@ export function readRegistryEnvFromProcess(): RegistryEnvInput {
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL,
     OLLAMA_BASE_URL: optionalEnv('OLLAMA_BASE_URL', '') || undefined,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   };
 }

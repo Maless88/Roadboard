@@ -100,6 +100,74 @@ describe('OpenAiCompatibleProvider', () => {
       expect(result.finishReason).toBe(expected);
     });
 
+    it('parses tool_calls into toolCalls, decoding the JSON-string arguments', async () => {
+      const provider = new OpenAiCompatibleProvider({ id: 'openai', privacyClass: 'public-cloud' });
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '',
+              tool_calls: [{ id: 'call_1', function: { name: 'get_weather', arguments: '{"city":"Rome"}' } }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+        }), { status: 200 }),
+      ));
+
+      const result = await provider.complete(
+        { messages: [{ role: 'user', content: 'weather?' }] },
+        { model: 'gpt-4o-mini', apiKey: 'sk-test' },
+      );
+
+      expect(result.finishReason).toBe('tool_call');
+      expect(result.toolCalls).toEqual([
+        { id: 'call_1', name: 'get_weather', arguments: { city: 'Rome' } },
+      ]);
+    });
+
+    it('falls back to the raw string when tool-call arguments are not valid JSON', async () => {
+      const provider = new OpenAiCompatibleProvider({ id: 'openai', privacyClass: 'public-cloud' });
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: '',
+              tool_calls: [{ id: 'call_2', function: { name: 'noop', arguments: '{not json' } }],
+            },
+            finish_reason: 'tool_calls',
+          }],
+        }), { status: 200 }),
+      ));
+
+      const result = await provider.complete(
+        { messages: [{ role: 'user', content: 'x' }] },
+        { model: 'gpt-4o-mini', apiKey: 'sk-test' },
+      );
+
+      expect(result.toolCalls).toEqual([
+        { id: 'call_2', name: 'noop', arguments: '{not json' },
+      ]);
+    });
+
+    it('omits toolCalls when the response has none', async () => {
+      const provider = new OpenAiCompatibleProvider({ id: 'openai', privacyClass: 'public-cloud' });
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({
+          choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+        }), { status: 200 }),
+      ));
+
+      const result = await provider.complete(
+        { messages: [{ role: 'user', content: 'hi' }] },
+        { model: 'gpt-4o-mini', apiKey: 'sk-test' },
+      );
+
+      expect(result.toolCalls).toBeUndefined();
+    });
+
     it('throws ProviderError when no API key is configured for the branded endpoint', async () => {
       const provider = new OpenAiCompatibleProvider({ id: 'openai', privacyClass: 'public-cloud' });
 

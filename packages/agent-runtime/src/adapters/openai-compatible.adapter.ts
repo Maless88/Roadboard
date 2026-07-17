@@ -1,4 +1,4 @@
-import type { LlmModelDescriptor, LlmProvider, LlmRequest, LlmResponse, PrivacyClass } from '../capability/contract';
+import type { LlmModelDescriptor, LlmProvider, LlmRequest, LlmResponse, LlmToolCall, PrivacyClass } from '../capability/contract';
 import type { ChatProviderConfig } from '../providers/types';
 import { ProviderError } from '../providers/types';
 import { parseSseDeltas } from '../providers/openai.provider';
@@ -21,15 +21,48 @@ interface OpenAiChatCompletionChunk {
 }
 
 
+interface OpenAiToolCall {
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+
 interface OpenAiChatCompletionResponse {
   choices?: Array<{
-    message?: { content?: string };
+    message?: { content?: string; tool_calls?: OpenAiToolCall[] };
     finish_reason?: string;
   }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
   };
+}
+
+
+function mapToolCalls(toolCalls: OpenAiToolCall[] | undefined): LlmToolCall[] | undefined {
+
+  if (!toolCalls?.length) return undefined;
+
+  return toolCalls.map((call) => {
+
+    const rawArguments = call.function?.arguments ?? '';
+
+    let parsedArguments: unknown = rawArguments;
+
+    try {
+      parsedArguments = JSON.parse(rawArguments);
+    } catch {
+
+      // Malformed tool-call arguments: pass the raw string through rather than throwing.
+      parsedArguments = rawArguments;
+    }
+
+    return {
+      id: call.id ?? '',
+      name: call.function?.name ?? '',
+      arguments: parsedArguments,
+    };
+  });
 }
 
 
@@ -125,6 +158,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
     const data = await res.json() as OpenAiChatCompletionResponse;
     const choice = data.choices?.[0];
+    const toolCalls = mapToolCalls(choice?.message?.tool_calls);
 
     return {
       content: choice?.message?.content ?? '',
@@ -133,6 +167,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         outputTokens: data.usage?.completion_tokens ?? 0,
       },
       finishReason: mapFinishReason(choice?.finish_reason),
+      ...(toolCalls ? { toolCalls } : {}),
     };
   }
 

@@ -22,6 +22,7 @@ const PRIVACY_CLASS_BY_PROVIDER: Record<RegistryProviderId, PrivacyClass> = {
   ollama: 'local',
   openai: 'public-cloud',
   anthropic: 'public-cloud',
+  gemini: 'public-cloud',
   enterprise: 'private-cloud',
 };
 
@@ -49,6 +50,10 @@ export async function listModels(
 
     case 'ollama':
       return deps.listOllamaModels ? await deps.listOllamaModels() : [];
+
+    case 'gemini':
+      // No static Gemini catalog (see model-catalog note); models are injected or empty.
+      return deps.listGeminiModels ? await deps.listGeminiModels() : [];
 
     case 'enterprise':
       return deps.listEnterpriseModels ? await deps.listEnterpriseModels() : [];
@@ -83,6 +88,8 @@ export async function buildRegistry(
   // both would wrongly expose the OpenAI static catalog/public-cloud privacy class for a
   // deployment that may not even be OpenAI.
   if (detected.openai && !detected.enterprise) providerIds.push('openai');
+
+  if (detected.gemini) providerIds.push('gemini');
 
   if (detected.ollama) providerIds.push('ollama');
 

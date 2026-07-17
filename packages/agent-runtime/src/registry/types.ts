@@ -3,7 +3,7 @@ import type { ProviderName } from '../providers';
 
 
 /** Identifier for every provider the registry can detect, including the enterprise slot. */
-export type RegistryProviderId = ProviderName | 'enterprise';
+export type RegistryProviderId = ProviderName | 'enterprise' | 'gemini';
 
 
 /**
@@ -37,6 +37,7 @@ export interface RegistryEnvInput {
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_BASE_URL?: string;
   readonly OLLAMA_BASE_URL?: string;
+  readonly GEMINI_API_KEY?: string;
 }
 
 
@@ -44,6 +45,7 @@ export interface DetectedConfig {
   readonly anthropic: boolean;
   readonly openai: boolean;
   readonly ollama: boolean;
+  readonly gemini: boolean;
   readonly enterprise: boolean;
   readonly enterpriseBaseUrl?: string;
   readonly enterpriseApiKey?: string;
@@ -54,6 +56,7 @@ export interface DetectedConfig {
 export interface RegistryDeps {
   listOllamaModels?: () => Promise<readonly LlmModelDescriptor[]> | readonly LlmModelDescriptor[];
   listEnterpriseModels?: () => Promise<readonly LlmModelDescriptor[]> | readonly LlmModelDescriptor[];
+  listGeminiModels?: () => Promise<readonly LlmModelDescriptor[]> | readonly LlmModelDescriptor[];
 }
 
 
