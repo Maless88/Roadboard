@@ -23,7 +23,7 @@
 - [x] LLM Runtime — Adapter openai-compatible e Ollama baseline
 - [x] LLM Runtime — Adapter nativi OpenAI Anthropic Gemini
 - [x] LLM Runtime — Router ruoli policy e budget
-- [ ] LLM Runtime — Diagnostica configurazione utente
+- [x] LLM Runtime — Diagnostica configurazione utente
 - [ ] LLM Runtime — Integrazione agenti e context pack
 - [ ] LLM Runtime — Test matrix e documentazione provider
 
