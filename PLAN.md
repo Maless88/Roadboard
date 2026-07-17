@@ -22,7 +22,7 @@
 - [x] LLM Runtime — Provider registry e detection
 - [x] LLM Runtime — Adapter openai-compatible e Ollama baseline
 - [x] LLM Runtime — Adapter nativi OpenAI Anthropic Gemini
-- [ ] LLM Runtime — Router ruoli policy e budget
+- [x] LLM Runtime — Router ruoli policy e budget
 - [ ] LLM Runtime — Diagnostica configurazione utente
 - [ ] LLM Runtime — Integrazione agenti e context pack
 - [ ] LLM Runtime — Test matrix e documentazione provider
