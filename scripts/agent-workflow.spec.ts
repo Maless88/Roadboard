@@ -47,6 +47,64 @@ function writeFile(dir: string, name: string, content = "# stub"): string {
   return p;
 }
 
+function latestTelemetryEntry(): Record<string, unknown> {
+  const entries = readTelemetryEntries();
+
+  return entries[entries.length - 1];
+}
+
+
+function readTelemetryEntries(): Array<Record<string, unknown>> {
+  const telemetryPath = path.resolve(__dirname, "..", ".agent", "workflow-telemetry", "processes.jsonl");
+  if (!fs.existsSync(telemetryPath)) {
+    return [];
+  }
+
+  const lines = fs.readFileSync(telemetryPath, "utf-8").trim().split("\n");
+
+  return lines.filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+}
+
+
+function telemetryEntriesAfter(count: number): Array<Record<string, unknown>> {
+  return readTelemetryEntries().slice(count);
+}
+
+const MCP_ENV_KEYS = [
+  "SERENA_BIN",
+  "ROADBOARD_MCP_URL",
+  "ROADBOARD_MCP_TOKEN_ENV_VAR",
+  "GITHUB_MCP_URL",
+  "GITHUB_MCP_TOKEN_ENV_VAR",
+  "PATH",
+] as const;
+
+const originalMcpEnv = Object.fromEntries(
+  MCP_ENV_KEYS.map((key) => [key, process.env[key]]),
+) as Record<(typeof MCP_ENV_KEYS)[number], string | undefined>;
+
+beforeEach(() => {
+  process.env.SERENA_BIN = "/tmp/serena-test-bin";
+  process.env.ROADBOARD_MCP_URL = "http://roadboard.test/mcp";
+  process.env.ROADBOARD_MCP_TOKEN_ENV_VAR = "ROADBOARD_MCP_TOKEN";
+  process.env.GITHUB_MCP_URL = "https://github.test/mcp";
+  process.env.GITHUB_MCP_TOKEN_ENV_VAR = "GITHUB_MCP_TOKEN";
+});
+
+afterEach(() => {
+  for (const key of MCP_ENV_KEYS) {
+    const value = originalMcpEnv[key];
+
+    if (value === undefined) {
+      delete process.env[key];
+    }
+
+    else {
+      process.env[key] = value;
+    }
+  }
+});
+
 // A fully valid, approved prompt under the review-gate model.
 const VALID_PROMPT = `---
 status: approved
@@ -670,6 +728,90 @@ describe("adaptersDryRun", () => {
     expect(result.adapter).toBe("codex");
   });
 
+  it("shows Claude + Serena isolation args with prompt file last", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        claude: {
+          enabled: true,
+          binary: path.join(tmpDir, "claude-worker.sh"),
+          outputDir: tmpDir,
+          mcpServers: ["serena"],
+        },
+      },
+    }), "utf-8");
+    writeFile(todoDir, "feat-claude.md", "# claude");
+
+    const result = adaptersDryRun("claude", "claude", { configPath, tasksDir });
+
+    expect(result.args).toContain("--mcp-config");
+    expect(result.args).toContain("--strict-mcp-config");
+    expect(result.args.at(-1)).toBe(path.join(todoDir, "feat-claude.md"));
+  });
+
+  it("shows Codex + Serena isolation args", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        codex: { enabled: true, binary: "codex", outputDir: tmpDir, mcpServers: ["serena"] },
+      },
+    }), "utf-8");
+    writeFile(todoDir, "feat-codex.md", "# codex");
+
+    const result = adaptersDryRun("codex", "codex", { configPath, tasksDir });
+
+    expect(result.args.slice(0, 6)).toEqual([
+      "exec", "--cd", tmpDir, "--sandbox", "workspace-write", "--skip-git-repo-check",
+    ]);
+    expect(result.args).toContain("--ignore-user-config");
+    expect(result.args.join(" ")).toContain("mcp_servers.serena.command");
+    expect(result.args.at(-1)).toBe(path.join(todoDir, "feat-codex.md"));
+  });
+
+  it("shows an empty MCP profile without Serena, Chrome, or GitHub", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        codex: { enabled: true, binary: "codex", outputDir: tmpDir, mcpServers: [] },
+      },
+    }), "utf-8");
+    writeFile(todoDir, "feat-empty.md", "# empty");
+
+    const result = adaptersDryRun("empty", "codex", { configPath, tasksDir });
+    const joined = result.args.join(" ");
+
+    expect(joined).toContain("--ignore-user-config");
+    expect(joined).not.toContain("serena");
+    expect(joined).not.toContain("chrome-devtools");
+    expect(joined).not.toContain("github");
+  });
+
+  it("rejects an unknown MCP server in adapter dry-run", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        codex: { enabled: true, binary: "codex", outputDir: tmpDir, mcpServers: ["ghost"] },
+      },
+    }), "utf-8");
+    writeFile(todoDir, "feat-ghost.md", "# ghost");
+
+    expect(() => adaptersDryRun("ghost", "codex", { configPath, tasksDir })).toThrow(/Unknown MCP server "ghost"/);
+  });
+
+  it("honors inheritGlobalMcp in adapter dry-run", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        codex: { enabled: true, binary: "codex", outputDir: tmpDir, inheritGlobalMcp: true },
+      },
+    }), "utf-8");
+    writeFile(todoDir, "feat-global.md", "# global");
+
+    const result = adaptersDryRun("global", "codex", { configPath, tasksDir });
+
+    expect(result.args).not.toContain("--ignore-user-config");
+  });
+
   it("does not execute the binary (no side effects)", () => {
     writeFile(todoDir, "feat-noexec.md", "# noexec");
 
@@ -761,6 +903,7 @@ describe("adaptersRun", () => {
     const configPath = path.join(tmpDir, "adapters.json");
     const promptFile = path.join(todoDir, "feat-echo.md");
     writeFile(todoDir, "feat-echo.md", "# echo prompt\n");
+    const telemetryBefore = readTelemetryEntries().length;
 
     fs.writeFileSync(
       configPath,
@@ -779,6 +922,90 @@ describe("adaptersRun", () => {
 
     const output = fs.readFileSync(result.outputPath, "utf-8");
     expect(output).toContain(promptFile);
+    expect(latestTelemetryEntry().role).toBe("adapter-run");
+    expect(telemetryEntriesAfter(telemetryBefore).at(-1)?.contextPackBytes).toBe(0);
+  });
+
+  it("passes Claude + Serena isolation args to adapters run", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    writeFile(todoDir, "feat-claude.md", "# claude prompt\n");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        claude: {
+          enabled: true,
+          binary: path.join(tmpDir, "claude-worker.sh"),
+          outputDir: tmpDir,
+          model: "sonnet",
+          mcpServers: ["serena"],
+        },
+      },
+    }), "utf-8");
+    let seenArgs: string[] = [];
+
+    adaptersRun("claude", "claude", true, {
+      configPath,
+      tasksDir,
+      execFn: (_binary, args) => {
+        seenArgs = args;
+        return "ok";
+      },
+    });
+
+    expect(seenArgs).toContain("--mcp-config");
+    expect(seenArgs).toContain("--strict-mcp-config");
+    expect(seenArgs.at(-1)).toBe(path.join(todoDir, "feat-claude.md"));
+    expect(latestTelemetryEntry().model).toBe("sonnet");
+  });
+
+  it("passes Codex + Serena isolation args to adapters run", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    writeFile(todoDir, "feat-codex.md", "# codex prompt\n");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        codex: { enabled: true, binary: "codex", outputDir: tmpDir, mcpServers: ["serena"] },
+      },
+    }), "utf-8");
+    let seenArgs: string[] = [];
+
+    adaptersRun("codex", "codex", true, {
+      configPath,
+      tasksDir,
+      execFn: (_binary, args) => {
+        seenArgs = args;
+        return "ok";
+      },
+    });
+
+    expect(seenArgs[0]).toBe("exec");
+    expect(seenArgs).toContain("--ignore-user-config");
+    expect(seenArgs.join(" ")).toContain("mcp_servers.serena.command");
+    expect(seenArgs.at(-1)).toBe(path.join(todoDir, "feat-codex.md"));
+  });
+
+  it("records adapter non-zero telemetry without logging error messages", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    writeFile(todoDir, "feat-fail.md", "# fail prompt\n");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: { fail: { enabled: true, binary: "/bin/fail", outputDir: tmpDir } },
+    }), "utf-8");
+
+    expect(() =>
+      adaptersRun("fail", "fail", true, {
+        configPath,
+        tasksDir,
+        execFn: () => {
+          const err = new Error("secret failure") as Error & { status: number };
+          err.status = 7;
+          throw err;
+        },
+      }),
+    ).toThrow("secret failure");
+
+    const entry = latestTelemetryEntry();
+    expect(entry.role).toBe("adapter-run");
+    expect(entry.exitCode).toBe(7);
+    expect(entry.failureKind).toBe("non-zero");
+    expect(JSON.stringify(entry)).not.toContain("secret failure");
   });
 
   it("throws a clear timeout error naming the role and elapsed time when the adapter times out", () => {
@@ -804,6 +1031,7 @@ describe("adaptersRun", () => {
         },
       }),
     ).toThrow(/Adapter "codex" step timed out after 4321ms/);
+    expect(latestTelemetryEntry().failureKind).toBe("timeout");
   });
 });
 
@@ -904,6 +1132,7 @@ describe("runWorker", () => {
       "feat-go.md",
       "---\nstatus: approved\nreview_round: 1\n---\n# go prompt\n",
     );
+    const telemetryBefore = readTelemetryEntries().length;
 
     const result = runWorker("go", "worker", {
       tasksDir,
@@ -918,6 +1147,8 @@ describe("runWorker", () => {
 
     const output = fs.readFileSync(result.outputPath as string, "utf-8");
     expect(output).toContain("feat-go.md");
+    expect(telemetryEntriesAfter(telemetryBefore).at(-1)?.role).toBe("worker");
+    expect(telemetryEntriesAfter(telemetryBefore).at(-1)?.contextPackBytes).toBe(0);
   });
 
   it("moves the approved prompt todo/ → run/ as part of spawning", () => {
@@ -1111,6 +1342,9 @@ describe("runWorker", () => {
         logFn: () => undefined,
       }),
     ).toThrow(/Worker step timed out after 1234ms/);
+    const entry = latestTelemetryEntry();
+    expect(entry.role).toBe("worker");
+    expect(entry.failureKind).toBe("timeout");
   });
 });
 
@@ -1169,6 +1403,22 @@ describe("configInit", () => {
     expect(parsed.roles.architect.flags).toContain("--dangerously-skip-permissions");
   });
 
+  it("starter config includes lightweight MCP profiles per workflow role", () => {
+    const agentDir = path.join(tmpDir, ".agent");
+    const configPath = path.join(agentDir, "workflow-adapters.json");
+
+    configInit({ configPath, agentDir });
+
+    const parsed = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+    expect(parsed.roles.architect.mcpServers).toEqual([]);
+    expect(parsed.roles.analyst.mcpServers).toEqual(["serena", "roadboard"]);
+    expect(parsed.roles.outputAnalyst.mcpServers).toEqual([]);
+    expect(parsed.roles.worker.mcpServers).toEqual(["serena"]);
+    expect(parsed.roles.analyst.mcpServers).not.toContain("chrome-devtools");
+    expect(parsed.roles.analyst.mcpServers).not.toContain("github");
+  });
+
   it("starter config includes a timeouts.agentMs default of 15 minutes", () => {
     const agentDir = path.join(tmpDir, ".agent");
     const configPath = path.join(agentDir, "workflow-adapters.json");
@@ -1179,6 +1429,27 @@ describe("configInit", () => {
     const parsed = JSON.parse(raw);
 
     expect(parsed.timeouts.agentMs).toBe(15 * 60 * 1000);
+  });
+
+  it("starter config includes external MCP registry placeholders", () => {
+    const agentDir = path.join(tmpDir, ".agent");
+    const configPath = path.join(agentDir, "workflow-adapters.json");
+
+    process.env.SERENA_BIN = "/must/not/be/frozen";
+    process.env.ROADBOARD_MCP_URL = "https://must-not-be-frozen.example/mcp";
+    process.env.ROADBOARD_MCP_TOKEN_ENV_VAR = "REAL_TOKEN_ENV_NAME";
+    configInit({ configPath, agentDir });
+
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.mcpRegistry.serena.placeholder).toBe(true);
+    expect(parsed.mcpRegistry.serena.command).toBe("<resolved from SERENA_BIN or PATH>");
+    expect(parsed.mcpRegistry.roadboard.url).toContain("replace-with-roadboard-mcp-url");
+    expect(parsed.mcpRegistry.roadboard.bearerTokenEnvVar).toBe("ROADBOARD_MCP_TOKEN_ENV_VAR_NAME");
+    expect(raw).not.toContain("/must/not/be/frozen");
+    expect(raw).not.toContain("must-not-be-frozen");
+    expect(raw).not.toContain("REAL_TOKEN_ENV_NAME");
   });
 
   it("throws an error when the file already exists (does not overwrite)", () => {
@@ -1253,6 +1524,50 @@ describe("configShow", () => {
     expect(result.config.roles?.architect?.model).toBe("opus");
     expect(result.config.roles?.architect?.flags).toContain("--dangerously-skip-permissions");
   });
+
+  it("applies lightweight defaults to legacy role config", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {},
+      roles: {
+        architect: { binary: "claude", model: "opus", flags: [] },
+        analyst: { binary: "codex", flags: [] },
+      },
+    }), "utf-8");
+
+    const result = configShow({ configPath });
+
+    expect(result.config.roles?.architect?.mcpServers).toEqual([]);
+    expect(result.config.roles?.analyst?.mcpServers).toEqual(["serena", "roadboard"]);
+    expect(result.config.roles?.outputAnalyst?.mcpServers).toEqual([]);
+    expect(result.config.roles?.worker?.mcpServers).toEqual(["serena"]);
+  });
+
+  it("uses fail-safe empty MCP defaults for non-canonical role names", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {},
+      roles: {
+        customReviewer: { binary: "codex", flags: [] },
+      },
+    }), "utf-8");
+
+    const result = configShow({ configPath });
+
+    expect(result.config.roles?.customReviewer?.mcpServers).toEqual([]);
+  });
+
+  it("rejects unknown MCP server names clearly", () => {
+    const configPath = path.join(tmpDir, "adapters.json");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {},
+      roles: {
+        analyst: { binary: "codex", mcpServers: ["serena", "nope"] },
+      },
+    }), "utf-8");
+
+    expect(() => configShow({ configPath })).toThrow(/Unknown MCP server "nope"/);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1276,14 +1591,18 @@ describe("buildRoleInvocation", () => {
     const { command, args } = buildRoleInvocation({ binary: "codex", flags: [] }, "PROMPT", "/repo");
     expect(command).toBe("codex");
     expect(args).toEqual([
-      "exec", "--cd", "/repo", "--sandbox", "workspace-write", "--skip-git-repo-check", "PROMPT",
+      "exec", "--cd", "/repo", "--sandbox", "workspace-write", "--skip-git-repo-check",
+      "--ignore-user-config", "PROMPT",
     ]);
   });
 
   it("claude → -p with --permission-mode acceptEdits when no permission flag", () => {
     const { command, args } = buildRoleInvocation({ binary: "claude", model: "opus", flags: [] }, "P", "/repo");
     expect(command).toBe("claude");
-    expect(args).toEqual(["-p", "P", "--model", "opus", "--permission-mode", "acceptEdits"]);
+    expect(args.slice(0, 5)).toEqual(["-p", "P", "--model", "opus", "--permission-mode"]);
+    expect(args).toContain("acceptEdits");
+    expect(args).toContain("--mcp-config");
+    expect(args).toContain("--strict-mcp-config");
   });
 
   it("claude → omits --permission-mode when a permission flag is already present", () => {
@@ -1292,6 +1611,224 @@ describe("buildRoleInvocation", () => {
     );
     expect(args).toContain("--dangerously-skip-permissions");
     expect(args).not.toContain("--permission-mode");
+    expect(args).toContain("--strict-mcp-config");
+  });
+
+  it("codex MCP allowlist adds only configured servers", () => {
+    const { args } = buildRoleInvocation(
+      { binary: "codex", mcpServers: ["serena", "roadboard"] },
+      "PROMPT",
+      "/repo",
+    );
+
+    expect(args).toContain("--ignore-user-config");
+    expect(args).toContain('mcp_servers.serena.command="/tmp/serena-test-bin"');
+    expect(args).toContain('mcp_servers.roadboard.bearer_token_env_var="ROADBOARD_MCP_TOKEN"');
+    expect(args.join(" ")).not.toContain("chrome-devtools");
+    expect(args.join(" ")).not.toContain("github");
+    expect(args.join(" ")).not.toContain("Bearer ");
+  });
+
+  it("claude MCP allowlist writes a strict config with Serena only", () => {
+    const repo = makeTempDir();
+
+    try {
+      const { args } = buildRoleInvocation(
+        { binary: "claude", mcpServers: ["serena"] },
+        "P",
+        repo,
+      );
+      const configPath = args[args.indexOf("--mcp-config") + 1];
+      const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+
+      expect(args).toContain("--strict-mcp-config");
+      expect(Object.keys(config.mcpServers)).toEqual(["serena"]);
+      expect(JSON.stringify(config)).not.toContain("chrome-devtools");
+      expect(JSON.stringify(config)).not.toContain("github");
+    }
+
+    finally {
+      fs.rmSync(repo, { recursive: true });
+    }
+  });
+
+  it("claude inheritGlobalMcp skips strict MCP config", () => {
+    const { args } = buildRoleInvocation(
+      { binary: "claude", mcpServers: ["serena"], inheritGlobalMcp: true },
+      "P",
+      "/repo",
+    );
+
+    expect(args).not.toContain("--mcp-config");
+    expect(args).not.toContain("--strict-mcp-config");
+  });
+
+  it("explicit exceptional MCP override is honored", () => {
+    const { args } = buildRoleInvocation(
+      { binary: "codex", mcpServers: ["serena", "chrome-devtools"] },
+      "PROMPT",
+      "/repo",
+    );
+
+    expect(args.join(" ")).toContain("chrome-devtools-mcp@latest");
+  });
+
+  it("resolves Serena from SERENA_BIN", () => {
+    process.env.SERENA_BIN = "/opt/custom-serena";
+    const { args } = buildRoleInvocation(
+      { binary: "codex", mcpServers: ["serena"] },
+      "PROMPT",
+      "/repo",
+    );
+
+    expect(args).toContain('mcp_servers.serena.command="/opt/custom-serena"');
+  });
+
+  it("resolves Serena from SERENA_BIN after loading a placeholder starter config", () => {
+    const configPath = path.join(makeTempDir(), "adapters.json");
+
+    try {
+      fs.mkdirSync(path.dirname(configPath), { recursive: true });
+      fs.writeFileSync(configPath, JSON.stringify({
+        adapters: {},
+        mcpRegistry: {
+          serena: {
+            placeholder: true,
+            command: "<resolved from SERENA_BIN or PATH>",
+            args: ["start-mcp-server", "--context", "codex", "--project-from-cwd"],
+          },
+        },
+        roles: {
+          analyst: { binary: "codex", mcpServers: ["serena"] },
+        },
+      }), "utf-8");
+      process.env.SERENA_BIN = "/opt/lazy-serena";
+
+      const config = configShow({ configPath }).config;
+      const { args } = buildRoleInvocation(config.roles!.analyst, "PROMPT", "/repo", config.mcpRegistry);
+
+      expect(args).toContain('mcp_servers.serena.command="/opt/lazy-serena"');
+    }
+
+    finally {
+      fs.rmSync(path.dirname(configPath), { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to Serena on PATH", () => {
+    const binDir = makeTempDir();
+
+    try {
+      const serenaPath = path.join(binDir, "serena");
+      fs.writeFileSync(serenaPath, "#!/bin/sh\nexit 0\n", "utf-8");
+      fs.chmodSync(serenaPath, 0o755);
+      delete process.env.SERENA_BIN;
+      process.env.PATH = binDir;
+
+      const { args } = buildRoleInvocation(
+        { binary: "codex", mcpServers: ["serena"] },
+        "PROMPT",
+        "/repo",
+      );
+
+      expect(args).toContain(`mcp_servers.serena.command=${JSON.stringify(serenaPath)}`);
+    }
+
+    finally {
+      fs.rmSync(binDir, { recursive: true, force: true });
+    }
+  });
+
+  it("throws clearly when Serena cannot be resolved", () => {
+    delete process.env.SERENA_BIN;
+    process.env.PATH = "";
+
+    expect(() =>
+      buildRoleInvocation(
+        { binary: "codex", mcpServers: ["serena"] },
+        "PROMPT",
+        "/repo",
+      ),
+    ).toThrow(/SERENA_BIN or a "serena" executable on PATH/);
+  });
+
+  it("throws clearly when RoadBoard is requested without URL configuration", () => {
+    delete process.env.ROADBOARD_MCP_URL;
+    delete process.env.ROADBOARD_MCP_TOKEN_ENV_VAR;
+
+    expect(() =>
+      buildRoleInvocation(
+        { binary: "codex", mcpServers: ["roadboard"] },
+        "PROMPT",
+        "/repo",
+      ),
+    ).toThrow(/ROADBOARD_MCP_URL/);
+  });
+
+  it("resolves RoadBoard placeholder from environment without exposing bearer values", () => {
+    const registry = {
+      roadboard: {
+        placeholder: true,
+        url: "https://replace-with-roadboard-mcp-url.example/mcp",
+        bearerTokenEnvVar: "ROADBOARD_MCP_TOKEN_ENV_VAR_NAME",
+      },
+    };
+    process.env.ROADBOARD_MCP_URL = "https://roadboard.example/mcp";
+    process.env.ROADBOARD_MCP_TOKEN_ENV_VAR = "ROADBOARD_MCP_TOKEN";
+    process.env.ROADBOARD_MCP_TOKEN = "bearer-secret-value";
+
+    const { args } = buildRoleInvocation(
+      { binary: "codex", mcpServers: ["roadboard"] },
+      "PROMPT",
+      "/repo",
+      registry,
+    );
+    const joined = args.join(" ");
+
+    expect(args).toContain('mcp_servers.roadboard.url="https://roadboard.example/mcp"');
+    expect(args).toContain('mcp_servers.roadboard.bearer_token_env_var="ROADBOARD_MCP_TOKEN"');
+    expect(joined).not.toContain("bearer-secret-value");
+    delete process.env.ROADBOARD_MCP_TOKEN;
+  });
+
+  it("rejects RoadBoard placeholder without a valid environment fallback", () => {
+    delete process.env.ROADBOARD_MCP_URL;
+    delete process.env.ROADBOARD_MCP_TOKEN_ENV_VAR;
+
+    expect(() =>
+      buildRoleInvocation(
+        { binary: "codex", mcpServers: ["roadboard"] },
+        "PROMPT",
+        "/repo",
+        {
+          roadboard: {
+            placeholder: true,
+            url: "https://replace-with-roadboard-mcp-url.example/mcp",
+            bearerTokenEnvVar: "ROADBOARD_MCP_TOKEN_ENV_VAR_NAME",
+          },
+        },
+      ),
+    ).toThrow(/ROADBOARD_MCP_URL/);
+  });
+
+  it("uses explicit RoadBoard registry configuration", () => {
+    delete process.env.ROADBOARD_MCP_URL;
+    delete process.env.ROADBOARD_MCP_TOKEN_ENV_VAR;
+
+    const { args } = buildRoleInvocation(
+      { binary: "codex", mcpServers: ["roadboard"] },
+      "PROMPT",
+      "/repo",
+      {
+        roadboard: {
+          url: "https://configured-roadboard.example/mcp",
+          bearerTokenEnvVar: "CONFIGURED_ROADBOARD_TOKEN",
+        },
+      },
+    );
+
+    expect(args).toContain('mcp_servers.roadboard.url="https://configured-roadboard.example/mcp"');
+    expect(args).toContain('mcp_servers.roadboard.bearer_token_env_var="CONFIGURED_ROADBOARD_TOKEN"');
   });
 });
 
@@ -1392,12 +1929,17 @@ describe("runReview", () => {
 
   it("draft → architect submits → analyst approves: outcome approved in 1 round", () => {
     const file = writeFile(todoDir, "feat-a.md", "---\nstatus: draft\nreview_round: 0\n---\n# a\n");
+    const telemetryBefore = readTelemetryEntries().length;
     const result = runReview("a", {
       tasksDir, configPath, spawnFn: makeSpawn(file, ["approved"]), logFn: () => undefined,
     });
+    const entries = telemetryEntriesAfter(telemetryBefore);
+
     expect(result.outcome).toBe("approved");
     expect(result.finalStatus).toBe("approved");
     expect(result.rounds).toBe(1);
+    expect(entries.find((entry) => entry.role === "architect-review")?.contextPackBytes).toBe(0);
+    expect(entries.find((entry) => entry.role === "analyst-prompt")?.contextPackBytes).toBe(0);
   });
 
   it("changes-requested then approved: outcome approved in 2 rounds", () => {
@@ -1443,28 +1985,13 @@ describe("runReview", () => {
     expect(file).toBeDefined();
   });
 
-  it("uses claude as Analyst when analyst='claude' (no codex role needed)", () => {
+  it("rejects claude as prompt-review Analyst because RoadBoard cannot be configured safely", () => {
     const file = writeFile(todoDir, "feat-f.md", "---\nstatus: draft\nreview_round: 0\n---\n# f\n");
-    const seen: string[] = [];
-    const spawnFn = (cmd: string, args: string[]) => {
-      seen.push(cmd);
-      const text = args.join(" ");
 
-      if (text.includes("Architect role")) {
-        setPromptStatus(file, "in-review");
-      }
-
-      else if (text.includes("Analyst role")) {
-        setPromptStatus(file, "approved");
-        appendReviewLogRound(file, 0, "approved");
-      }
-
-      return 0;
-    };
-    const result = runReview("f", { tasksDir, configPath, analyst: "claude", spawnFn, logFn: () => undefined });
-    expect(result.outcome).toBe("approved");
-    // both architect and analyst invoked the claude binary
-    expect(seen.every((c) => c === "claude")).toBe(true);
+    expect(() =>
+      runReview("f", { tasksDir, configPath, analyst: "claude", spawnFn: () => 0, logFn: () => undefined }),
+    ).toThrow(/--analyst claude is not supported for prompt-review/);
+    expect(file).toBeDefined();
   });
 
   it("Analyst prompt instructs re-evaluating the prompt from scratch, ignoring prior rounds", () => {
@@ -1611,6 +2138,57 @@ describe("invokeAgentStep", () => {
     expect(transcript).toContain("err-line");
   });
 
+  it("records telemetry for a successful spawned role process", () => {
+    const transcriptPath = path.join(tmpDir, "ok.log");
+    const code = invokeAgentStep({
+      role: "Architect",
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('ok')"],
+      cwd: tmpDir,
+      timeoutMs: 15000,
+      logFn: () => undefined,
+      transcriptPath,
+      telemetry: {
+        role: "architect-review",
+        binary: process.execPath,
+        model: "opus",
+        mcpServers: [],
+        promptBytes: 10,
+        contextPackBytes: 10,
+        transcriptPath,
+      },
+    });
+
+    const entry = latestTelemetryEntry();
+    expect(code).toBe(0);
+    expect(entry.role).toBe("architect-review");
+    expect(entry.exitCode).toBe(0);
+    expect(entry.tokenUsage).toBe("unavailable");
+  });
+
+  it("records telemetry for a non-zero spawned role process", () => {
+    const code = invokeAgentStep({
+      role: "Analyst",
+      command: process.execPath,
+      args: ["-e", "process.exit(3)"],
+      cwd: tmpDir,
+      timeoutMs: 15000,
+      logFn: () => undefined,
+      telemetry: {
+        role: "analyst-prompt",
+        binary: process.execPath,
+        mcpServers: ["serena", "roadboard"],
+        promptBytes: 10,
+        contextPackBytes: 10,
+      },
+    });
+
+    const entry = latestTelemetryEntry();
+    expect(code).toBe(3);
+    expect(entry.exitCode).toBe(3);
+    expect(entry.failureKind).toBe("non-zero");
+  });
+
   it("throws a clear timeout error naming the role and elapsed time on a real spawnSync timeout", () => {
     expect(() =>
       invokeAgentStep({
@@ -1638,8 +2216,16 @@ describe("invokeAgentStep", () => {
           err.code = "ETIMEDOUT";
           throw err;
         },
+        telemetry: {
+          role: "worker",
+          binary: "irrelevant",
+          mcpServers: ["serena"],
+          promptBytes: 1,
+          contextPackBytes: 1,
+        },
       }),
     ).toThrow(/Worker step timed out after 999ms/);
+    expect(latestTelemetryEntry().failureKind).toBe("timeout");
   });
 });
 
@@ -1953,6 +2539,388 @@ output_round: 0
     expect(seen!.context).toContain("## Acceptance criteria");
   });
 
+  it("uses Worker snapshot diff: excludes preexisting edits and includes Worker out-of-scope edits", () => {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoTodo = path.join(repoTasks, "todo");
+    const repoRun = path.join(repoTasks, "run");
+    const configPath = path.join(repo, ".agent", "workflow-adapters.json");
+    fs.mkdirSync(repoTodo, { recursive: true });
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "preexisting.txt"), "base\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "worker.txt"), "base\n", "utf-8");
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(path.join(repo, "preexisting.txt"), "base\nuser edit\n", "utf-8");
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        test: { enabled: true, binary: "/bin/echo", outputDir: path.join(repo, ".agent", "out") },
+      },
+      roles: {
+        outputAnalyst: { binary: "codex", mcpServers: [] },
+      },
+    }), "utf-8");
+    writeFile(repoTodo, "feat-y.md", RUN_PROMPT);
+
+    runWorker("y", "test", {
+      tasksDir: repoTasks,
+      configPath,
+      execFn: (_binary, args) => {
+        const promptPath = args[args.length - 1];
+        fs.writeFileSync(path.join(repo, "worker.txt"), "base\nworker edit\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "outside.txt"), "worker out of scope\n", "utf-8");
+        fs.writeFileSync(
+          promptPath,
+          fs.readFileSync(promptPath, "utf-8").replace("output_status: pending", "output_status: pending"),
+          "utf-8",
+        );
+
+        return "worker output";
+      },
+      logFn: () => undefined,
+    });
+
+    let seenDiff = "";
+    runReviewOutput("y", {
+      tasksDir: repoTasks,
+      repoRoot: repo,
+      reviewFn: (input) => {
+        seenDiff = input.diff;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(seenDiff).toContain("worker.txt");
+    expect(seenDiff).toContain("outside.txt");
+    expect(seenDiff).not.toContain("preexisting.txt");
+    fs.rmSync(repo, { recursive: true });
+  });
+
+  it("redacts HEAD symlinks across symlink/file transitions without exposing targets", () => {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoTodo = path.join(repoTasks, "todo");
+    const repoRun = path.join(repoTasks, "run");
+    const configPath = path.join(repo, ".agent", "workflow-adapters.json");
+    fs.mkdirSync(repoTodo, { recursive: true });
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.symlinkSync("HEAD_SYMLINK_TARGET_MARKER_A", path.join(repo, "head-symlink-to-symlink"));
+    fs.symlinkSync("HEAD_SYMLINK_TARGET_MARKER_B", path.join(repo, "head-symlink-to-file"));
+    fs.writeFileSync(path.join(repo, "head-file-to-symlink"), "regular before\n", "utf-8");
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: { test: { enabled: true, binary: "/bin/echo", outputDir: path.join(repo, ".agent", "out") } },
+    }), "utf-8");
+    writeFile(repoTodo, "feat-y.md", RUN_PROMPT);
+
+    runWorker("y", "test", {
+      tasksDir: repoTasks,
+      configPath,
+      execFn: () => {
+        fs.unlinkSync(path.join(repo, "head-symlink-to-symlink"));
+        fs.symlinkSync("WORKER_SYMLINK_TARGET_MARKER_A", path.join(repo, "head-symlink-to-symlink"));
+        fs.unlinkSync(path.join(repo, "head-symlink-to-file"));
+        fs.writeFileSync(path.join(repo, "head-symlink-to-file"), "regular after\n", "utf-8");
+        fs.rmSync(path.join(repo, "head-file-to-symlink"));
+        fs.symlinkSync("WORKER_SYMLINK_TARGET_MARKER_C", path.join(repo, "head-file-to-symlink"));
+
+        return "worker output";
+      },
+      logFn: () => undefined,
+    });
+
+    let seenDiff = "";
+    runReviewOutput("y", {
+      tasksDir: repoTasks,
+      repoRoot: repo,
+      reviewFn: (input) => {
+        seenDiff = input.diff;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(seenDiff).toContain("head-symlink-to-symlink");
+    expect(seenDiff).toContain("head-symlink-to-file");
+    expect(seenDiff).toContain("head-file-to-symlink");
+    expect(seenDiff).toContain("redacted symlink");
+    expect(seenDiff).not.toContain("HEAD_SYMLINK_TARGET_MARKER_A");
+    expect(seenDiff).not.toContain("HEAD_SYMLINK_TARGET_MARKER_B");
+    expect(seenDiff).not.toContain("WORKER_SYMLINK_TARGET_MARKER_A");
+    expect(seenDiff).not.toContain("WORKER_SYMLINK_TARGET_MARKER_C");
+
+    const snapshotPath = path.join(repo, ".agent", "worker-snapshots", "y.json");
+    const snapshot = fs.readFileSync(snapshotPath, "utf-8");
+    expect(snapshot).not.toContain("HEAD_SYMLINK_TARGET_MARKER_A");
+    expect(snapshot).not.toContain("HEAD_SYMLINK_TARGET_MARKER_B");
+    fs.rmSync(repo, { recursive: true });
+  });
+
+  it("rejects invalid Worker snapshot pointers without falling back to the whole-repo diff", () => {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoRun = path.join(repoTasks, "run");
+    const snapshotDir = path.join(repo, ".agent", "worker-snapshots");
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(snapshotDir, { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "tracked.txt"), "base\n", "utf-8");
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(path.join(repoRun, "feat-y.md"), RUN_PROMPT, "utf-8");
+    fs.writeFileSync(path.join(repo, "tracked.txt"), "base\nWHOLE_REPO_FALLBACK_MARKER\n", "utf-8");
+    const validSnapshot = path.join(snapshotDir, "valid.json");
+    fs.writeFileSync(validSnapshot, JSON.stringify({
+      version: 1,
+      slug: "y",
+      createdAt: new Date().toISOString(),
+      repoRoot: repo,
+      files: {},
+    }), "utf-8");
+    fs.writeFileSync(path.join(snapshotDir, "y.latest"), path.relative(repo, validSnapshot) + "\n", "utf-8");
+    let sawDiff = "";
+
+    runReviewOutput("y", {
+      tasksDir: repoTasks,
+      repoRoot: repo,
+      reviewFn: (input) => {
+        sawDiff = input.diff;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(sawDiff).toContain("WHOLE_REPO_FALLBACK_MARKER");
+
+    const cases = [
+      {
+        name: "sibling prefix",
+        setup: () => {
+          const evilDir = path.join(repo, ".agent", "worker-snapshots-evil");
+          fs.mkdirSync(evilDir, { recursive: true });
+          const evilPath = path.join(evilDir, "evil.json");
+          fs.writeFileSync(evilPath, "{}", "utf-8");
+          return path.relative(repo, evilPath);
+        },
+      },
+      {
+        name: "traversal",
+        setup: () => "../outside-snapshot.json",
+      },
+      {
+        name: "absolute external",
+        setup: () => {
+          const outside = path.join(repo, "outside-snapshot.json");
+          fs.writeFileSync(outside, "{}", "utf-8");
+          return outside;
+        },
+      },
+      {
+        name: "symlink outside",
+        setup: () => {
+          const outside = path.join(repo, "outside-symlink-target.json");
+          const link = path.join(snapshotDir, "linked.json");
+          fs.writeFileSync(outside, "{}", "utf-8");
+          fs.symlinkSync(outside, link);
+          return path.relative(repo, link);
+        },
+      },
+    ];
+
+    for (const item of cases) {
+      setOutputStatus(path.join(repoRun, "feat-y.md"), "pending");
+      fs.writeFileSync(path.join(snapshotDir, "y.latest"), item.setup() + "\n", "utf-8");
+      expect(() =>
+        runReviewOutput("y", {
+          tasksDir: repoTasks,
+          repoRoot: repo,
+          reviewFn: () => {
+            throw new Error(`fallback used for ${item.name}`);
+          },
+          logFn: () => undefined,
+        }),
+      ).toThrow(/Worker snapshot.*missing or outside/);
+    }
+
+    fs.rmSync(repo, { recursive: true });
+  });
+
+  it("snapshot diff handles delete, rename, spaces, symlink, binary, sensitive redaction, and temp cleanup", () => {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoTodo = path.join(repoTasks, "todo");
+    const repoRun = path.join(repoTasks, "run");
+    const configPath = path.join(repo, ".agent", "workflow-adapters.json");
+    fs.mkdirSync(repoTodo, { recursive: true });
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "delete-me.txt"), "delete\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "rename-me.txt"), "rename\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "staged-old.txt"), "staged\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "with space.txt"), "space\n", "utf-8");
+    fs.writeFileSync(path.join(repo, ".env"), "SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, ".env.production"), "PRODUCTION_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, ".envrc"), "ENVRC_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, ".env-local"), "ENV_LOCAL_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "api-token.txt"), "TOKEN_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "db-credential.txt"), "CREDENTIAL_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "client-secret.txt"), "CLIENT_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "server.pem"), "PEM_SECRET_BEFORE=1\n", "utf-8");
+    fs.mkdirSync(path.join(repo, "credentials"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "secrets"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "config", "credentials"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "nested", "secrets"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "mycredentials"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "secretstuff"), { recursive: true });
+    fs.writeFileSync(path.join(repo, "credentials", "config.txt"), "CREDENTIALS_DIR_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "secrets", "password.txt"), "SECRETS_DIR_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "config", "credentials", "data.json"), "NESTED_CREDENTIALS_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "nested", "secrets", "value.txt"), "NESTED_SECRETS_SECRET_BEFORE=1\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "mycredentials", "config.txt"), "MYCREDENTIALS_PUBLIC_BEFORE\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "secretstuff", "value.txt"), "SECRETSTUFF_PUBLIC_BEFORE\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "utf8.txt"), "UTF8_BEFORE è valido\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "binary.dat"), Buffer.from([0, 1, 2, 3]));
+    fs.writeFileSync(path.join(repo, "binary-no-nul.dat"), Buffer.from([0xff, 0xd8, 0xff, 0xe1, 0xfe, 0xfa]));
+    fs.writeFileSync(path.join(repo, "target-a.txt"), "a\n", "utf-8");
+    fs.writeFileSync(path.join(repo, "target-b.txt"), "b\n", "utf-8");
+    fs.symlinkSync("target-a.txt", path.join(repo, "link.txt"));
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: { test: { enabled: true, binary: "/bin/echo", outputDir: path.join(repo, ".agent", "out") } },
+    }), "utf-8");
+    writeFile(repoTodo, "feat-y.md", RUN_PROMPT);
+
+    runWorker("y", "test", {
+      tasksDir: repoTasks,
+      configPath,
+      execFn: () => {
+        fs.rmSync(path.join(repo, "delete-me.txt"));
+        fs.renameSync(path.join(repo, "rename-me.txt"), path.join(repo, "renamed file.txt"));
+        child_process.spawnSync("git", ["mv", "staged-old.txt", "staged new.txt"], { cwd: repo });
+        fs.writeFileSync(path.join(repo, "with space.txt"), "space\nworker\n", "utf-8");
+        fs.writeFileSync(path.join(repo, ".env"), "SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, ".env.production"), "PRODUCTION_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, ".envrc"), "ENVRC_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, ".env-local"), "ENV_LOCAL_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "api-token.txt"), "TOKEN_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "db-credential.txt"), "CREDENTIAL_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "client-secret.txt"), "CLIENT_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "server.pem"), "PEM_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "credentials", "config.txt"), "CREDENTIALS_DIR_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "secrets", "password.txt"), "SECRETS_DIR_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "config", "credentials", "data.json"), "NESTED_CREDENTIALS_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "nested", "secrets", "value.txt"), "NESTED_SECRETS_SECRET_AFTER=2\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "mycredentials", "config.txt"), "MYCREDENTIALS_PUBLIC_AFTER\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "secretstuff", "value.txt"), "SECRETSTUFF_PUBLIC_AFTER\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "utf8.txt"), "UTF8_AFTER è valido\n", "utf-8");
+        fs.writeFileSync(path.join(repo, "binary.dat"), Buffer.from([0, 9, 9, 9]));
+        fs.writeFileSync(path.join(repo, "binary-no-nul.dat"), Buffer.from([0xff, 0xd8, 0xff, 0xe2, 0xfd, 0xfa]));
+        fs.rmSync(path.join(repo, "link.txt"));
+        fs.symlinkSync("target-b.txt", path.join(repo, "link.txt"));
+
+        return "worker output";
+      },
+      logFn: () => undefined,
+    });
+
+    let seenDiff = "";
+    runReviewOutput("y", {
+      tasksDir: repoTasks,
+      repoRoot: repo,
+      reviewFn: (input) => {
+        seenDiff = input.diff;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(seenDiff).toContain("delete-me.txt");
+    expect(seenDiff).toContain("rename-me.txt");
+    expect(seenDiff).toContain("renamed file.txt");
+    expect(seenDiff).toContain("staged-old.txt");
+    expect(seenDiff).toContain("staged new.txt");
+    expect(seenDiff).toContain("with space.txt");
+    expect(seenDiff).toContain(".env");
+    expect(seenDiff).toContain(".env.production");
+    expect(seenDiff).toContain(".envrc");
+    expect(seenDiff).toContain(".env-local");
+    expect(seenDiff).toContain("credentials/config.txt");
+    expect(seenDiff).toContain("secrets/password.txt");
+    expect(seenDiff).toContain("config/credentials/data.json");
+    expect(seenDiff).toContain("nested/secrets/value.txt");
+    expect(seenDiff).toContain("redacted sensitive-path");
+    expect(seenDiff).toContain("binary.dat");
+    expect(seenDiff).toContain("binary-no-nul.dat");
+    expect(seenDiff).toContain("redacted binary-file");
+    expect(seenDiff).toContain("MYCREDENTIALS_PUBLIC_AFTER");
+    expect(seenDiff).toContain("SECRETSTUFF_PUBLIC_AFTER");
+    expect(seenDiff).toContain("UTF8_AFTER è valido");
+    expect(seenDiff).toContain("link.txt");
+    expect(seenDiff).toContain("redacted symlink");
+    for (const marker of [
+      "SECRET_BEFORE",
+      "SECRET_AFTER",
+      "PRODUCTION_SECRET_BEFORE",
+      "PRODUCTION_SECRET_AFTER",
+      "ENVRC_SECRET_BEFORE",
+      "ENVRC_SECRET_AFTER",
+      "ENV_LOCAL_SECRET_BEFORE",
+      "ENV_LOCAL_SECRET_AFTER",
+      "TOKEN_SECRET_BEFORE",
+      "TOKEN_SECRET_AFTER",
+      "CREDENTIAL_SECRET_BEFORE",
+      "CREDENTIAL_SECRET_AFTER",
+      "CLIENT_SECRET_BEFORE",
+      "CLIENT_SECRET_AFTER",
+      "PEM_SECRET_BEFORE",
+      "PEM_SECRET_AFTER",
+      "CREDENTIALS_DIR_SECRET_BEFORE",
+      "CREDENTIALS_DIR_SECRET_AFTER",
+      "SECRETS_DIR_SECRET_BEFORE",
+      "SECRETS_DIR_SECRET_AFTER",
+      "NESTED_CREDENTIALS_SECRET_BEFORE",
+      "NESTED_CREDENTIALS_SECRET_AFTER",
+      "NESTED_SECRETS_SECRET_BEFORE",
+      "NESTED_SECRETS_SECRET_AFTER",
+    ]) {
+      expect(seenDiff).not.toContain(marker);
+    }
+
+    const snapshotPath = path.join(repo, ".agent", "worker-snapshots", "y.json");
+    const snapshot = fs.readFileSync(snapshotPath, "utf-8");
+    expect(snapshot).not.toContain("SECRET_BEFORE");
+    expect(snapshot).not.toContain("PRODUCTION_SECRET_BEFORE");
+    expect(snapshot).not.toContain("CREDENTIALS_DIR_SECRET_BEFORE");
+    expect(snapshot).not.toContain("NESTED_SECRETS_SECRET_BEFORE");
+    expect((fs.statSync(snapshotPath).mode & 0o777)).toBe(0o600);
+    expect(fs.readdirSync(path.join(repo, ".agent", "worker-snapshots")).some((name) => name.startsWith("diff-temp-"))).toBe(false);
+    fs.rmSync(repo, { recursive: true });
+  });
+
   it("writes changes-requested verdict", () => {
     const file = writeFile(runDir, "feat-y.md", RUN_PROMPT);
     const result = runReviewOutput("y", {
@@ -2073,6 +3041,35 @@ output_round: 0
       const parsed = parsePrompt(fs.readFileSync(file, "utf-8"));
       expect(parsed.frontmatter.outputStatus).toBe("approved");
       expect(parsed.frontmatter.outputRound).toBe(1);
+    });
+
+    it("records analyst-output telemetry without prompt or diff content", () => {
+      const markerPrompt = "PROMPT_SECRET_MARKER";
+      const markerDiff = "DIFF_SECRET_MARKER";
+      const file = writeFile(runDir, "feat-y.md", `${RUN_PROMPT}\n${markerPrompt}\n`);
+      const promptFileBytes = fs.statSync(file).size;
+      runReviewOutput("y", {
+        tasksDir,
+        configPath,
+        diffFn: () => `diff --git a/x b/x\n+${markerDiff}\n`,
+        spawnFn: () => {
+          setOutputStatus(file, "approved");
+          fs.appendFileSync(file, "\n## Output review log\n\n### Round 1 — approved\n- looks good\n");
+
+          return 0;
+        },
+        logFn: () => undefined,
+      });
+
+      const entry = latestTelemetryEntry();
+      const serialized = JSON.stringify(entry);
+
+      expect(entry.role).toBe("analyst-output");
+      expect(entry.exitCode).toBe(0);
+      expect(entry.diffBytes).toBeGreaterThan(0);
+      expect(entry.contextPackBytes).toBe(Number(entry.promptBytes) + Number(entry.diffBytes) + promptFileBytes);
+      expect(serialized).not.toContain(markerPrompt);
+      expect(serialized).not.toContain(markerDiff);
     });
 
     it("reads the verdict back from the file the Analyst edited (changes-requested)", () => {

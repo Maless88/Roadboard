@@ -110,4 +110,4 @@
 ## AI Workflow — Rifiniture dei gate di review (follow-up)
 
 - [x] enh-analyst-reeval-from-scratch — Analyst rivaluta il diff corrente da zero (no carry-over)
-- [ ] enh-worktree-per-task-review — Worktree per-task per isolare il diff di review-output
+- [x] enh-worktree-per-task-review — Worktree per-task per isolare il diff di review-output

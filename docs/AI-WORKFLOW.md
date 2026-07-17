@@ -46,21 +46,22 @@ The CLI encodes the same gate: `pnpm agent:workflow run --slug <slug> --adapter 
 
 ### Single-task-in-run constraint
 
-`review-output` evaluates the **whole-repo diff** (`git diff HEAD` + untracked files), not a per-task diff. If two prompts sit in `tasks/run/` concurrently, the Analyst reviewing task A's output also sees task B's work-in-progress and will (correctly) flag it as out-of-scope — a structural false negative. To avoid this, both `run` and `review-output` refuse to proceed when `tasks/run/` holds more than one prompt at a time:
+`run` records a pre-Worker snapshot under `.agent/worker-snapshots/`. `review-output` compares the current worktree against that snapshot, so the Analyst sees all Worker-produced changes, including out-of-scope files, but not edits that were already present before the Worker started. If no snapshot is available (legacy/manual runs), `review-output` falls back to the historical whole-repo diff (`git diff HEAD` + untracked files). To avoid ambiguous concurrent output, both `run` and `review-output` still refuse to proceed when `tasks/run/` holds more than one prompt at a time:
 
 - `pnpm agent:workflow run --slug <slug> --adapter <name>` refuses if `tasks/run/` already contains another prompt file.
 - `pnpm agent:workflow review-output --slug <slug>` refuses if `tasks/run/` contains more than one prompt file (naming the extras).
 - Worker output artifacts (`*-output.md`) are exempt from the count — only lifecycle prompt files are.
-- Pass `--force` to either command to bypass the guard for a deliberate exception. The Analyst still reviews the whole-repo diff, so a forced concurrent run risks the same false-negative contamination described above.
+- Pass `--force` to either command to bypass the guard for a deliberate exception. With a Worker snapshot the diff remains task-local; without one, the legacy whole-repo fallback can still include unrelated work.
 
-The structural fix (per-task git worktrees, isolating each Worker's diff) is future work, not implemented here.
+Snapshot files, pointers, and temporary diff files are written under `.agent/worker-snapshots/` with restrictive permissions. Ignored files are not snapshotted. Redaction is path/type-based: any basename starting with `.env` (`.env`, `.env.production`, `.envrc`, `.env-local`), key/certificate files (`.pem`, `.key`, `.p12`, `.pfx`, `.crt`, `.cer`), files whose basename contains `credential`, `secret`, or `token`, files under path segments named exactly `credentials/` or `secrets/`, binary files, and symlinks are redacted. Directory matching is segment-aware, so names like `mycredentials/` or `secretstuff/` are not treated as sensitive directories by themselves. The snapshot stores only comparison metadata for redacted entries, and the Analyst diff shows the path plus an explicit redaction reason instead of content. Known limitation: inline secrets inside ordinary source files or other non-sensitive-by-name text paths are not content-scanned or redacted. Temporary files used to build text diffs are removed immediately after diff generation. Snapshot files remain in `.agent/` for audit/debug and can be deleted safely after the output review is no longer needed.
 
 ### 3. Output review loop (`run/`, after the Worker finishes)
 
 9. Worker implements the prompt, self-verifies, sets frontmatter `output_status: pending` on the prompt still sitting in `tasks/run/`, and stops. **It does not move the file.**
-10. `pnpm agent:workflow review-output --slug <slug>` — computes `git diff HEAD`, feeds it plus the prompt's `## Scope` and `## Acceptance Criteria` to the Analyst reviewer, and writes the verdict back: `output_status` → `approved` / `changes-requested`, `output_round` incremented, one `### Round N — <verdict>` appended to `## Output review log` (append-only, never overwritten).
+10. `pnpm agent:workflow review-output --slug <slug>` — computes the Worker snapshot diff when available, feeds it plus the prompt's `## Scope` and `## Acceptance Criteria` to the Analyst reviewer, and writes the verdict back: `output_status` → `approved` / `changes-requested`, `output_round` incremented, one `### Round N — <verdict>` appended to `## Output review log` (append-only, never overwritten).
 11. Defaults to `changes-requested` when uncertain. Caps at 3 rounds — beyond that, `output_status: blocked-review` and the Developer must triage.
     - Every Architect/Analyst step (prompt-gate `review` and output-gate `review-output`) persists its stdout+stderr to `.agent/review-transcripts/<slug>-<gate>-round<N>-<role>.log` for later audit.
+    - Every spawned model process appends structured telemetry to `.agent/workflow-telemetry/processes.jsonl`: role/pass, binary, model, authorized MCP names, prompt/context/diff byte counts, duration, exit code, failure kind for timeout/non-zero exits, transcript path, and structured token usage when the CLI provides it. If usage is not available, `tokenUsage` is recorded as `unavailable`; prompts, diffs, credentials, environment values, and error messages are not logged.
     - If an Analyst's notes exceed 10 entries in a single round, only the first 10 are persisted and a log line states how many were dropped.
 12. `pnpm agent:workflow promote --slug <slug>` — the **only** `run/`→`done/` path. Refuses to move the file unless, in order:
     - `output_status: approved`;
@@ -234,7 +235,7 @@ pnpm agent:workflow review-output --slug feat-task-bulk-delete
 pnpm agent:workflow review-output --slug feat-task-bulk-delete --force  # bypass single-task-in-run guard
 ```
 
-Refuses if `tasks/run/` contains more than one prompt file (single-task-in-run guard, naming the extras; pass `--force` to bypass). Otherwise computes `git diff HEAD`, hands it plus the prompt's Scope/Acceptance Criteria to the reviewer, writes `output_status` and appends to `## Output review log`.
+Refuses if `tasks/run/` contains more than one prompt file (single-task-in-run guard, naming the extras; pass `--force` to bypass). Otherwise computes the Worker snapshot diff when available, falling back to the legacy whole-repo `git diff HEAD` + untracked files only when no snapshot exists. It hands the provided diff plus the prompt's Scope/Acceptance Criteria to the reviewer, writes `output_status`, and appends to `## Output review log`.
 
 **`promote --slug <slug>`** — the only `run/`→`done/` path:
 
@@ -268,12 +269,59 @@ No API keys, tokens, or credentials are stored in the repository. `.agent/workfl
     "codex": {
       "enabled": true,
       "binary": "/absolute/path/to/codex",
-      "outputDir": "/absolute/path/to/output"
+      "outputDir": "/absolute/path/to/output",
+      "mcpServers": []
     },
     "claude": {
       "enabled": false,
       "binary": "/absolute/path/to/claude",
-      "outputDir": "/absolute/path/to/output"
+      "outputDir": "/absolute/path/to/output",
+      "mcpServers": ["serena"]
+    }
+  },
+  "mcpRegistry": {
+    "serena": {
+      "placeholder": true,
+      "command": "<resolved from SERENA_BIN or PATH>",
+      "args": ["start-mcp-server", "--context", "codex", "--project-from-cwd"]
+    },
+    "roadboard": {
+      "placeholder": true,
+      "url": "https://replace-with-roadboard-mcp-url.example/mcp",
+      "bearerTokenEnvVar": "ROADBOARD_MCP_TOKEN_ENV_VAR_NAME"
+    },
+    "github": {
+      "placeholder": true,
+      "url": "https://replace-with-github-mcp-url.example/mcp",
+      "bearerTokenEnvVar": "GITHUB_MCP_TOKEN_ENV_VAR_NAME"
+    }
+  },
+  "roles": {
+    "architect": {
+      "binary": "claude",
+      "model": "opus",
+      "flags": ["--dangerously-skip-permissions"],
+      "mcpServers": [],
+      "inheritGlobalMcp": false
+    },
+    "analyst": {
+      "binary": "codex",
+      "flags": [],
+      "mcpServers": ["serena", "roadboard"],
+      "inheritGlobalMcp": false
+    },
+    "outputAnalyst": {
+      "binary": "codex",
+      "flags": [],
+      "mcpServers": [],
+      "inheritGlobalMcp": false
+    },
+    "worker": {
+      "binary": "claude",
+      "model": "sonnet",
+      "flags": ["--dangerously-skip-permissions"],
+      "mcpServers": ["serena"],
+      "inheritGlobalMcp": false
     }
   },
   "verify": {
@@ -286,7 +334,26 @@ No API keys, tokens, or credentials are stored in the repository. `.agent/workfl
 }
 ```
 
-`binary` must be an absolute path — the CLI never resolves binaries from `PATH`. `verify` configures the commands `promote` re-runs before allowing `run/`→`done/`.
+`binary` must be an absolute path for adapters — the CLI never resolves adapter binaries from `PATH`. Role binaries may use `codex` or `claude` when available on `PATH`. `mcpRegistry` externalizes MCP endpoint details from source code. Starter entries marked `placeholder: true` are documentation scaffolding, not real commands/endpoints: Serena then resolves lazily from `SERENA_BIN`, then a `serena` executable on `PATH`; RoadBoard resolves from a non-placeholder `mcpRegistry.roadboard` entry or from `ROADBOARD_MCP_URL` + `ROADBOARD_MCP_TOKEN_ENV_VAR`. The latter variable contains the name of the bearer-token environment variable, not the bearer value. If a requested MCP still has only placeholders and no valid fallback, the workflow fails before spawning the agent. Token values are never copied into generated config files or telemetry. `verify` configures the commands `promote` re-runs before allowing `run/`→`done/`.
+
+### MCP profiles
+
+The workflow does not inherit the user's global MCP catalog by default. `config --init` writes lightweight allowlists:
+
+- `architect`: no MCP.
+- `analyst`: `serena`, `roadboard`.
+- `outputAnalyst`: no MCP.
+- `worker`: `serena`.
+
+Chrome DevTools and GitHub are excluded from all default workflow passes. Add an MCP name to a role or adapter `mcpServers` array only for an exceptional task. Unknown MCP names fail fast unless they are explicitly defined in `mcpRegistry`. Non-canonical role names receive an empty MCP default, not the Analyst profile. `inheritGlobalMcp: true` exists only for compatibility/debug and should not be used for normal workflow runs.
+
+Codex isolation uses `codex exec --ignore-user-config` plus per-server `-c mcp_servers...` overrides built from the resolved registry. Claude isolation uses a generated `.agent/workflow-mcp/claude-*.json` file plus `--mcp-config ... --strict-mcp-config`. The generated files reference bearer-token environment variable names where supported; they do not copy token values into the repository. If a requested MCP cannot be resolved safely for the selected binary, the workflow fails instead of falling back to the global catalog.
+
+The `run` and `adapters run` paths share the same adapter argument builder. Codex adapters are invoked through `codex exec` with the isolated config flags and the prompt path as the final argument; Claude/wrapper adapters receive `--mcp-config` and `--strict-mcp-config` before the final prompt path. `adapters dry-run` prints the same isolated command line that `adapters run` would execute.
+
+`review --analyst claude` is intentionally rejected for prompt-review: prompt-review requires Serena + RoadBoard, and this workflow does not have a safe Claude RoadBoard configuration that avoids copying credentials. Use the default Codex analyst for prompt-review. `review-output --analyst claude` remains possible because output-review uses no MCP.
+
+Residual limitation: the snapshot strategy is still worktree-based, not a dedicated per-task git worktree. It excludes preexisting dirty work by comparing against the pre-Worker snapshot, but a legacy/manual Worker run without a snapshot falls back to the whole-repo diff.
 
 `timeouts.agentMs` (optional) bounds every agent/adapter invocation — the prompt-gate Architect and Analyst (`review`), the output-gate Analyst (`review-output`), the Worker (`run`), and the configured-CLI adapter (`adapters run`). It defaults to 900000ms (15 minutes) when the block or field is absent. A timed-out step throws a clear error naming the role and the configured timeout. This timeout does **not** apply to `git diff` calls or to the build/test verification commands `promote` re-executes — those have their own semantics.
 

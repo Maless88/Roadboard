@@ -18,18 +18,30 @@
  */
 
 import * as child_process from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { generateTaskList } from "./tasks-list";
 
 const ROOT = path.resolve(__dirname, "..");
 const TASKS_DIR = path.join(ROOT, "tasks");
+const AGENT_DIR = path.join(ROOT, ".agent");
 
 export function readPackageVersion(): string {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf-8")) as { version: string };
   return pkg.version;
 }
 const TASK_LIST_PATH = path.join(ROOT, "TASK_LIST.md");
+const WORKFLOW_TELEMETRY_DIR = path.join(AGENT_DIR, "workflow-telemetry");
+
+const ROLE_DEFAULT_MCP: Record<WorkflowRoleName, string[]> = {
+  architect: [],
+  analyst: ["serena", "roadboard"],
+  outputAnalyst: [],
+  worker: ["serena"],
+};
+
+const warnedLegacyConfigs = new Set<string>();
 
 /** The three lifecycle folders — the single source of truth for task state. */
 const LIFECYCLE_FOLDERS = ["todo", "run", "done"] as const;
@@ -156,9 +168,12 @@ export interface AdapterConfig {
   enabled: boolean;
   binary: string;
   outputDir: string;
+  model?: string;
   role?: "analyst" | "architect";
   systemPromptPath?: string;
   flags?: string[];
+  mcpServers?: string[];
+  inheritGlobalMcp?: boolean;
 }
 
 export interface RoleConfig {
@@ -166,6 +181,8 @@ export interface RoleConfig {
   model?: string;
   flags?: string[];
   systemPromptPath?: string;
+  mcpServers?: string[];
+  inheritGlobalMcp?: boolean;
 }
 
 export interface VerifyConfig {
@@ -178,11 +195,42 @@ export interface TimeoutsConfig {
   agentMs?: number;
 }
 
+export interface McpRegistryEntryConfig {
+  placeholder?: boolean;
+  command?: string;
+  args?: string[];
+  url?: string;
+  bearerTokenEnvVar?: string;
+  codex?: string[];
+  claude?: Record<string, unknown>;
+}
+
+export type McpRegistryConfig = Record<string, McpRegistryEntryConfig>;
+
 export interface AdaptersConfig {
   adapters: Record<string, AdapterConfig>;
   roles?: Record<string, RoleConfig>;
+  mcpRegistry?: McpRegistryConfig;
   verify?: VerifyConfig;
   timeouts?: TimeoutsConfig;
+}
+
+type WorkflowRoleName = "architect" | "analyst" | "outputAnalyst" | "worker";
+
+interface McpServerDefinition {
+  codex?: string[];
+  claude?: Record<string, unknown>;
+}
+
+interface ProcessTelemetryInput {
+  role: string;
+  binary: string;
+  model?: string;
+  mcpServers: string[];
+  promptBytes: number;
+  contextPackBytes: number;
+  diffBytes?: number;
+  transcriptPath?: string;
 }
 
 export interface ConfigInitResult {
@@ -719,7 +767,6 @@ export function runSync(options: {
 // Adapters
 // ---------------------------------------------------------------------------
 
-const AGENT_DIR = path.join(ROOT, ".agent");
 const ADAPTERS_CONFIG_PATH = path.join(AGENT_DIR, "workflow-adapters.json");
 const REVIEW_TRANSCRIPTS_DIR = path.join(AGENT_DIR, "review-transcripts");
 
@@ -750,7 +797,338 @@ function loadAdaptersConfig(configPath?: string): AdaptersConfig | null {
 
   const raw = fs.readFileSync(p, "utf-8");
 
-  return JSON.parse(raw) as AdaptersConfig;
+  return normalizeAdaptersConfig(JSON.parse(raw) as AdaptersConfig, p);
+}
+
+
+function codexConfigArg(key: string, value: string | string[]): string[] {
+  return ["-c", `${key}=${JSON.stringify(value)}`];
+}
+
+
+function commandMcpDefinition(name: string, command: string, args: string[] = []): McpServerDefinition {
+  return {
+    codex: [
+      ...codexConfigArg(`mcp_servers.${name}.command`, command),
+      ...codexConfigArg(`mcp_servers.${name}.args`, args),
+    ],
+    claude: { command, args },
+  };
+}
+
+
+function urlMcpDefinition(name: string, url: string, bearerTokenEnvVar: string): McpServerDefinition {
+  return {
+    codex: [
+      ...codexConfigArg(`mcp_servers.${name}.url`, url),
+      ...codexConfigArg(`mcp_servers.${name}.bearer_token_env_var`, bearerTokenEnvVar),
+    ],
+  };
+}
+
+
+function isPlaceholderRegistryEntry(entry: McpRegistryEntryConfig | undefined): boolean {
+  if (!entry) {
+    return false;
+  }
+
+  return entry.placeholder === true ||
+    entry.command === "<resolved from SERENA_BIN or PATH>" ||
+    entry.url === "https://replace-with-roadboard-mcp-url.example/mcp" ||
+    entry.url === "https://replace-with-github-mcp-url.example/mcp" ||
+    entry.bearerTokenEnvVar === "ROADBOARD_MCP_TOKEN_ENV_VAR_NAME" ||
+    entry.bearerTokenEnvVar === "GITHUB_MCP_TOKEN_ENV_VAR_NAME";
+}
+
+
+function findExecutableOnPath(binary: string): string | null {
+  const pathEnv = process.env.PATH ?? "";
+
+  for (const dir of pathEnv.split(path.delimiter)) {
+    if (!dir) {
+      continue;
+    }
+
+    const candidate = path.join(dir, binary);
+
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+
+      return candidate;
+    }
+
+    catch {
+      // Keep scanning PATH.
+    }
+  }
+
+  return null;
+}
+
+
+function definitionFromConfigEntry(name: string, entry: McpRegistryEntryConfig): McpServerDefinition {
+  if (entry.codex || entry.claude) {
+    return {
+      codex: entry.codex,
+      claude: entry.claude,
+    };
+  }
+
+  if (entry.command) {
+    return commandMcpDefinition(name, entry.command, entry.args ?? []);
+  }
+
+  if (entry.url && entry.bearerTokenEnvVar) {
+    return urlMcpDefinition(name, entry.url, entry.bearerTokenEnvVar);
+  }
+
+  throw new Error(
+    `MCP server "${name}" has an incomplete mcpRegistry entry. ` +
+    "Provide either codex/claude, command, or url + bearerTokenEnvVar.",
+  );
+}
+
+
+function resolveSerenaDefinition(entry: McpRegistryEntryConfig | undefined): McpServerDefinition {
+  if (entry && !isPlaceholderRegistryEntry(entry)) {
+    return definitionFromConfigEntry("serena", entry);
+  }
+
+  const command = process.env.SERENA_BIN ?? findExecutableOnPath("serena");
+
+  if (!command) {
+    throw new Error(
+      'MCP server "serena" requires SERENA_BIN or a "serena" executable on PATH.',
+    );
+  }
+
+  return commandMcpDefinition("serena", command, ["start-mcp-server", "--context", "codex", "--project-from-cwd"]);
+}
+
+
+function resolveEnvUrlDefinition(
+  name: string,
+  entry: McpRegistryEntryConfig | undefined,
+  urlEnvName: string,
+  tokenEnvNameEnvName: string,
+): McpServerDefinition {
+  if (entry && !isPlaceholderRegistryEntry(entry)) {
+    return definitionFromConfigEntry(name, entry);
+  }
+
+  const url = process.env[urlEnvName];
+  const bearerTokenEnvVar = process.env[tokenEnvNameEnvName];
+
+  if (!url || !bearerTokenEnvVar) {
+    throw new Error(
+      `MCP server "${name}" requires mcpRegistry.${name}.url + bearerTokenEnvVar ` +
+      `or environment variables ${urlEnvName} and ${tokenEnvNameEnvName}.`,
+    );
+  }
+
+  return urlMcpDefinition(name, url, bearerTokenEnvVar);
+}
+
+
+function resolveMcpServerDefinition(name: string, registry?: McpRegistryConfig): McpServerDefinition {
+  const entry = registry?.[name];
+
+  if (entry && !["serena", "roadboard", "github", "chrome-devtools", "context7"].includes(name)) {
+    return definitionFromConfigEntry(name, entry);
+  }
+
+  if (name === "serena") {
+    return resolveSerenaDefinition(entry);
+  }
+
+  if (name === "roadboard") {
+    return resolveEnvUrlDefinition(
+      "roadboard",
+      entry,
+      "ROADBOARD_MCP_URL",
+      "ROADBOARD_MCP_TOKEN_ENV_VAR",
+    );
+  }
+
+  if (name === "github") {
+    return resolveEnvUrlDefinition(
+      "github",
+      entry,
+      "GITHUB_MCP_URL",
+      "GITHUB_MCP_TOKEN_ENV_VAR",
+    );
+  }
+
+  if (name === "chrome-devtools") {
+    return entry
+      ? definitionFromConfigEntry(name, entry)
+      : commandMcpDefinition(name, "npx", ["-y", "chrome-devtools-mcp@latest"]);
+  }
+
+  if (name === "context7") {
+    return entry
+      ? definitionFromConfigEntry(name, entry)
+      : commandMcpDefinition(name, "npx", ["-y", "@upstash/context7-mcp"]);
+  }
+
+  throw new Error(`Unknown MCP server "${name}". Add it to mcpRegistry before using it.`);
+}
+
+
+function validateMcpServers(names: string[], owner: string, binary?: string, registry?: McpRegistryConfig): void {
+  for (const name of names) {
+    const definition = resolveMcpServerDefinition(name, registry);
+
+    if (binary) {
+      const kind = binaryKind(binary);
+
+      if (kind === "codex" && !definition.codex) {
+        throw new Error(`MCP server "${name}" cannot be configured for Codex in ${owner}.`);
+      }
+
+      if (kind === "claude" && !definition.claude) {
+        throw new Error(
+          `MCP server "${name}" cannot be safely configured for Claude in ${owner} without embedding credentials.`,
+        );
+      }
+    }
+  }
+}
+
+
+function roleWithDefaults(
+  role: RoleConfig | undefined,
+  roleName: WorkflowRoleName | null,
+  configPath: string,
+  registry?: McpRegistryConfig,
+): RoleConfig | undefined {
+  if (!role) {
+    return undefined;
+  }
+
+  const legacy = role.mcpServers === undefined && role.inheritGlobalMcp !== true;
+  const defaultMcp = roleName ? ROLE_DEFAULT_MCP[roleName] : [];
+  const next = {
+    ...role,
+    mcpServers: role.mcpServers ?? defaultMcp,
+    inheritGlobalMcp: role.inheritGlobalMcp ?? false,
+  };
+
+  validateMcpServers(next.mcpServers, `roles.${roleName ?? "custom"}`, next.binary, registry);
+
+  if (legacy) {
+    warnLegacyMcpDefaults(configPath);
+  }
+
+  return next;
+}
+
+
+function adapterWithDefaults(
+  adapter: AdapterConfig,
+  adapterName: string,
+  configPath: string,
+  registry?: McpRegistryConfig,
+): AdapterConfig {
+  const legacy = adapter.mcpServers === undefined && adapter.inheritGlobalMcp !== true;
+  const kind = binaryKind(adapter.binary);
+  const defaultMcp = kind === "claude" || kind === "codex" ? ROLE_DEFAULT_MCP.worker : [];
+  const next = {
+    ...adapter,
+    mcpServers: adapter.mcpServers ?? defaultMcp,
+    inheritGlobalMcp: adapter.inheritGlobalMcp ?? false,
+  };
+
+  validateMcpServers(next.mcpServers, `adapters.${adapterName}`, next.binary, registry);
+
+  if (legacy) {
+    warnLegacyMcpDefaults(configPath);
+  }
+
+  return next;
+}
+
+
+function workflowRoleName(name: string): WorkflowRoleName | null {
+  if (name === "architect" || name === "analyst" || name === "outputAnalyst" || name === "worker") {
+    return name;
+  }
+
+  return null;
+}
+
+
+function normalizeAdaptersConfig(config: AdaptersConfig, configPath: string): AdaptersConfig {
+  const registry = config.mcpRegistry;
+  const roles = config.roles
+    ? Object.fromEntries(
+      Object.entries(config.roles).map(([name, role]) => [
+        name,
+        roleWithDefaults(
+          role,
+          workflowRoleName(name),
+          configPath,
+          registry,
+        ),
+      ]),
+    ) as Record<string, RoleConfig>
+    : undefined;
+
+  if (roles?.analyst && !roles.outputAnalyst) {
+    roles.outputAnalyst = {
+      ...roles.analyst,
+      mcpServers: ROLE_DEFAULT_MCP.outputAnalyst,
+      inheritGlobalMcp: false,
+    };
+  }
+
+  if (roles?.architect && !roles.worker) {
+    roles.worker = {
+      binary: "claude",
+      model: "sonnet",
+      flags: [],
+      mcpServers: ROLE_DEFAULT_MCP.worker,
+      inheritGlobalMcp: false,
+    };
+  }
+
+  const adapters = Object.fromEntries(
+    Object.entries(config.adapters ?? {}).map(([name, adapter]) => [
+      name,
+      adapterWithDefaults(adapter, name, configPath, registry),
+    ]),
+  );
+
+  return {
+    ...config,
+    adapters,
+    roles,
+  };
+}
+
+
+function warnLegacyMcpDefaults(configPath: string): void {
+  const key = path.resolve(configPath);
+
+  if (warnedLegacyConfigs.has(key)) {
+    return;
+  }
+
+  warnedLegacyConfigs.add(key);
+  console.warn(
+    `[agent-workflow] ${configPath} has no explicit mcpServers/inheritGlobalMcp fields; ` +
+    "using lightweight role defaults. Set inheritGlobalMcp:true only for compatibility/debug.",
+  );
+}
+
+
+function binaryKind(binary: string): "codex" | "claude" | "other" {
+  const base = path.basename(binary).replace(/\.[^.]+$/, "");
+
+  if (base === "codex") return "codex";
+  if (base === "claude" || binary.endsWith("claude-worker.sh")) return "claude";
+
+  return "other";
 }
 
 /**
@@ -845,12 +1223,18 @@ export function adaptersDryRun(
   }
 
   const adapterCfg = config.adapters[adapterName];
+  const args = buildAdapterInvocationArgs(
+    adapterCfg,
+    filePath,
+    path.resolve(options.tasksDir ?? TASKS_DIR, ".."),
+    config.mcpRegistry,
+  );
 
   return {
     slug,
     adapter: adapterName,
     command: adapterCfg.binary,
-    args: [filePath],
+    args,
   };
 }
 
@@ -917,27 +1301,37 @@ export function adaptersRun(
 
   const outputPath = path.join(outputDir, `${slug}-${adapterName}-output.md`);
   const timeoutMs = resolveAgentTimeoutMs(config);
+  const args = buildAdapterInvocationArgs(
+    adapterCfg,
+    filePath,
+    path.resolve(options.tasksDir ?? TASKS_DIR, ".."),
+    config.mcpRegistry,
+  );
   const execFn = options.execFn ?? ((binary, args, opts) =>
     child_process.execFileSync(binary, args, opts) as string);
 
-  // Use execFileSync to avoid shell injection — binary path must be absolute
-  let output: string;
-
-  try {
-    output = execFn(adapterCfg.binary, [filePath], {
+  const output = invokeExecFileStep({
+    role: "adapter-run",
+    command: adapterCfg.binary,
+    args,
+    timeoutMs,
+    execFn,
+    opts: {
       encoding: "utf-8",
       maxBuffer: 10 * 1024 * 1024,
       timeout: timeoutMs,
-    });
-  }
-
-  catch (err) {
-    if (isTimeoutError(err)) {
-      throw new Error(`Adapter "${adapterName}" step timed out after ${timeoutMs}ms.`);
-    }
-
-    throw err;
-  }
+    },
+    timeoutMessage: `Adapter "${adapterName}" step timed out after ${timeoutMs}ms.`,
+    telemetry: {
+      role: "adapter-run",
+      binary: adapterCfg.binary,
+      model: adapterCfg.model,
+      mcpServers: adapterCfg.inheritGlobalMcp ? ["<global>"] : adapterCfg.mcpServers ?? [],
+      promptBytes: fileByteSize(filePath),
+      contextPackBytes: 0,
+      transcriptPath: outputPath,
+    },
+  });
 
   fs.writeFileSync(outputPath, output, "utf-8");
 
@@ -947,16 +1341,51 @@ export function adaptersRun(
 
 const STARTER_CONFIG: AdaptersConfig = {
   adapters: {},
+  mcpRegistry: {
+    serena: {
+      placeholder: true,
+      command: "<resolved from SERENA_BIN or PATH>",
+      args: ["start-mcp-server", "--context", "codex", "--project-from-cwd"],
+    },
+    roadboard: {
+      placeholder: true,
+      url: "https://replace-with-roadboard-mcp-url.example/mcp",
+      bearerTokenEnvVar: "ROADBOARD_MCP_TOKEN_ENV_VAR_NAME",
+    },
+    github: {
+      placeholder: true,
+      url: "https://replace-with-github-mcp-url.example/mcp",
+      bearerTokenEnvVar: "GITHUB_MCP_TOKEN_ENV_VAR_NAME",
+    },
+  },
   roles: {
     analyst: {
       binary: "codex",
       model: "chatgpt-4.5",
       flags: [],
+      mcpServers: ["serena", "roadboard"],
+      inheritGlobalMcp: false,
+    },
+    outputAnalyst: {
+      binary: "codex",
+      model: "chatgpt-4.5",
+      flags: [],
+      mcpServers: [],
+      inheritGlobalMcp: false,
     },
     architect: {
       binary: "claude",
       model: "opus",
       flags: ["--dangerously-skip-permissions"],
+      mcpServers: [],
+      inheritGlobalMcp: false,
+    },
+    worker: {
+      binary: "claude",
+      model: "sonnet",
+      flags: ["--dangerously-skip-permissions"],
+      mcpServers: ["serena"],
+      inheritGlobalMcp: false,
     },
   },
   verify: {
@@ -1001,7 +1430,7 @@ export function configShow(options: { configPath?: string } = {}): ConfigShowRes
   }
 
   const raw = fs.readFileSync(filePath, "utf-8");
-  const config = JSON.parse(raw) as AdaptersConfig;
+  const config = normalizeAdaptersConfig(JSON.parse(raw) as AdaptersConfig, filePath);
 
   return { filePath, config };
 }
@@ -1034,8 +1463,7 @@ export interface RunOptions {
 
 /**
  * Refuses when tasks/run/ already holds a prompt other than `excludeBasename`
- * (single-task-in-run constraint) — concurrent prompts in run/ contaminate
- * review-output's whole-repo diff. Worker output artifacts (`-output.md`) are
+ * (single-task-in-run constraint). Worker output artifacts (`-output.md`) are
  * exempt via `isPromptFileName`. Bypassed entirely when `force` is set.
  */
 function assertSingleTaskInRun(
@@ -1074,7 +1502,8 @@ function assertSingleTaskInRun(
 
   throw new Error(
     `Refusing review-output: tasks/run/ contains ${others.length} other prompt(s) besides the one being reviewed (${list}). ` +
-    "review-output evaluates the whole-repo diff, so concurrent prompts in run/ would contaminate the review " +
+    "review-output expects one active Worker snapshot at a time; legacy runs without snapshots fall back to a whole-repo diff, " +
+    "so concurrent prompts can still contaminate the review " +
     "(single-task-in-run constraint) — pass --force to bypass.",
   );
 }
@@ -1162,7 +1591,7 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
     const wouldPath = inTodo
       ? path.join(tasksDir, "run", path.basename(promptFile))
       : promptFile;
-    const args = [...(adapterCfg.flags ?? []), wouldPath];
+    const args = buildAdapterInvocationArgs(adapterCfg, wouldPath, path.resolve(tasksDir, ".."), config.mcpRegistry);
     log(
       `[dry-run] would ${inTodo ? "move todo/→run/ then " : ""}run worker on approved prompt: ` +
       `${command} ${args.join(" ")}`,
@@ -1190,7 +1619,8 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
     log(`[run] moved ${path.basename(dest)} todo/ → run/`);
   }
 
-  const args = [...(adapterCfg.flags ?? []), promptFile];
+  const repoRoot = path.resolve(tasksDir, "..");
+  const args = buildAdapterInvocationArgs(adapterCfg, promptFile, repoRoot, config.mcpRegistry);
 
   // Worker output artifacts are NOT lifecycle prompts — default them into
   // .agent/ so they never pollute tasks/run/ counts and sync.
@@ -1204,21 +1634,28 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
   log(`[run] invoking worker adapter "${adapterName}" on approved prompt ${path.basename(promptFile)}`);
 
   const timeoutMs = resolveAgentTimeoutMs(config);
-  let output: string;
-
-  try {
-    output = execFn(command, args, { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, timeout: timeoutMs });
-  }
-
-  catch (err) {
-    if (isTimeoutError(err)) {
-      throw new Error(`Worker step timed out after ${timeoutMs}ms.`);
-    }
-
-    throw err;
-  }
+  const workerSnapshot = captureWorkerSnapshot(repoRoot, slug);
+  const output = invokeExecFileStep({
+    role: "worker",
+    command,
+    args,
+    timeoutMs,
+    execFn,
+    opts: { encoding: "utf-8", maxBuffer: 10 * 1024 * 1024, timeout: timeoutMs },
+    timeoutMessage: `Worker step timed out after ${timeoutMs}ms.`,
+    telemetry: {
+      role: "worker",
+      binary: command,
+      model: adapterCfg.model,
+      mcpServers: adapterCfg.inheritGlobalMcp ? ["<global>"] : adapterCfg.mcpServers ?? [],
+      promptBytes: fileByteSize(promptFile),
+      contextPackBytes: 0,
+      transcriptPath: outputPath,
+    },
+  });
 
   fs.writeFileSync(outputPath, output, "utf-8");
+  writeWorkerSnapshotPointer(repoRoot, slug, workerSnapshot);
 
   return { slug, promptFile, adapter: adapterName, status, dryRun: false, command, args, outputPath };
 }
@@ -1257,23 +1694,14 @@ export function buildRoleInvocation(
   role: RoleConfig,
   promptText: string,
   repoRoot: string,
+  registry?: McpRegistryConfig,
 ): { command: string; args: string[] } {
   const flags = role.flags ?? [];
-  const isCodex = path.basename(role.binary).replace(/\.[^.]+$/, "") === "codex";
+  const kind = binaryKind(role.binary);
+  const isolationArgs = buildMcpIsolationArgs(role, repoRoot, "role", registry);
 
-  if (isCodex) {
-    // Drop a stray "exec" from flags — we add the exec scaffold ourselves.
-    const extraFlags = flags.filter((f) => f !== "exec");
-    const args = [
-      "exec",
-      "--cd", repoRoot,
-      "--sandbox", "workspace-write",
-      "--skip-git-repo-check",
-      ...extraFlags,
-      promptText,
-    ];
-
-    return { command: role.binary, args };
+  if (kind === "codex") {
+    return { command: role.binary, args: buildCodexExecArgs(repoRoot, isolationArgs, role.model, flags, promptText) };
   }
 
   // claude (default) — headless print mode with non-interactive edit permission
@@ -1291,9 +1719,100 @@ export function buildRoleInvocation(
     args.push("--permission-mode", "acceptEdits");
   }
 
+  args.push(...isolationArgs);
   args.push(...flags);
 
   return { command: role.binary, args };
+}
+
+
+function buildCodexExecArgs(
+  repoRoot: string,
+  isolationArgs: string[],
+  model: string | undefined,
+  flags: string[],
+  promptOrFile: string,
+): string[] {
+  return [
+    "exec",
+    "--cd", repoRoot,
+    "--sandbox", "workspace-write",
+    "--skip-git-repo-check",
+    ...isolationArgs,
+    ...(model ? ["--model", model] : []),
+    ...flags.filter((flag) => flag !== "exec"),
+    promptOrFile,
+  ];
+}
+
+
+function buildMcpIsolationArgs(
+  cfg: Pick<RoleConfig, "binary" | "mcpServers" | "inheritGlobalMcp">,
+  repoRoot: string,
+  owner: string,
+  registry?: McpRegistryConfig,
+): string[] {
+  if (cfg.inheritGlobalMcp === true) {
+    return [];
+  }
+
+  const servers = cfg.mcpServers ?? [];
+  validateMcpServers(servers, owner, cfg.binary, registry);
+  const kind = binaryKind(cfg.binary);
+
+  if (kind === "codex") {
+    return ["--ignore-user-config", ...servers.flatMap((name) => resolveMcpServerDefinition(name, registry).codex ?? [])];
+  }
+
+  if (kind === "claude") {
+    const configPath = writeClaudeMcpConfig(repoRoot, servers, registry);
+    return ["--mcp-config", configPath, "--strict-mcp-config"];
+  }
+
+  if (servers.length > 0) {
+    throw new Error(
+      `Cannot guarantee MCP isolation for ${owner}: binary "${cfg.binary}" is neither Codex nor Claude.`,
+    );
+  }
+
+  return [];
+}
+
+
+function writeClaudeMcpConfig(repoRoot: string, serverNames: string[], registry?: McpRegistryConfig): string {
+  const baseRoot = fs.existsSync(repoRoot) ? repoRoot : ROOT;
+  const mcpDir = path.join(baseRoot, ".agent", "workflow-mcp");
+  fs.mkdirSync(mcpDir, { recursive: true });
+  const stableName = serverNames.length > 0 ? serverNames.join("-") : "none";
+  const filePath = path.join(mcpDir, `claude-${stableName}.json`);
+  const mcpServers = Object.fromEntries(
+    serverNames.map((name) => [name, resolveMcpServerDefinition(name, registry).claude]),
+  );
+
+  writePrivateFile(filePath, JSON.stringify({ mcpServers }, null, 2) + "\n");
+
+  if (!filePath.startsWith(baseRoot)) {
+    throw new Error(`Refusing to write Claude MCP config outside repo: ${filePath}`);
+  }
+
+  return filePath;
+}
+
+
+function buildAdapterInvocationArgs(
+  adapterCfg: AdapterConfig,
+  promptFile: string,
+  repoRoot: string,
+  registry?: McpRegistryConfig,
+): string[] {
+  const isolationArgs = buildMcpIsolationArgs(adapterCfg, repoRoot, `adapter ${adapterCfg.binary}`, registry);
+  const flags = adapterCfg.flags ?? [];
+
+  if (binaryKind(adapterCfg.binary) === "codex") {
+    return buildCodexExecArgs(repoRoot, isolationArgs, adapterCfg.model, flags, promptFile);
+  }
+
+  return [...flags, ...isolationArgs, promptFile];
 }
 
 /** Flip the frontmatter `status:` line in place without disturbing the rest. */
@@ -1561,15 +2080,25 @@ export function invokeAgentStep(params: {
   spawnFn?: (command: string, args: string[]) => number;
   logFn: (msg: string) => void;
   transcriptPath?: string;
+  telemetry?: ProcessTelemetryInput;
 }): number {
-  const { role, command, args, cwd, timeoutMs, spawnFn, logFn, transcriptPath } = params;
+  const { role, command, args, cwd, timeoutMs, spawnFn, logFn, transcriptPath, telemetry } = params;
+  const startedAt = Date.now();
 
   if (spawnFn) {
     try {
-      return spawnFn(command, args);
+      const code = spawnFn(command, args);
+      if (telemetry) writeProcessTelemetry(telemetry, Date.now() - startedAt, code);
+      return code;
     }
 
     catch (err) {
+      if (telemetry) writeProcessTelemetry(
+        telemetry,
+        Date.now() - startedAt,
+        isTimeoutError(err) ? 124 : 1,
+        isTimeoutError(err) ? "timeout" : "non-zero",
+      );
       if (isTimeoutError(err)) {
         throw new Error(`${role} step timed out after ${timeoutMs}ms.`);
       }
@@ -1589,6 +2118,7 @@ export function invokeAgentStep(params: {
   });
 
   if (result.error && isTimeoutError(result.error)) {
+    if (telemetry) writeProcessTelemetry(telemetry, Date.now() - startedAt, 124, "timeout");
     throw new Error(`${role} step timed out after ${timeoutMs}ms.`);
   }
 
@@ -1603,8 +2133,107 @@ export function invokeAgentStep(params: {
   }
 
   logFn(`[${role.toLowerCase()}] step finished (exit ${result.status ?? "null"}).`);
+  if (telemetry) {
+    const exitCode = result.status ?? 1;
+    writeProcessTelemetry(
+      telemetry,
+      Date.now() - startedAt,
+      exitCode,
+      exitCode === 0 ? undefined : "non-zero",
+    );
+  }
 
   return result.status ?? 1;
+}
+
+
+function invokeExecFileStep(params: {
+  role: string;
+  command: string;
+  args: string[];
+  opts: object;
+  timeoutMs: number;
+  timeoutMessage: string;
+  execFn: (binary: string, args: string[], opts: object) => string;
+  telemetry: ProcessTelemetryInput;
+}): string {
+  const startedAt = Date.now();
+
+  try {
+    const output = params.execFn(params.command, params.args, params.opts);
+    writeProcessTelemetry(params.telemetry, Date.now() - startedAt, 0);
+
+    return output;
+  }
+
+  catch (err) {
+    const exitCode = isTimeoutError(err) ? 124 : extractExitCode(err);
+    writeProcessTelemetry(params.telemetry, Date.now() - startedAt, exitCode, isTimeoutError(err) ? "timeout" : "non-zero");
+
+    if (isTimeoutError(err)) {
+      throw new Error(params.timeoutMessage);
+    }
+
+    throw err;
+  }
+}
+
+
+function extractExitCode(err: unknown): number {
+  if (err !== null && typeof err === "object") {
+    const status = (err as { status?: unknown }).status;
+    const code = (err as { code?: unknown }).code;
+
+    if (typeof status === "number") return status;
+    if (typeof code === "number") return code;
+  }
+
+  return 1;
+}
+
+
+function writeProcessTelemetry(
+  input: ProcessTelemetryInput,
+  durationMs: number,
+  exitCode: number,
+  failureKind?: "timeout" | "non-zero",
+): void {
+  fs.mkdirSync(WORKFLOW_TELEMETRY_DIR, { recursive: true, mode: 0o700 });
+  const entry = {
+    timestamp: new Date().toISOString(),
+    role: input.role,
+    binary: input.binary,
+    model: input.model ?? null,
+    authorizedMcpServers: input.mcpServers,
+    promptBytes: input.promptBytes,
+    contextPackBytes: input.contextPackBytes,
+    diffBytes: input.diffBytes ?? 0,
+    durationMs,
+    exitCode,
+    failureKind: failureKind ?? null,
+    tokenUsage: "unavailable",
+    transcriptPath: input.transcriptPath ?? null,
+  };
+  const filePath = path.join(WORKFLOW_TELEMETRY_DIR, "processes.jsonl");
+  const fd = fs.openSync(filePath, "a", 0o600);
+
+  try {
+    fs.writeSync(fd, JSON.stringify(entry) + "\n", undefined, "utf-8");
+  }
+
+  finally {
+    fs.closeSync(fd);
+  }
+}
+
+
+function byteSize(text: string): number {
+  return Buffer.byteLength(text, "utf-8");
+}
+
+
+function fileByteSize(filePath: string): number {
+  return fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
 }
 
 /**
@@ -1640,10 +2269,15 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
     throw new Error(`No "architect" role in ${configPath}.`);
   }
 
+  if (analystKind === "claude") {
+    throw new Error(
+      "--analyst claude is not supported for prompt-review because the required RoadBoard MCP " +
+      "cannot be configured for Claude without copying credentials. Use the Codex analyst profile.",
+    );
+  }
+
   const analystRole: RoleConfig =
-    analystKind === "claude"
-      ? { binary: "claude", model: architectRole.model, flags: architectRole.flags }
-      : config.roles.analyst;
+    config.roles.analyst;
 
   if (!analystRole) {
     throw new Error(`No "analyst" role in ${configPath}. Add one or pass --analyst claude.`);
@@ -1672,7 +2306,9 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
     if (status === "draft" || status === "changes-requested" || status === null) {
       const verb = status === "changes-requested" ? "revising" : "submitting";
       log(`[review] round ${i + 1}: Architect (${architectRole.binary}) ${verb}…`);
-      const { command, args } = buildRoleInvocation(architectRole, buildArchitectPrompt(relPath, status), ROOT);
+      const architectPrompt = buildArchitectPrompt(relPath, status);
+      const architectTranscript = path.join(transcriptsDir, `${slug}-review-round${i + 1}-architect.log`);
+      const { command, args } = buildRoleInvocation(architectRole, architectPrompt, ROOT, config.mcpRegistry);
       const code = invokeAgentStep({
         role: "Architect",
         command,
@@ -1681,7 +2317,16 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
         timeoutMs,
         spawnFn: options.spawnFn,
         logFn: log,
-        transcriptPath: path.join(transcriptsDir, `${slug}-review-round${i + 1}-architect.log`),
+        transcriptPath: architectTranscript,
+        telemetry: {
+          role: "architect-review",
+          binary: architectRole.binary,
+          model: architectRole.model,
+          mcpServers: architectRole.inheritGlobalMcp ? ["<global>"] : architectRole.mcpServers ?? [],
+          promptBytes: byteSize(architectPrompt),
+          contextPackBytes: 0,
+          transcriptPath: architectTranscript,
+        },
       });
 
       if (code !== 0) {
@@ -1700,7 +2345,9 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
     // Analyst step: write verdict into the prompt
     const expectedRound = parsePrompt(fs.readFileSync(promptFile, "utf-8")).frontmatter.reviewRound ?? 0;
     log(`[review] round ${i + 1}: Analyst (${analystRole.binary}) reviewing…`);
-    const { command, args } = buildRoleInvocation(analystRole, buildAnalystPrompt(relPath), ROOT);
+    const analystPrompt = buildAnalystPrompt(relPath);
+    const analystTranscript = path.join(transcriptsDir, `${slug}-review-round${i + 1}-analyst.log`);
+    const { command, args } = buildRoleInvocation(analystRole, analystPrompt, ROOT, config.mcpRegistry);
     const snapshotFn = options.snapshotFn ?? snapshotWorkingTree;
     const treeBefore = snapshotFn(ROOT);
     const code = invokeAgentStep({
@@ -1711,7 +2358,16 @@ export function runReview(slug: string, options: ReviewOptions = {}): ReviewResu
       timeoutMs,
       spawnFn: options.spawnFn,
       logFn: log,
-      transcriptPath: path.join(transcriptsDir, `${slug}-review-round${i + 1}-analyst.log`),
+      transcriptPath: analystTranscript,
+      telemetry: {
+        role: "analyst-prompt",
+        binary: analystRole.binary,
+        model: analystRole.model,
+        mcpServers: analystRole.inheritGlobalMcp ? ["<global>"] : analystRole.mcpServers ?? [],
+        promptBytes: byteSize(analystPrompt),
+        contextPackBytes: 0,
+        transcriptPath: analystTranscript,
+      },
     });
     const treeAfter = snapshotFn(ROOT);
 
@@ -1784,6 +2440,380 @@ function computeGitDiff(repoRoot: string): string {
   return (tracked.stdout ?? "") + untrackedDiff;
 }
 
+
+interface WorkerSnapshot {
+  version: 1;
+  slug: string;
+  createdAt: string;
+  repoRoot: string;
+  files: Record<string, SnapshotEntry>;
+}
+
+type SnapshotEntry =
+  | { state: "missing" }
+  | { state: "content"; content: string }
+  | { state: "redacted"; exists: boolean; hash: string | null; reason: string };
+
+
+function captureWorkerSnapshot(repoRoot: string, slug: string): string {
+  const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
+  fs.mkdirSync(snapshotDir, { recursive: true, mode: 0o700 });
+  const files: Record<string, SnapshotEntry> = {};
+
+  for (const relPath of listDirtyPaths(repoRoot)) {
+    files[relPath] = snapshotWorktreePath(repoRoot, relPath);
+  }
+
+  const snapshot: WorkerSnapshot = {
+    version: 1,
+    slug,
+    createdAt: new Date().toISOString(),
+    repoRoot,
+    files,
+  };
+  const filePath = path.join(snapshotDir, `${slug}.json`);
+  writePrivateFile(filePath, JSON.stringify(snapshot, null, 2) + "\n");
+
+  return filePath;
+}
+
+
+function writeWorkerSnapshotPointer(repoRoot: string, slug: string, snapshotPath: string): void {
+  const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
+  fs.mkdirSync(snapshotDir, { recursive: true, mode: 0o700 });
+  const pointerPath = path.join(snapshotDir, `${slug}.latest`);
+  writePrivateFile(pointerPath, path.relative(repoRoot, snapshotPath) + "\n");
+}
+
+
+function computeWorkerDiff(repoRoot: string, slug: string): string | null {
+  const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
+  const pointerPath = path.join(snapshotDir, `${slug}.latest`);
+
+  if (!fs.existsSync(pointerPath)) {
+    return null;
+  }
+
+  const snapshotRel = fs.readFileSync(pointerPath, "utf-8").trim();
+  const snapshotPath = path.resolve(repoRoot, snapshotRel);
+
+  if (!isContainedPath(snapshotDir, snapshotPath) || !fs.existsSync(snapshotPath)) {
+    throw new Error(`Worker snapshot for "${slug}" is missing or outside .agent/.`);
+  }
+
+  const realSnapshotDir = fs.realpathSync(snapshotDir);
+  const realSnapshotPath = fs.realpathSync(snapshotPath);
+
+  if (!isContainedPath(realSnapshotDir, realSnapshotPath)) {
+    throw new Error(`Worker snapshot for "${slug}" is missing or outside .agent/.`);
+  }
+
+  const snapshot = JSON.parse(fs.readFileSync(realSnapshotPath, "utf-8")) as WorkerSnapshot;
+  const beforePaths = new Set(Object.keys(snapshot.files));
+  const afterPaths = new Set(listDirtyPaths(repoRoot));
+  let diff = "";
+
+  for (const relPath of [...new Set([...beforePaths, ...afterPaths])].sort()) {
+    const before = beforePaths.has(relPath)
+      ? snapshot.files[relPath]
+      : snapshotHeadPath(repoRoot, relPath);
+    const after = snapshotWorktreePath(repoRoot, relPath);
+
+    if (!snapshotEntriesEqual(before, after)) {
+      diff += diffSnapshotEntries(repoRoot, relPath, before, after);
+    }
+  }
+
+  return diff;
+}
+
+
+function isContainedPath(parentDir: string, candidatePath: string): boolean {
+  const relative = path.relative(path.resolve(parentDir), path.resolve(candidatePath));
+
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+
+function listDirtyPaths(repoRoot: string): string[] {
+  const opts = { cwd: repoRoot, encoding: "utf-8" as const, maxBuffer: 20 * 1024 * 1024 };
+  const status = child_process.spawnSync(
+    "git",
+    ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    opts,
+  );
+  const records = (status.stdout ?? "").split("\0").filter((record) => record !== "");
+  const paths = new Set<string>();
+
+  for (let i = 0; i < records.length; i++) {
+    const record = records[i];
+    const code = record.slice(0, 2);
+    const relPath = record.slice(3);
+
+    if (relPath && !relPath.startsWith(".agent/")) {
+      paths.add(relPath);
+    }
+
+    if ((code.includes("R") || code.includes("C")) && records[i + 1]) {
+      const sourcePath = records[i + 1];
+      i++;
+
+      if (sourcePath && !sourcePath.startsWith(".agent/")) {
+        paths.add(sourcePath);
+      }
+    }
+  }
+
+  return [...paths].sort();
+}
+
+
+function snapshotWorktreePath(repoRoot: string, relPath: string): SnapshotEntry {
+  if (!isSafeRepoRelativePath(relPath)) {
+    return { state: "redacted", exists: false, hash: null, reason: "unsafe-path" };
+  }
+
+  const filePath = path.join(repoRoot, relPath);
+
+  if (!path.resolve(filePath).startsWith(path.resolve(repoRoot) + path.sep)) {
+    return { state: "redacted", exists: false, hash: null, reason: "outside-repository" };
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return { state: "missing" };
+  }
+
+  const stat = fs.lstatSync(filePath);
+
+  if (stat.isSymbolicLink()) {
+    const target = fs.readlinkSync(filePath);
+    return { state: "redacted", exists: true, hash: hashBuffer(Buffer.from(target)), reason: "symlink" };
+  }
+
+  if (!stat.isFile()) {
+    return { state: "redacted", exists: true, hash: null, reason: "non-regular-file" };
+  }
+
+  const buffer = fs.readFileSync(filePath);
+
+  if (isSensitivePath(relPath)) {
+    return { state: "redacted", exists: true, hash: hashBuffer(buffer), reason: "sensitive-path" };
+  }
+
+  if (isBinaryBuffer(buffer)) {
+    return { state: "redacted", exists: true, hash: hashBuffer(buffer), reason: "binary-file" };
+  }
+
+  return { state: "content", content: buffer.toString("utf-8") };
+}
+
+
+function snapshotHeadPath(repoRoot: string, relPath: string): SnapshotEntry {
+  if (!isSafeRepoRelativePath(relPath)) {
+    return { state: "redacted", exists: false, hash: null, reason: "unsafe-path" };
+  }
+
+  const opts = { cwd: repoRoot, encoding: "utf-8" as const, maxBuffer: 20 * 1024 * 1024 };
+  const tree = child_process.spawnSync("git", ["ls-tree", "-z", "HEAD", "--", relPath], {
+    ...opts,
+    encoding: "buffer",
+  });
+
+  if (tree.status !== 0) {
+    return { state: "missing" };
+  }
+
+  const treeOut = Buffer.isBuffer(tree.stdout) ? tree.stdout.toString("utf-8").replace(/\0$/, "") : "";
+
+  if (treeOut === "") {
+    return { state: "missing" };
+  }
+
+  const match = treeOut.match(/^(\d{6})\s+\S+\s+[0-9a-f]+\t/);
+
+  if (!match) {
+    return { state: "redacted", exists: true, hash: null, reason: "unreadable-git-entry" };
+  }
+
+  if (match[1] === "120000") {
+    return { state: "redacted", exists: true, hash: null, reason: "symlink" };
+  }
+
+  const result = child_process.spawnSync("git", ["show", `HEAD:${relPath}`], { ...opts, encoding: "buffer" });
+
+  if (result.status !== 0) {
+    return { state: "missing" };
+  }
+
+  const buffer = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout ?? "");
+
+  if (isSensitivePath(relPath)) {
+    return { state: "redacted", exists: true, hash: hashBuffer(buffer), reason: "sensitive-path" };
+  }
+
+  if (isBinaryBuffer(buffer)) {
+    return { state: "redacted", exists: true, hash: hashBuffer(buffer), reason: "binary-file" };
+  }
+
+  return { state: "content", content: buffer.toString("utf-8") };
+}
+
+
+function snapshotEntriesEqual(before: SnapshotEntry, after: SnapshotEntry): boolean {
+  return JSON.stringify(before) === JSON.stringify(after);
+}
+
+
+function diffSnapshotEntries(
+  repoRoot: string,
+  relPath: string,
+  before: SnapshotEntry,
+  after: SnapshotEntry,
+): string {
+  if (
+    (before.state === "content" || before.state === "missing") &&
+    (after.state === "content" || after.state === "missing")
+  ) {
+    return diffFileContents(
+      repoRoot,
+      relPath,
+      before.state === "missing" ? null : before.content,
+      after.state === "missing" ? null : after.content,
+    );
+  }
+
+  return redactedDiff(relPath, before, after);
+}
+
+
+function diffFileContents(repoRoot: string, relPath: string, before: string | null, after: string | null): string {
+  const baseTempDir = path.join(repoRoot, ".agent", "worker-snapshots");
+  fs.mkdirSync(baseTempDir, { recursive: true, mode: 0o700 });
+  const tempDir = fs.mkdtempSync(path.join(baseTempDir, "diff-temp-"));
+  fs.chmodSync(tempDir, 0o700);
+  const safe = relPath.replace(/[^a-zA-Z0-9_.-]+/g, "_");
+  const beforePath = before === null ? "/dev/null" : path.join(tempDir, `${safe}.before`);
+  const afterPath = after === null ? "/dev/null" : path.join(tempDir, `${safe}.after`);
+
+  try {
+    if (before !== null) writePrivateFile(beforePath, before);
+    if (after !== null) writePrivateFile(afterPath, after);
+
+    const result = child_process.spawnSync(
+      "git",
+      ["diff", "--no-index", "--no-ext-diff", "--", beforePath, afterPath],
+      { cwd: repoRoot, encoding: "utf-8", maxBuffer: 20 * 1024 * 1024 },
+    );
+    const raw = result.stdout ?? "";
+
+    return raw
+      .replaceAll(beforePath, before === null ? "/dev/null" : `a/${relPath}`)
+      .replaceAll(afterPath, after === null ? "/dev/null" : `b/${relPath}`);
+  }
+
+  finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+}
+
+
+function redactedDiff(relPath: string, before: SnapshotEntry, after: SnapshotEntry): string {
+  const beforeLabel = before.state === "missing"
+    ? "missing"
+    : before.state === "content"
+      ? "text content"
+      : `redacted ${before.reason}`;
+  const afterLabel = after.state === "missing"
+    ? "missing"
+    : after.state === "content"
+      ? "text content"
+      : `redacted ${after.reason}`;
+
+  return [
+    `diff --git a/${relPath} b/${relPath}`,
+    `--- a/${relPath}`,
+    `+++ b/${relPath}`,
+    "@@",
+    `- [${beforeLabel}]`,
+    `+ [${afterLabel}]`,
+    "",
+  ].join("\n");
+}
+
+
+function writePrivateFile(filePath: string, content: string): void {
+  const fd = fs.openSync(filePath, "w", 0o600);
+
+  try {
+    fs.writeFileSync(fd, content, "utf-8");
+  }
+
+  finally {
+    fs.closeSync(fd);
+  }
+}
+
+
+function isSafeRepoRelativePath(relPath: string): boolean {
+  return relPath !== "" && !path.isAbsolute(relPath) && !relPath.split(/[\\/]/).includes("..");
+}
+
+
+function isSensitivePath(relPath: string): boolean {
+  const normalized = relPath.replace(/\\/g, "/").toLowerCase();
+  const segments = normalized.split("/");
+  const base = path.basename(normalized);
+
+  return (
+    base.startsWith(".env") ||
+    base.includes("credential") ||
+    base.includes("secret") ||
+    base.includes("token") ||
+    base === "id_rsa" ||
+    base === "id_dsa" ||
+    base === "id_ecdsa" ||
+    base === "id_ed25519" ||
+    /\.(pem|key|p12|pfx|crt|cer)$/.test(base) ||
+    segments.includes("credentials") ||
+    segments.includes("secrets")
+  );
+}
+
+
+function isBinaryBuffer(buffer: Buffer): boolean {
+  if (buffer.includes(0)) {
+    return true;
+  }
+
+  if (buffer.length === 0) {
+    return false;
+  }
+
+  const sample = buffer.subarray(0, Math.min(buffer.length, 8192));
+  const text = sample.toString("utf-8");
+
+  if (text.includes("\uFFFD")) {
+    return true;
+  }
+
+  let suspicious = 0;
+
+  for (const byte of sample) {
+    const isAllowedControl = byte === 7 || byte === 8 || byte === 9 || byte === 10 || byte === 12 || byte === 13 || byte === 27;
+
+    if ((byte < 32 && !isAllowedControl) || byte === 127) {
+      suspicious++;
+    }
+  }
+
+  return suspicious / sample.length > 0.3;
+}
+
+
+function hashBuffer(buffer: Buffer): string {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
 export interface ReviewOutputOptions {
   tasksDir?: string;
   configPath?: string;
@@ -1844,8 +2874,9 @@ function buildOutputAnalystPrompt(
 ): string {
   return [
     "You are running in Analyst role — the OUTPUT review gate.",
-    `A Worker has implemented the prompt at: ${promptRelPath}. The resulting git diff (vs HEAD) is saved at: ${diffRelPath}.`,
-    "Read both files. Judge whether the diff satisfies the prompt's `## Scope` and `## Acceptance criteria`: completeness, scope cleanliness (no out-of-scope edits), correctness, safety.",
+    `A Worker has implemented the prompt at: ${promptRelPath}. The resulting diff is saved at: ${diffRelPath}.`,
+    "Normally this diff is computed against the pre-Worker snapshot captured by the workflow. If no snapshot exists, the workflow falls back to the historical whole-repo diff vs HEAD. Judge only the diff content provided in that file.",
+    "Read both files. Judge whether the provided diff satisfies the prompt's `## Scope` and `## Acceptance criteria`: completeness, scope cleanliness (no out-of-scope edits), correctness, safety.",
     "Judge STATICALLY, from the diff and prompt only. Do NOT run build, tests, linters, or any command — `promote` re-executes build and tests as the real gate before this prompt can reach done/, so a criterion like \"tests green\" is verified there, not here. If the diff adds or updates the required tests and the code is correct, treat that criterion as satisfied; do NOT mark it unverifiable merely because you did not execute it.",
     `Write your verdict by editing ONLY the prompt file (${promptRelPath}): set frontmatter \`output_status\` to \`approved\` or \`changes-requested\`, and APPEND a new section under \`## Output review log\` (create the heading if absent) with the EXACT heading \`### Round ${nextRound} — <verdict>\` (never overwrite prior rounds), followed by bullet findings.`,
     "Use exactly the round number given above — do not compute or increment it yourself.",
@@ -1880,10 +2911,10 @@ function makeAnalystReviewFn(
   const analystRole: RoleConfig | undefined =
     opts.analyst === "claude"
       ? { binary: "claude", model: architectRole?.model, flags: architectRole?.flags }
-      : config.roles.analyst;
+      : config.roles.outputAnalyst ?? config.roles.analyst;
 
   if (!analystRole) {
-    throw new Error(`No "analyst" role in ${opts.configPath}. Add one or pass --analyst claude.`);
+    throw new Error(`No "outputAnalyst" or "analyst" role in ${opts.configPath}. Add one or pass --analyst claude.`);
   }
 
   const timeoutMs = resolveAgentTimeoutMs(config);
@@ -1900,8 +2931,12 @@ function makeAnalystReviewFn(
       path.relative(opts.repoRoot, diffPath),
       opts.nextRound,
     );
-    const { command, args } = buildRoleInvocation(analystRole, promptText, opts.repoRoot);
+    const { command, args } = buildRoleInvocation(analystRole, promptText, opts.repoRoot, config.mcpRegistry);
     opts.logFn(`[review-output] Analyst (${analystRole.binary}) reviewing diff…`);
+    const transcriptPath = path.join(
+      opts.transcriptsDir ?? REVIEW_TRANSCRIPTS_DIR,
+      `${slugBase}-review-output-round${opts.nextRound}-analyst.log`,
+    );
     const code = invokeAgentStep({
       role: "Analyst",
       command,
@@ -1910,10 +2945,17 @@ function makeAnalystReviewFn(
       timeoutMs,
       spawnFn: opts.spawnFn,
       logFn: opts.logFn,
-      transcriptPath: path.join(
-        opts.transcriptsDir ?? REVIEW_TRANSCRIPTS_DIR,
-        `${slugBase}-review-output-round${opts.nextRound}-analyst.log`,
-      ),
+      transcriptPath,
+      telemetry: {
+        role: "analyst-output",
+        binary: analystRole.binary,
+        model: analystRole.model,
+        mcpServers: analystRole.inheritGlobalMcp ? ["<global>"] : analystRole.mcpServers ?? [],
+        promptBytes: byteSize(promptText),
+        contextPackBytes: byteSize(promptText) + fileByteSize(diffPath) + fileByteSize(input.promptFile),
+        diffBytes: fileByteSize(diffPath),
+        transcriptPath,
+      },
     });
 
     if (code !== 0) {
@@ -1950,7 +2992,6 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
   const repoRoot = options.repoRoot ?? ROOT;
   const maxRounds = options.maxRounds ?? 3;
   const log = options.logFn ?? ((msg: string) => console.log(msg));
-  const diffFn = options.diffFn ?? computeGitDiff;
 
   const promptFile = findPromptFileInFolder(slug, "run", tasksDir);
 
@@ -1988,7 +3029,9 @@ export function runReviewOutput(slug: string, options: ReviewOutputOptions = {})
     return { slug, promptFile, outputStatus: "blocked-review", outputRound: nextRound, verdict: "blocked-review" };
   }
 
-  const diff = diffFn(repoRoot);
+  const diff = options.diffFn
+    ? options.diffFn(repoRoot)
+    : computeWorkerDiff(repoRoot, slug) ?? computeGitDiff(repoRoot);
   const context = extractScopeAndCriteria(content);
 
   // The injected (test) reviewFn path keeps today's behavior: it returns a
