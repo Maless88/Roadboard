@@ -68,7 +68,7 @@ and symbols are cited inline.
   - `graph.controller.ts` — REST controller mounted on `projects/:projectId/codeflow/graph` exposing `getGraph`, `resetProject`, `entity-links`, `snapshot`, `outbox-stats`, `drift`, `nodes/*`, `edges/*`, `links/*` (apps/core-api/src/modules/codeflow/graph.controller.ts:17–197).
   - `graph.service.ts` — orchestrates Postgres writes and emits outbox events.
   - `graph-sync.service.ts` + tests — replicates Postgres mutations to Memgraph asynchronously.
-  - `drift.service.ts` — Postgres ↔ Memgraph reconciliation (recent commit `7a396ad: feat(codeflow): CF-GDB-03c mini-PR B+C — drift endpoint + hourly systemd timer`).
+  - `drift.service.ts` — Postgres ↔ Memgraph reconciliation (recent commit `1a0d42c: feat(codeflow): CF-GDB-03c mini-PR B+C — drift endpoint + hourly systemd timer`).
 - **MCP server:** [apps/mcp-service/](../../apps/mcp-service/) — stdio + StreamableHTTP transport (port 3005). 50 tools, including `ingest_architecture`, `get_architecture_map`, `get_node_context`, `link_task_to_node`. Calls back into core-api via [core-api.client.ts](../../apps/mcp-service/src/clients/core-api.client.ts).
 - **Other apps:** `auth-access` (3002), `worker-jobs` (3003, BullMQ), `local-sync-bridge` (3004, SQLite).
 
@@ -94,8 +94,8 @@ From [packages/database/prisma/schema.prisma](../../packages/database/prisma/sch
 ### 2.5 Graph Storage
 - **Primary:** PostgreSQL via Prisma (source of truth).
 - **Secondary:** Memgraph (Neo4j-compatible, Cypher) via [packages/graph-db/](../../packages/graph-db/) — schema in [packages/graph-db/src/schema.ts](../../packages/graph-db/src/schema.ts).
-  - Labels: `App | Package | Module | Service | Repository | Link | Annotation`.
-  - Edge types: `DEPENDS_ON | IMPORTS | IMPACTS | LINKED_TO | ANNOTATES | BELONGS_TO`.
+  - Labels: `App | Package | Module | Service | Repository | Link | Annotation`, plus Deep Code Map (Wave 6) multi-label subtypes of `:ArchitectureNode`: `File | Symbol | ExternalPackage`.
+  - Edge types: `DEPENDS_ON | IMPORTS | IMPACTS | LINKED_TO | ANNOTATES | BELONGS_TO`, plus Deep Code Map (Wave 6) code-intelligence edges: `CONTAINS | CALLS | EXTENDS | IMPLEMENTS | REFERENCES_TYPE` (reusing `IMPORTS`).
 - Sync model: outbox events in Postgres → Memgraph; reconciler (`drift.service.ts`) runs hourly via systemd timer.
 
 ### 2.6 Graph Rendering Approach
@@ -336,7 +336,7 @@ Configuration in env: `SOCRATICODE_URL`, `SOCRATICODE_TOKEN`, `SOCRATICODE_TIMEO
 ### Phase 0 — Prerequisites already in flight
 - **Goal:** finish the in-progress CodeFlow consolidation before adding a new layer on top.
 - **Tasks:**
-  - Stabilise drift detection (recent: commit `7a396ad: feat(codeflow): CF-GDB-03c mini-PR B+C — drift endpoint + hourly systemd timer`).
+  - Stabilise drift detection (recent: commit `1a0d42c: feat(codeflow): CF-GDB-03c mini-PR B+C — drift endpoint + hourly systemd timer`).
   - Verify outbox/sync resilience (`graph-sync.service.spec.ts`).
   - Confirm impact analysis scaling (`ImpactAnalysis` precomputation).
 - **Files:** `apps/core-api/src/modules/codeflow/{graph-sync.service.ts, drift.service.ts}`.

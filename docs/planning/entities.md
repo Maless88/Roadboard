@@ -1,5 +1,7 @@
 # Roadboard 2.0 Entities
 
+> **Historical design document.** Early planning draft; the real schema (`packages/database/prisma/schema.prisma`) currently has 28 Prisma models. `Milestone` below is not a Prisma model — the real hierarchy is `Project` → `Phase` → `Task`.
+
 ## Entity Model Overview
 Roadboard 2.0 should be built around a small set of first-class entities with explicit relations.
 
@@ -34,7 +36,7 @@ Key fields:
 - start_date
 - end_date
 
-### Milestone
+### Milestone (not implemented — never became a Prisma model)
 Represents a checkpoint or delivery target inside a phase or project.
 
 Key fields:

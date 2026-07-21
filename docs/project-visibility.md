@@ -1,5 +1,7 @@
 # Spec architetto — `project-visibility`
 
+> **Historical brief** — task assignment snapshot from 2026-05-12. Kept for record; verify current task/phase state in RoadBoard before acting on it.
+
 **Data brief**: 2026-05-12
 **Phase RoadBoard**: *Project Visibility — Per-User Archive & Card UX* (`cmor8wfac`)
 **Stato**: in corso (1 task in_progress, 1 done).

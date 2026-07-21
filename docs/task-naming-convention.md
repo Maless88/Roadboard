@@ -105,6 +105,6 @@ Env vars required:
 
 ## Enforcement
 
-- **MCP soft warning** (separate prompt `enh-mcp-task-naming-guidance`): `create_task` / `update_task` emit a `naming_hint` if the title matches the legacy regex.
+- **MCP soft warning**: `checkLegacyTitle` (`@roadboard/mcp-contracts`) is invoked by `apps/mcp-service/src/main.ts` on `create_task` and `create_phase`, surfacing a `warning` in the tool result when the title matches the legacy regex. Not invoked on `update_task`.
 - **Retrofit**: script targets `todo` + `in_progress` tasks only. `done` tasks are historical and kept as-is.
 - **New tasks**: always use `Area — description` from creation. No exceptions.

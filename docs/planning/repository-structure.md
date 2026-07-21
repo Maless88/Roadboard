@@ -41,6 +41,8 @@ A mono-repo makes this much easier to manage coherently.
 
 ## Recommended Mono-Repo Shape
 
+> **Status: proposal — not yet created.** `packages/ui`, `infra/k8s`, and `docs/roadboard2` below do not exist in the current repo. Planning docs actually live under `docs/planning/`.
+
 ```text
 roadboard/
   apps/
