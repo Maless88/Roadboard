@@ -41,47 +41,27 @@ Those remain owned by `core-api` and `auth-access`.
 - thin clients toward `core-api` and `auth-access`
 - structured validation via shared MCP contracts
 
-## Suggested Internal Layout
+## Actual Current Layout
+
+The service has not (yet) been split into the `server/`, `tools/`, `workflows/`, `policies/`, `audit/` layers described below — those remain aspirational. The real `apps/mcp-service/src/` today is:
 
 ```text
 apps/mcp-service/
   src/
-    main.ts
-    server/
-      mcp.server.ts
-      tool-registry.ts
-    common/
-      guards/
-      decorators/
-      pipes/
-      filters/
-      dto/
-      utils/
-      context/
-    tools/
-      read/
-      write/
-      workflow/
-    workflows/
-      task-context/
-      project-summary/
-      handoff/
-      memory-capture/
+    main.ts                    # monolith: MCP server bootstrap + all tool definitions/handlers (~2.4k lines)
     clients/
-      core-api/
-      auth-access/
-    policies/
-      token-scope/
-      tool-usage/
-      workflow-rules/
-    audit/
-    config/
-  test/
-    integration/
-    contract/
+      core-api.client.ts
+      auth.client.ts
+    create-handoff.spec.ts
+    transport-profile.spec.ts
+    tool-profiles.spec.ts
   package.json
   tsconfig.json
 ```
+
+Tool profiles (`workflow`=21, `atlas`=16, `personal`=13, `full`=50, default `full`) are computed from the single tool catalogue in `main.ts`; see `docs/mcp-client-setup.md#tool-profiles`.
+
+The sections below describe the target modular layout this monolith should evolve toward — not the current state.
 
 ## High-Level Design
 
@@ -121,9 +101,7 @@ Examples:
 - `update_task_status`
 - `create_memory_entry`
 - `create_decision`
-- `create_session_handoff`
-- `issue_mcp_token`
-- `revoke_mcp_token`
+- `create_handoff`
 
 Design principle:
 write tools must be narrower, more validated, and more strongly guarded than read tools.
@@ -201,7 +179,8 @@ Contains typed clients/adapters for:
 - principal resolution
 - grant checks
 - token metadata lookup
-- optional token issuance/revocation when allowed
+
+Token issuance/revocation stays a REST-only `auth-access` capability — it is not exposed as an MCP tool today.
 
 Important rule:
 all service-to-service calls should flow through clients/adapters, not through scattered raw HTTP calls.
@@ -308,27 +287,28 @@ Recommended request flow:
 
 ## Recommended Tool Classes For MVP
 
-### Read tools
+The lists below are illustrative, not exhaustive — the real catalogue is 50 tools (`full` profile) defined in `apps/mcp-service/src/main.ts`, spanning several more families than originally scoped here: project/task/phase/memory/decision CRUD, handoff/summary workflow tools, the architecture/CodeFlow graph family (`get_architecture_map`, `create_architecture_node`, `create_architecture_edge`, `ingest_architecture`, ...), skills (`list_skills`, `attach_skill`, `sync_skills_catalog`, ...), inbox/notifications (`read_inbox`, `create_draft`, `notify`, ...), and scheduling (`create_scheduled_activity`, `create_reminder`, `list_scheduled_activities`, ...).
+
+### Read tools (examples)
 - `get_project`
 - `list_projects`
-- `list_project_milestones`
 - `list_active_tasks`
-- `get_task_context`
+- `list_phases`
 - `get_project_memory`
 - `list_recent_decisions`
-- `get_dashboard_snapshot`
+- `get_project_changelog`
+- `search_memory`
 
-### Write tools
+### Write tools (examples)
 - `create_task`
 - `update_task_status`
 - `create_memory_entry`
 - `create_decision`
-- `create_session_handoff`
+- `create_handoff`
 
-### Workflow tools
+### Workflow tools (examples)
 - `prepare_task_context`
 - `prepare_project_summary`
-- `create_handoff_from_recent_activity`
 
 ## Rules To Lock In
 

@@ -31,55 +31,46 @@ It does **not** own:
 
 Those remain owned by their respective services.
 
-## Recommended Technology
-- Node.js
+## Actual Technology
+- NestJS 11 (Fastify adapter)
 - TypeScript
-- BullMQ
-- Redis
-- thin clients/adapters toward central services
+- `@nestjs/bullmq` + BullMQ, Redis
+- `@roadboard/graph-db`, `@roadboard/agent-runtime`, `@roadboard/database` (workspace packages)
+- does **not** depend on `@nestjs/schedule` — periodic/cron scheduling lives in `local-sync-bridge`, not here
 
-## Suggested Internal Layout
+## Actual Current Layout
+
+The real `apps/worker-jobs/src/` (verified) is a flat NestJS app, not the `app/`/`queue/`/`clients/`/`policies/` split described below — those remain aspirational:
 
 ```text
 apps/worker-jobs/
   src/
     main.ts
-    app/
-      worker.bootstrap.ts
-      worker.module.ts
-    common/
-      guards/
-      pipes/
-      filters/
-      dto/
-      utils/
-      jobs/
-    queue/
-      queue.names.ts
-      queue.factory.ts
-      job.registry.ts
+    app.module.ts
+    health/
     jobs/
-      dashboards/
-      summaries/
-      handoffs/
-      sync/
-      cleanup/
-      audit/
-    clients/
-      core-api/
-      auth-access/
-      mcp-service/
-    policies/
-      retries/
-      idempotency/
-      scheduling/
-    config/
-  test/
-    integration/
-    jobs/
+      jobs.controller.ts
+      jobs.module.ts
+      jobs.service.ts
+      agent-run.runner.ts
+      queue-names.ts
+      processors/
+        agent-run.processor.ts
+        cleanup.processor.ts
+        dashboard-refresh.processor.ts
+        deep-code-scan.processor.ts
+        summary-generation.processor.ts
+        thumbnail-refresh.processor.ts
+    modules/
+      graph-projection/
+        graph-projection.module.ts
+        graph-projection.service.ts
+    types/
   package.json
   tsconfig.json
 ```
+
+The sections below describe the target modular layout this app should evolve toward — not the current state.
 
 ## High-Level Design
 

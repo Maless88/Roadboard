@@ -6,13 +6,12 @@ Define the internal structure of the `core-api` service.
 This service is the central owner of the Roadboard 2.0 work domain:
 - projects
 - phases
-- milestones
 - tasks
 - memory
 - decisions
-- handoffs
 - dashboards
 - audit events (domain-side)
+- agents (rooms/skills/credentials), chatbot, codeflow, notifications, ops, release, scheduling
 
 The structure should favor:
 - strong module boundaries
@@ -40,7 +39,9 @@ Each domain module should contain its own:
 - policies/validators where needed
 - repository/query logic wrappers when useful
 
-## Suggested Internal Layout
+## Actual Current Layout
+
+The real `apps/core-api/src/modules/` (verified) has more modules than originally scoped here, and none of `milestones`, `task-dependencies`, `handoffs`, or a dedicated `integrations/` directory exist:
 
 ```text
 apps/core-api/
@@ -48,37 +49,28 @@ apps/core-api/
     main.ts
     app.module.ts
     common/
-      auth/
-      guards/
-      interceptors/
-      pipes/
-      filters/
-      decorators/
-      dto/
-      utils/
+    types/
     modules/
-      projects/
-      phases/
-      milestones/
-      tasks/
-      task-dependencies/
-      memory/
-      decisions/
-      handoffs/
-      dashboards/
+      agents/          # agents.controller, rooms.controller, skills.controller, credentials.controller
       audit/
+      chatbot/
+      codeflow/        # graph, repositories, domain-groups controllers
+      dashboards/
+      decisions/
       health/
-    integrations/
-      auth-access/
-      worker-jobs/
-    prisma/
-    config/
-  test/
-    integration/
-    e2e/
+      memory/
+      notifications/
+      ops/
+      phases/
+      projects/        # projects.controller, thumbnails.controller
+      release/
+      scheduling/
+      tasks/
   package.json
   tsconfig.json
 ```
+
+Service-to-service calls toward `auth-access`/`worker-jobs` live inside the relevant module (e.g. `common/`), not in a separate `integrations/` directory.
 
 ## Module Breakdown
 
@@ -107,14 +99,7 @@ Owns:
 - ordering within a project
 - lifecycle status
 
-### 3. `milestones`
-Owns:
-- milestone CRUD
-- due dates
-- linkage to phase/project
-- milestone progress input queries
-
-### 4. `tasks`
+### 3. `tasks`
 Owns:
 - task CRUD
 - status transitions
@@ -125,17 +110,9 @@ Owns:
 
 This will likely become one of the richest modules.
 
-### 5. `task-dependencies`
-Owns:
-- dependency creation/removal
-- dependency validation
-- dependency queries
-- blockers computation support
+Task dependencies/blockers are not a separate module today; if that logic grows non-trivial it should live in its own `task-dependencies` module rather than being bolted onto `tasks`.
 
-Keep separate from `tasks` if the logic becomes non-trivial.
-If still small early on, it can remain nested inside `tasks` and split later.
-
-### 6. `memory`
+### 4. `memory`
 Owns:
 - memory entry CRUD
 - category handling
@@ -143,42 +120,38 @@ Owns:
 - linking memory to tasks/projects/decisions
 - recent memory and search-oriented retrieval endpoints
 
-### 7. `decisions`
+### 5. `decisions`
 Owns:
 - decision record CRUD
 - rationale and impact metadata
 - linkage to tasks and memory entries
 - decision timelines/recent decisions
 
-### 8. `handoffs`
-Owns:
-- session handoff creation
-- handoff retrieval
-- next-step packaging
-- continuity summaries for humans/agents
+Session handoffs (the `create_handoff` MCP tool) are not backed by a dedicated `handoffs` module today — if a distinct handoff domain emerges, give it its own module rather than overloading `memory`/`decisions`.
 
-### 9. `dashboards`
+### 6. `dashboards`
 Owns:
 - dashboard-specific read endpoints
 - aggregated status views
-- milestone progress views
 - recent activity summaries
 - work snapshot DTOs
 
 Important:
 this module should mainly expose read/query composition, not canonical writes.
 
-### 10. `audit`
+### 7. `audit`
 Owns:
 - domain-side activity event recording
 - event query endpoints where needed
 - structured activity metadata from core domain operations
 
-### 11. `health`
+### 8. `health`
 Owns:
 - health checks
 - readiness/liveness
 - dependency status where appropriate
+
+The service today also has `agents` (agent rooms/skills/credentials), `chatbot`, `codeflow` (Atlas/CodeFlow graph, repositories, domain groups), `notifications`, `ops`, `release`, and `scheduling` modules, which were not part of the original scope of this document.
 
 ## Common Layer
 
@@ -220,21 +193,10 @@ Do not dump domain-specific logic there.
 
 ## Integration Layer
 
-### `integrations/auth-access`
-Contains clients/adapters for:
-- user identity lookup
-- team/project grant checks
-- token or principal context resolution
-
-### `integrations/worker-jobs`
-Contains clients/publishers for:
-- background jobs
-- dashboard refresh jobs
-- summary/handoff jobs
-- cleanup triggers
+There is no dedicated `integrations/` directory in the real service. Calls toward `auth-access` (identity lookup, grant checks, principal resolution) and toward `worker-jobs` (background/dashboard-refresh/cleanup triggers) live inside the relevant domain module today.
 
 Important rule:
-external service calls should be isolated in integrations, not scattered across domain modules.
+external service calls should be isolated in adapters/clients, not scattered ad-hoc across domain modules — extracting a shared `integrations/` layer is a reasonable next step if this duplication grows.
 
 ## Data Access Strategy
 Use Prisma as the main ORM and DB access tool.
@@ -252,18 +214,14 @@ Example:
 ## API Design Recommendation
 Expose REST endpoints grouped by domain.
 
-Examples:
+Real controllers today expose flat, top-level routes rather than nested `/projects/:id/...` paths (project scoping happens via query/body, not the URL), except for `dashboards` and `codeflow`:
 - `/projects`
-- `/projects/:id/phases`
-- `/projects/:id/milestones`
-- `/projects/:id/tasks`
-- `/tasks/:id`
-- `/tasks/:id/memory`
-- `/tasks/:id/decisions`
-- `/projects/:id/memory`
-- `/projects/:id/decisions`
-- `/projects/:id/handoffs`
-- `/projects/:id/dashboard`
+- `/phases`
+- `/tasks`
+- `/memory`
+- `/decisions`
+- `/projects/:projectId/dashboard` (+ `/projects/:projectId/dashboard/tasks-summary`)
+- `/projects/:projectId/codeflow/graph`, `/projects/:projectId/codeflow/repositories`, `/projects/:projectId/domain-groups`
 
 ## Write vs Read Separation
 Inside the core API, strongly separate:
@@ -295,17 +253,14 @@ That belongs to `mcp-service`.
 For the earliest wave, prioritize:
 1. `projects`
 2. `phases`
-3. `milestones`
-4. `tasks`
-5. `memory`
-6. `decisions`
-7. `dashboards`
-8. `health`
+3. `tasks`
+4. `memory`
+5. `decisions`
+6. `dashboards`
+7. `health`
 
-Then add:
-9. `handoffs`
-10. `audit`
-11. `task-dependencies`
+Then add (all now implemented, plus `agents`, `chatbot`, `codeflow`, `notifications`, `ops`, `release`, `scheduling`):
+8. `audit`
 
 ## Final Recommendation
 The `core-api` should be a **modular domain backend**, not a generic CRUD server.

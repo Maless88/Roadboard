@@ -32,57 +32,44 @@ It does **not** own:
 
 Those remain owned by `core-api` and `auth-access`.
 
-## Recommended Technology
+## Actual Technology
+- NestJS 11 (Fastify adapter), port 3004
 - TypeScript
-- SQLite
-- lightweight local daemon/service
+- `better-sqlite3` (SQLite)
+- `@nestjs/schedule` (`ScheduleModule.forRoot()` + `@Cron` — this is the app that owns periodic scheduling, not `worker-jobs`)
 - HTTPS sync to central services
 - structured local operation journal
 
-## Suggested Internal Layout
+## Actual Current Layout
+
+The real `apps/local-sync-bridge/src/` (verified) is a flat NestJS app, not the `storage/`/`sync/clients/`/`context-bundles/`/`api/` split described below — those remain aspirational:
 
 ```text
 apps/local-sync-bridge/
   src/
     main.ts
-    app/
-      bridge.server.ts
-      bridge.module.ts
-    common/
-      guards/
-      pipes/
-      filters/
-      dto/
-      utils/
-      context/
-    storage/
-      sqlite/
-      repositories/
-      migrations/
+    app.module.ts
+    health/
     journal/
-      operations/
-      reconciliation/
-      retries/
+      journal.module.ts
+      journal.service.ts
+    memory/
+      memory.controller.ts
+      memory.module.ts
+      memory.service.ts
     sync/
-      clients/
-        core-api/
-        auth-access/
-      engine/
-      mapping/
-      policies/
-      status/
-    context-bundles/
-    api/
-      local-state/
-      sync-status/
-      bundles/
-    config/
-  test/
-    integration/
-    sync/
+      sync.controller.ts
+      sync.module.ts
+      sync.service.ts        # @Cron(EVERY_30_SECONDS) sync loop
+    tasks/
+      tasks.controller.ts
+      tasks.module.ts
+      tasks.service.ts
   package.json
   tsconfig.json
 ```
+
+The sections below describe the target modular layout this app should evolve toward — not the current state.
 
 ## High-Level Design
 

@@ -35,7 +35,9 @@ The structure should support:
 It should **not** own project/work domain state.
 It should provide identity and authorization capabilities to the rest of the platform.
 
-## Suggested Internal Layout
+## Actual Current Layout
+
+The real `apps/auth-access/src/modules/` (verified) has no `audit` module and no `integrations/` directory, and adds `team-invites` (not originally scoped here):
 
 ```text
 apps/auth-access/
@@ -43,30 +45,16 @@ apps/auth-access/
     main.ts
     app.module.ts
     common/
-      guards/
-      decorators/
-      pipes/
-      filters/
-      dto/
-      utils/
-      crypto/
     modules/
-      users/
-      teams/
-      memberships/
-      grants/
-      tokens/
-      sessions/
       auth/
+      grants/
       health/
-      audit/
-    integrations/
-      core-api/
-    prisma/
-    config/
-  test/
-    integration/
-    e2e/
+      memberships/
+      sessions/
+      team-invites/
+      teams/
+      tokens/
+      users/
   package.json
   tsconfig.json
 ```
@@ -163,12 +151,13 @@ Owns:
 - readiness/liveness
 - dependency status
 
-### 9. `audit`
+### 9. `team-invites`
 Owns:
-- access-related audit events
-- token issuance/revocation audit
-- grant change audit
-- login/logout/security-relevant events
+- invite creation/lookup/acceptance for a team
+- invite tokens
+- invite lifecycle (pending/accepted/revoked)
+
+There is no dedicated `audit` module in the real service — access-related audit events are not (yet) split out on their own.
 
 ## Common Layer
 
@@ -205,10 +194,7 @@ Keep auth/access domain logic inside modules, not hidden inside `common/`.
 
 ## Integration Layer
 
-### `integrations/core-api`
-Contains clients/adapters for:
-- optional project existence checks when issuing project-scoped grants
-- project metadata lookups where necessary
+There is no dedicated `integrations/` directory in the real service. Any project existence checks / project metadata lookups toward `core-api` (when issuing project-scoped grants) live inside the relevant module today.
 
 Important rule:
 `auth-access` may verify project references, but must not own project data.
@@ -229,17 +215,16 @@ Examples:
 ## API Design Recommendation
 Expose REST endpoints grouped by access domain.
 
-Examples:
+Real routes (verified against the controllers):
 - `/auth/login`
 - `/auth/logout`
 - `/auth/me`
 - `/users`
 - `/teams`
 - `/teams/:id/memberships`
-- `/projects/:id/grants`
-- `/tokens`
-- `/tokens/:id/revoke`
-- `/permissions/check`
+- `/tokens` (`POST`/`GET`), `/tokens/validate`, `DELETE /tokens/:id` (revoke)
+- `/grants` (`POST`/`GET`), `GET /grants/check`, `DELETE /grants/:id`
+- `POST teams/:teamId/invites`, `GET teams/:teamId/invites`, `DELETE invites/:id`, `GET invites/by-token/:token`, `POST invites/by-token/:token/accept`
 
 ## Grant and Permission Strategy
 Use explicit RBAC/grant logic backed by project grants.
@@ -301,8 +286,8 @@ For the earliest wave, prioritize:
 7. `sessions`
 8. `health`
 
-Then add:
-9. `audit`
+Then add (now implemented):
+9. `team-invites`
 
 ## Final Recommendation
 The `auth-access` service should be a dedicated identity and authorization backend for Roadboard 2.0.
