@@ -2603,6 +2603,74 @@ output_round: 0
     fs.rmSync(repo, { recursive: true });
   });
 
+  it("reuses the pre-Worker snapshot across a retry so the diff shows cumulative Worker changes", () => {
+    const repo = makeTempDir();
+    const repoTasks = path.join(repo, "tasks");
+    const repoTodo = path.join(repoTasks, "todo");
+    const repoRun = path.join(repoTasks, "run");
+    const configPath = path.join(repo, ".agent", "workflow-adapters.json");
+    fs.mkdirSync(repoTodo, { recursive: true });
+    fs.mkdirSync(repoRun, { recursive: true });
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    child_process.spawnSync("git", ["init"], { cwd: repo });
+    fs.writeFileSync(path.join(repo, "preexisting.txt"), "base\n", "utf-8");
+    child_process.spawnSync("git", ["add", "."], { cwd: repo });
+    child_process.spawnSync(
+      "git",
+      ["-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "-m", "init"],
+      { cwd: repo },
+    );
+    fs.writeFileSync(configPath, JSON.stringify({
+      adapters: {
+        test: { enabled: true, binary: "/bin/echo", outputDir: path.join(repo, ".agent", "out") },
+      },
+      roles: {
+        outputAnalyst: { binary: "codex", mcpServers: [] },
+      },
+    }), "utf-8");
+    writeFile(repoTodo, "feat-y.md", RUN_PROMPT);
+
+    // First spawn: prompt moves todo/ → run/, snapshot is captured fresh (inTodo=true).
+    runWorker("y", "test", {
+      tasksDir: repoTasks,
+      configPath,
+      execFn: () => {
+        fs.writeFileSync(path.join(repo, "file-a.txt"), "worker edit A\n", "utf-8");
+
+        return "worker output A";
+      },
+      logFn: () => undefined,
+    });
+
+    // Retry: prompt is already in run/ (inTodo=false) — must reuse the existing snapshot.
+    runWorker("y", "test", {
+      tasksDir: repoTasks,
+      configPath,
+      execFn: () => {
+        fs.writeFileSync(path.join(repo, "file-b.txt"), "worker edit B\n", "utf-8");
+
+        return "worker output B";
+      },
+      logFn: () => undefined,
+    });
+
+    let seenDiff = "";
+    runReviewOutput("y", {
+      tasksDir: repoTasks,
+      repoRoot: repo,
+      reviewFn: (input) => {
+        seenDiff = input.diff;
+        return "approved";
+      },
+      logFn: () => undefined,
+    });
+
+    expect(seenDiff).toContain("file-a.txt");
+    expect(seenDiff).toContain("file-b.txt");
+    expect(seenDiff).not.toContain("preexisting.txt");
+    fs.rmSync(repo, { recursive: true });
+  });
+
   it("redacts HEAD symlinks across symlink/file transitions without exposing targets", () => {
     const repo = makeTempDir();
     const repoTasks = path.join(repo, "tasks");

@@ -1634,7 +1634,8 @@ export function runWorker(slug: string, adapterName: string, options: RunOptions
   log(`[run] invoking worker adapter "${adapterName}" on approved prompt ${path.basename(promptFile)}`);
 
   const timeoutMs = resolveAgentTimeoutMs(config);
-  const workerSnapshot = captureWorkerSnapshot(repoRoot, slug);
+  const existingSnapshot = inTodo ? null : resolveExistingSnapshotPath(repoRoot, slug);
+  const workerSnapshot = existingSnapshot ?? captureWorkerSnapshot(repoRoot, slug);
   const output = invokeExecFileStep({
     role: "worker",
     command,
@@ -2493,6 +2494,25 @@ function captureWorkerSnapshot(repoRoot: string, slug: string): string {
   writePrivateFile(filePath, JSON.stringify(snapshot, null, 2) + "\n");
 
   return filePath;
+}
+
+
+function resolveExistingSnapshotPath(repoRoot: string, slug: string): string | null {
+  const snapshotDir = path.join(repoRoot, ".agent", "worker-snapshots");
+  const pointerPath = path.join(snapshotDir, `${slug}.latest`);
+
+  if (!fs.existsSync(pointerPath)) {
+    return null;
+  }
+
+  const snapshotRel = fs.readFileSync(pointerPath, "utf-8").trim();
+  const snapshotPath = path.resolve(repoRoot, snapshotRel);
+
+  if (!isContainedPath(snapshotDir, snapshotPath) || !fs.existsSync(snapshotPath)) {
+    return null;
+  }
+
+  return snapshotPath;
 }
 
 
