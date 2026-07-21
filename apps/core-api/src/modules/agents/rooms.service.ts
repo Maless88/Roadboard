@@ -81,6 +81,10 @@ export class RoomsService {
       kind: room.kind,
       title: room.title,
       projectId: room.projectId,
+      summaryText: room.summaryText,
+      summaryUpToMessageId: room.summaryUpToMessageId,
+      summaryTokens: room.summaryTokens,
+      summaryUpdatedAt: room.summaryUpdatedAt,
       participants: room.participants.map((p) => ({ kind: p.kind, refId: p.refId })),
       messages: messages.map((m) => ({
         id: m.id, senderKind: m.senderKind, senderId: m.senderId, content: m.content, createdAt: m.createdAt,

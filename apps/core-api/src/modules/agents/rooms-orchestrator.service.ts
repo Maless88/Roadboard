@@ -51,6 +51,70 @@ export function forLlmContent(content: string): string {
   return i === -1 ? content : content.slice(0, i);
 }
 
+export interface RoomMessageLike {
+  id?: string;
+  senderKind: string;
+  senderId: string;
+  content: string;
+}
+
+export interface RoomContextLike<T extends RoomMessageLike> {
+  summaryText?: string | null;
+  summaryUpToMessageId?: string | null;
+  messages: T[];
+}
+
+/**
+ * Read-time context selection (v1): if the room carries a persistent summary
+ * (`summaryText`) and its watermark message is still loaded, return the summary
+ * as a synthetic context turn PLUS the contiguous tail of raw messages that come
+ * AFTER the watermark. Otherwise (no summary, or watermark not found among the
+ * loaded messages) fall back to the current last-`CONTEXT_MSG_CAP` window. The
+ * summary itself is never written here — that is v2's job.
+ */
+export function selectContextMessages<T extends RoomMessageLike>(
+  room: RoomContextLike<T>,
+): { summaryTurn: ChatMessage | null; rawMessages: T[] } {
+  const summary = (room.summaryText ?? "").trim();
+
+  if (summary && room.summaryUpToMessageId) {
+    const idx = room.messages.findIndex((m) => m.id === room.summaryUpToMessageId);
+
+    if (idx !== -1) {
+      return {
+        summaryTurn: { role: "user", content: `[contesto riassunto]\n${summary}` },
+        rawMessages: room.messages.slice(idx + 1),
+      };
+    }
+  }
+
+  return { summaryTurn: null, rawMessages: room.messages.slice(-CONTEXT_MSG_CAP) };
+}
+
+/**
+ * Assemble the model context for a turn: the optional summary turn followed by
+ * the selected raw messages, each mapped by the caller (mapping differs per site:
+ * the image path skips `stripAgentMeta`, the general path applies it and drops
+ * empties). A mapper returning null omits that message.
+ */
+export function buildContextMessages<T extends RoomMessageLike>(
+  room: RoomContextLike<T>,
+  mapMessage: (m: T) => ChatMessage | null,
+): ChatMessage[] {
+  const { summaryTurn, rawMessages } = selectContextMessages(room);
+  const out: ChatMessage[] = [];
+
+  if (summaryTurn) out.push(summaryTurn);
+
+  for (const m of rawMessages) {
+    const mapped = mapMessage(m);
+
+    if (mapped) out.push(mapped);
+  }
+
+  return out;
+}
+
 export function parseMentions(message: string): string[] {
   const out = new Set<string>();
   const re = /@([a-zA-Z0-9_-]+)/g;
@@ -118,8 +182,10 @@ export class RoomOrchestratorService {
           await rooms.postMessage(user.userId, roomId, message); // membership-gated
           const room = (await rooms.getRoom(user.userId, roomId)) as {
             projectId?: string | null;
+            summaryText?: string | null;
+            summaryUpToMessageId?: string | null;
             participants: { kind: string; refId: string }[];
-            messages: { senderKind: string; senderId: string; content: string }[];
+            messages: { id: string; senderKind: string; senderId: string; content: string }[];
           };
           const repoUrl = room.projectId ? await rooms.getProjectRepoUrl(room.projectId) : null;
 
@@ -167,7 +233,7 @@ export class RoomOrchestratorService {
           if ((capBySlug.get(decision.slug) ?? "") === "image") {
             const { slug: gslug, config: gconfig } = await agents.resolveForChat(decision.slug, user.userId);
             gconfig.projectId = room.projectId ?? null; gconfig.source = "chat"; gconfig.repoUrl = repoUrl;
-            const gmsgs: ChatMessage[] = room.messages.slice(-CONTEXT_MSG_CAP).map((mm) => {
+            const gmsgs: ChatMessage[] = buildContextMessages(room, (mm) => {
               if (mm.senderKind === "user") return { role: "user", content: forLlmContent(mm.content) };
               if (mm.senderId === gslug) return { role: "assistant", content: forLlmContent(mm.content) };
               return { role: "user", content: `[${mm.senderId}]: ${forLlmContent(mm.content)}` };
@@ -223,15 +289,19 @@ export class RoomOrchestratorService {
           } catch { /* memory is best-effort, never block a turn */ }
           // Feed prior agent turns back WITHOUT the streamed markers (↪ / _→ tool_) or
           // leaked meta, so the model doesn't parrot that syntax in new turns.
-          const messages: ChatMessage[] = [];
-          for (const m of room.messages.slice(-CONTEXT_MSG_CAP)) { // context-window: ultimi N msg al modello (i piu vecchi coperti dalla memoria durevole)
-            if (m.senderKind === "user") { messages.push({ role: "user", content: forLlmContent(m.content) }); continue; }
+          // context-window: summary turn (se presente) + coda dei messaggi dopo il
+          // watermark, altrimenti gli ultimi N messaggi grezzi (nessuna regressione).
+          const messages: ChatMessage[] = buildContextMessages(room, (m) => {
+            if (m.senderKind === "user") return { role: "user", content: forLlmContent(m.content) };
+
             const cleaned = stripAgentMeta(forLlmContent(m.content));
-            if (!cleaned) continue;
-            messages.push(m.senderId === slug
+
+            if (!cleaned) return null;
+
+            return m.senderId === slug
               ? { role: "assistant", content: cleaned }
-              : { role: "user", content: `[${m.senderId}]: ${cleaned}` });
-          }
+              : { role: "user", content: `[${m.senderId}]: ${cleaned}` };
+          });
 
           void audit.recordForUser(user, "agent.run.started", "agent", slug, undefined, {
             provider: config.provider, model: config.model, runtime: config.runtime, roomId,

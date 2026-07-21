@@ -485,6 +485,11 @@ model ChatRoom {
   updatedAt     DateTime  @updatedAt @map("updated_at")
   lastMessageAt DateTime? @map("last_message_at")
 
+  summaryText          String?   @map("summary_text")
+  summaryUpToMessageId String?   @map("summary_up_to_message_id")
+  summaryTokens        Int?      @map("summary_tokens")
+  summaryUpdatedAt     DateTime? @map("summary_updated_at")
+
   ownerUser    User              @relation("UserChatRooms", fields: [ownerUserId], references: [id], onDelete: Cascade)
   participants ChatParticipant[]
   messages     RoomMessage[]
