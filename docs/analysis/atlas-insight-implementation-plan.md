@@ -11,7 +11,16 @@
 
 ## Phases
 
-### Phase 0 — CodeFlow Stabilization
+### Phase 0 — CodeFlow Stabilization — **OBSOLETE (2026-07)**
+> Premises no longer hold: Memgraph is now the single source of truth for the
+> architecture graph (CF-GDB-03b-E) — there is no Postgres↔Memgraph drift to
+> validate (`DriftService`/`drift.service.ts` and the `GET graph/drift` route
+> were removed), `GraphSyncService` was removed (outbox processing lives in
+> the worker's `graph-projection.service.ts`, statuses `pending/in_progress/
+> done/dead`, not `processed`), and `ImpactAnalysis`/`impact_analyses` no
+> longer exist (`getImpact` runs unconditionally on Memgraph). Tasks AI-P0-01
+> to AI-P0-03 below are void; do not execute them. The remaining phases
+> (1–6) are unaffected and remain legitimate.
 - **Goal:** ensure Atlas's Postgres↔Memgraph pipeline is healthy before stacking new layers on top.
 - **Description:** Validate drift detection, outbox sync resilience, and impact precomputation on existing CodeFlow code. No new features.
 - **Depends on:** —
@@ -50,7 +59,7 @@
 
 ## Tasks by Phase
 
-### Phase 0 — CodeFlow Stabilization
+### Phase 0 — CodeFlow Stabilization — **OBSOLETE, see banner above**
 
 - [ ] **Task ID:** AI-P0-01
   **Title:** Validate Postgres↔Memgraph drift on all active projects for 7 days

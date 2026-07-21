@@ -26,8 +26,26 @@ something (hallucination) because no scheduler exists.
 - **AgentExecutorService.stream()** (core-api) — runs an agent (api/local/cli).
 - **RoomsService.appendMessage()** — persists an agent message into a room.
 
-Missing: recurring scheduler, activity persistence, delivery wiring, calendar UI,
-agent self-scheduling tool, anti-hallucination guardrail.
+Implemented (2026-07): recurring scheduler (`apps/core-api/src/modules/scheduling/`
++ `SchedulingDispatcher`, BullMQ `agent-run` queue), activity persistence
+(Prisma `ScheduledActivity` / `ScheduledActivityRun`), agent self-scheduling
+tool (MCP `create_scheduled_activity`, `list_scheduled_activities`,
+`pause_scheduled_activity`, `delete_scheduled_activity` in
+`apps/mcp-service/src/main.ts`), the calendar UI
+(`apps/web-app/src/app/scheduling/page.tsx` + `scheduling-client.tsx`, route
+`/scheduling`, week/month grid), and the run delivery path: `agent-run.processor.ts`
+is no longer a stub — it injects `AgentRunRunner` and consumes BullMQ payload
+`{ activityId, runId }`; `AgentRunRunner.run()` (`apps/worker-jobs/src/jobs/agent-run.runner.ts`)
+resolves the responder agent, streams the `promptTemplate` through the shared
+`AgentExecutor`, appends the reply into the delivery room (auto-creating the
+agent's direct room when `deliveryRoomId` is null), and records the outcome
+(`ok`/`error`, `outputMessageId`, `outputPreview`) on `ScheduledActivityRun`.
+
+Missing: external push delivery (Telegram/OpenClaw bridge polling `notify=true`
+runs, per P1b) and the anti-hallucination guardrail (P4). In-app room delivery
+(the P1 processor above) is implemented; only the outbound Telegram/OpenClaw
+notification hop described in P1b remains unbuilt — no OpenClaw/Telegram
+reference found anywhere in the current tree.
 
 ## Locked decisions (2026-06-25)
 

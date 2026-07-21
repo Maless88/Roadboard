@@ -242,8 +242,8 @@ The current dual-write path (`GraphSyncService`) silently swallows errors when M
 
 ---
 
-## Contacts / ownership
+## Contacts / ownership (historical — files removed)
 
 CodeFlow backbone: core-api `apps/core-api/src/modules/codeflow/`  
-Drift detector: `drift.service.ts`, `graph.controller.ts` → `GET /projects/:id/codeflow/graph/drift`  
-Timer files: `infra/systemd/roadboard-drift-check.{timer,service}`
+Drift detector: `drift.service.ts` (deleted), `graph.controller.ts` → `GET /projects/:id/codeflow/graph/drift` (route retired)  
+Timer files: `infra/systemd/roadboard-drift-check.{timer,service}` (deleted, along with `scripts/drift-check.sh`)

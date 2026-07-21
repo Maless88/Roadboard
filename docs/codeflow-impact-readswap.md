@@ -7,24 +7,26 @@
 
 Status: shipped, then superseded — the flag was removed once the cutover completed (see banner).
 
-## What changed
+## What changed (historical — see retirement banner)
 
-`GraphService.getImpact(nodeId, projectId)` is now routed through Memgraph
-via a Cypher reverse-BFS when the feature flag is ON. When OFF (default) the
-call keeps using the legacy Postgres BFS — zero behavioural change.
+`GraphService.getImpact(nodeId, projectId)` now routes through Memgraph
+unconditionally via a Cypher reverse-BFS. The section below describes the
+now-removed flag-gated transition step, kept for historical record only.
 
-The flag is intentionally per-getter: this is the first migration in the
+The flag was intentionally per-getter: this was the first migration in the
 per-getter cutover plan (CF-GDB-03b-B → C). `getNode`, `getGraph`,
 `getSnapshot` remain on Postgres.
 
-## Feature flag
+## Feature flag (removed)
 
 | Env var                              | Default | Effect                                                     |
 |--------------------------------------|---------|------------------------------------------------------------|
-| `GRAPH_READ_USE_MEMGRAPH_IMPACT`     | `false` | OFF → Postgres BFS (current behaviour)                     |
+| `GRAPH_READ_USE_MEMGRAPH_IMPACT`     | `false` | OFF → Postgres BFS (former behaviour)                      |
 |                                      | `true`  | ON  → Memgraph Cypher reverse-BFS, Postgres fallback on err|
 
-Read once at GraphService construction time. To flip the flag in dev:
+This flag no longer exists in the codebase — `getImpact` always uses
+Memgraph. The dev-flip commands below are preserved for historical context
+only and no longer apply:
 
 ```bash
 # Inside the core-api container
@@ -35,9 +37,6 @@ GRAPH_READ_USE_MEMGRAPH_IMPACT=true docker compose -f infra/docker/docker-compos
 echo 'GRAPH_READ_USE_MEMGRAPH_IMPACT=true' >> .env
 docker compose -f infra/docker/docker-compose.yml up -d --no-deps core-api
 ```
-
-To rollback instantly: remove the env var (or set to `false`) and restart
-core-api. No data migration, no Memgraph reset needed.
 
 ## Cypher query
 
@@ -71,11 +70,16 @@ Reserved-word note: `hops` is reserved in Memgraph's openCypher grammar
 and cannot be used as a column alias. We alias as `hopCount` and rename
 in TypeScript before bucketing.
 
-## Fallback semantics
+## Fallback semantics (removed)
 
-Any throw from `GraphDbClient.run()` (network, parse, timeout) is caught
+The Postgres fallback, `refreshImpact()` pre-compute, and the
+`impact_analyses` table described below no longer exist. `getImpact` now
+routes to Memgraph unconditionally and throws on error rather than falling
+back. Preserved for historical record only:
+
+Any throw from `GraphDbClient.run()` (network, parse, timeout) was caught
 inside `GraphService.getImpactFromMemgraph` and the call transparently
-re-issues against Postgres. A `warn`-level log line is emitted with the
+re-issued against Postgres. A `warn`-level log line was emitted with the
 shape:
 
 ```json
@@ -88,21 +92,20 @@ shape:
 }
 ```
 
-`refreshImpact()` (the Postgres-only pre-compute) is intentionally
-preserved — it still feeds the `impact_analyses` table consumed by the
-fallback path.
+`refreshImpact()` (the Postgres-only pre-compute) fed the `impact_analyses`
+table consumed by the fallback path.
 
-## Test coverage
+## Test coverage (historical)
 
 - Unit (`apps/core-api/src/modules/codeflow/graph.service.spec.ts`)
   - `buildImpactCypher` shape: direction, depth limit, self-loop guard,
-    project scoping, min-hop aggregation.
-  - Flag ON routes through Memgraph, classifies hops 1/2/3+.
-  - Memgraph error → Postgres fallback (no exception bubbles up).
-  - Flag OFF stays on Postgres (regression guard).
+    project scoping, min-hop aggregation — still accurate.
+  - The flag ON/OFF and Postgres-fallback tests described below were removed
+    along with the flag; `getImpact` unit tests now cover the unconditional
+    Memgraph path only.
 
-- Integration (`apps/core-api/test/impact-parity.spec.ts`)
-  - Seeds the same 5-node DAG into Postgres and Memgraph via the
-    production `GraphSyncService`, then asserts identical
-    `direct/indirect/remote` set membership between flag OFF and flag ON.
-  - Skips silently if Memgraph is unreachable.
+- Integration (`apps/core-api/test/impact-parity.spec.ts`) — **removed**,
+  deleted along with `GraphSyncService` and the Postgres graph tables.
+  Historically it seeded the same 5-node DAG into Postgres and Memgraph via
+  the production `GraphSyncService`, then asserted identical
+  `direct/indirect/remote` set membership between flag OFF and flag ON.
