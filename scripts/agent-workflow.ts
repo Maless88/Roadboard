@@ -1938,6 +1938,10 @@ function buildAnalystPrompt(relPath: string): string {
     "Judge: correctness, completeness, unambiguity, scope cleanliness, safety.",
     "Write your verdict by editing ONLY this file: set frontmatter `status` to `approved` or `changes-requested`, and APPEND a new `### Round <n>` section under `## Review log` (never overwrite prior rounds). Use the current `review_round` value as <n>.",
     "Default to `changes-requested` if anything is ambiguous, incomplete, unverifiable, or risky. Approval is earned.",
+    "Approve as soon as the prompt is executable and correct; perfection is not the bar.",
+    "Request changes ONLY for material defects: wrong, missing, or contradictory decisions; scope errors; or factual errors verified against the codebase.",
+    "Do NOT block on cosmetic issues: wording, phrasing, formatting, markdown checkbox state, section ordering, or stylistic preferences.",
+    "If a concern was raised in a previous review pass and the current prompt addresses it, do not re-open it.",
     "Re-evaluate the prompt AS IT STANDS RIGHT NOW, from scratch. Do not assume a finding from a previous `## Review log` round still applies — verify each potential issue against the CURRENT prompt text before reporting it, and do not pattern-match against prior rounds.",
     "Do NOT modify source code, do NOT move the file, do NOT commit.",
   ].join("\n\n");
