@@ -29,6 +29,7 @@ RoadBoard is designed to be the operational control plane for complex project wo
 - **Audit trail** — full activity log per project with filters by event type, actor type, and date range
 - **Project thumbnails** — auto-refresh screenshots from project home URL + manual upload
 - **AI assistant** — per-project chatbot config supporting Anthropic, OpenAI, and Ollama
+- **Provider-agnostic LLM runtime** — capability-based routing across OpenAI/Anthropic/Gemini/Ollama and openai-compatible endpoints, with role→model resolution, per-turn budgets, and graceful degradation (local-only or no-provider safe); see [docs/llm-runtime.md](docs/llm-runtime.md)
 - **Web dashboard** — swipeable project cards, skeleton loaders, task management, Atlas
 - **Async job layer** — background refresh, summary generation, thumbnail refresh, and cleanup via BullMQ
 - **Local sync bridge** — offline-first SQLite journal with sync engine to the central database

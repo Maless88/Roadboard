@@ -6,7 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-07-22
+
 ### Added
+- LLM runtime layer (`@roadboard/agent-runtime`): provider-agnostic capability routing — provider registry with environment detection, OpenAI-compatible/Ollama/Anthropic/Gemini adapters, CapabilityRouter (role→model resolution, ordered fallback, per-turn budgets, degrade policy), runtime diagnostics, and agent-integration primitives (compact context pack, turn planner, usage mappers); documented in docs/llm-runtime.md and ADR 0002
+- MCP tool profiles: `MCP_TOOL_PROFILE` selects the exposed tool set (workflow=21, atlas=16, personal=13, full=50 default) to reduce agent context
+- Context compaction v1: persistent per-room summary fields on ChatRoom and read-time prompt assembly (summary + raw messages after the summary watermark) with fallback to the last-N message window
 - Agent rooms: delete and clear-history actions on agent chat rooms
 - Photorealistic agent avatars (Cloudflare FLUX) replacing the illustrated set, with matching full-body images in the agent Scheda modal (in-scene layout with floating card)
 - Roadboard logomark, browser tab favicon (`icon.svg`) and login banner
@@ -23,8 +28,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Agent card redesign (image/name/task + Scheda/Chat/Log actions) and avatars shown in Home and Chat sidebar
 - Chat streaming performance: memoized markdown rendering and instant auto-scroll (removes stutter while agent replies stream)
 - AI workflow docs rewritten for the in-prompt review-gate model; retired templates for the old briefs/proposals folder model removed
+- AI workflow CLI hardening: per-role MCP isolation (no global catalog by default), pre-Worker snapshot with path-based secret redaction for review-output, and structured per-process telemetry
 
 ### Fixed
+- AI workflow output-gate: reuse the pre-Worker snapshot across Worker retries (previously re-captured on each run, truncating the review-output diff into a false negative)
+- Documentation realigned to current code across planning/analysis docs (service structure, retired/implemented feature state, factual and metadata drift)
 - Postgres/Redis/Memgraph ports bound to 127.0.0.1 instead of 0.0.0.0
 - Prisma migration checksum drift and stale thumbnail index (schema↔DB alignment)
 - White edge halo and color fringe on agent full-body cutout images
