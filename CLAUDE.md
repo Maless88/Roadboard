@@ -123,6 +123,10 @@ pnpm --filter @roadboard/core-api exec vitest run src/modules/tasks/tasks.servic
 
 # Database
 pnpm db:migrate       # run pending Prisma migrations (ALWAYS use this, never db push)
+# NEVER `prisma migrate dev`: 5 raw pgvector/extension tables (agent_memories, skills_catalog,
+# agent_skills, agent_notifications, device_tokens) live in the DB but not in schema.prisma —
+# migrate dev would DROP them (live data). New migrations must be additive/isolated.
+# See docs/database-migrations.md for the safe process.
 pnpm db:generate      # regenerate Prisma client after schema changes
 pnpm db:seed          # seed the database
 pnpm --filter @roadboard/database db:studio   # open Prisma Studio
